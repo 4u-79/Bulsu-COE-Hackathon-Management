@@ -52,8 +52,17 @@ function switchTab(tabName) {
 
   // 3. Update tab button active states
   document.querySelectorAll('.tab-btn, .manage-tab-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tab === tabName);
+    btn?.classList.toggle('active', btn.dataset?.tab === tabName);
   });
+
+  // 3b. Update sidebar link active states dynamically
+  document.querySelectorAll('#nav-rooms, #nav-faculty, #nav-sections, #nav-subjects').forEach((link) => {
+    link?.classList.remove('active');
+  });
+  const currentNav = document.getElementById(`nav-${tabName}`);
+  if (currentNav) {
+    currentNav.classList.add('active');
+  }
 
   // 4. Update the top breadcrumb and page title
   const breadcrumbEl = document.getElementById('breadcrumb-page-name');
@@ -112,11 +121,13 @@ function initManageTabs() {
   const initialTab = urlParams.get('tab') || hashTab || 'rooms';
 
   tabs.forEach((tab) => {
-    tab.addEventListener('click', (e) => {
+    tab?.addEventListener('click', (e) => {
       e.preventDefault();
-      const target = tab.dataset.tab;
-      switchTab(target);
-      history.replaceState(null, '', `?tab=${target}`);
+      const target = tab.dataset?.tab;
+      if (target) {
+        switchTab(target);
+        history.replaceState(null, '', `?tab=${target}`);
+      }
     });
   });
 
@@ -419,6 +430,7 @@ function openAddModal(entity) {
   buildModalForm(entity, null);
   document.getElementById("manage-modal-backdrop").classList.add("open");
 }
+window.openAddModal = openAddModal;
 
 window.openEditModal = function (entity, id) {
   currentModalEntity = entity;

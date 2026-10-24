@@ -21,6 +21,9 @@ document.addEventListener("DOMContentLoaded", () => {
     filterRoomType: document.getElementById("filter-room-type"),
     filterUtilThreshold: document.getElementById("filter-util-threshold"),
 
+    roomUtilSearch: document.getElementById("room-util-search"),
+    facultyWorkloadSearch: document.getElementById("faculty-workload-search"),
+
     roomMetersContainer: document.getElementById("room-meters-container"),
     facultyMetersContainer: document.getElementById("faculty-meters-container"),
     roomsReportTbody: document.getElementById("rooms-report-tbody"),
@@ -46,6 +49,30 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (this.filterUtilThreshold) {
         this.filterUtilThreshold.addEventListener("change", () => this.applyFilters());
+      }
+
+      // Room Utilization Live Filter
+      if (this.roomUtilSearch) {
+        this.roomUtilSearch.addEventListener("input", (e) => {
+          const term = e.target.value.toLowerCase().trim();
+          const roomItems = document.querySelectorAll(".room-util-item");
+          roomItems.forEach((item) => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(term) ? "" : "none";
+          });
+        });
+      }
+
+      // Faculty Workload Live Filter
+      if (this.facultyWorkloadSearch) {
+        this.facultyWorkloadSearch.addEventListener("input", (e) => {
+          const term = e.target.value.toLowerCase().trim();
+          const facultyItems = document.querySelectorAll(".faculty-workload-item");
+          facultyItems.forEach((item) => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(term) ? "" : "none";
+          });
+        });
       }
 
       if (this.btnExportReports) {
@@ -231,7 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const widthPct = Math.min(100, Math.max(0, r.utilization_rate));
 
         return `
-          <div class="meter-row" title="${r.name} scheduled for ${r.scheduled_hours} hrs of 72.0 available weekly hours">
+          <div class="meter-row room-util-item" title="${r.name} scheduled for ${r.scheduled_hours} hrs of 72.0 available weekly hours">
             <div class="meter-header">
               <span class="meter-name">
                 <span>${this.escapeHtml(r.name)}</span>
@@ -248,6 +275,15 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `;
       }).join("");
+
+      // Preserve active search filter
+      if (this.roomUtilSearch && this.roomUtilSearch.value.trim()) {
+        const term = this.roomUtilSearch.value.toLowerCase().trim();
+        this.roomMetersContainer.querySelectorAll(".room-util-item").forEach(item => {
+          const text = item.textContent.toLowerCase();
+          item.style.display = text.includes(term) ? "" : "none";
+        });
+      }
     },
 
     renderFacultyMeters(faculty) {
@@ -273,7 +309,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const widthPct = Math.min(100, Math.max(0, pct));
 
         return `
-          <div class="meter-row" title="${f.name} teaching ${f.teaching_hours || 0} hrs (${f.assigned_units} of ${f.max_units} max units)">
+          <div class="meter-row faculty-workload-item" title="${f.name} teaching ${f.teaching_hours || 0} hrs (${f.assigned_units} of ${f.max_units} max units)">
             <div class="meter-header">
               <span class="meter-name">
                 <span>${this.escapeHtml(f.name)}</span>
@@ -289,6 +325,15 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `;
       }).join("");
+
+      // Preserve active search filter
+      if (this.facultyWorkloadSearch && this.facultyWorkloadSearch.value.trim()) {
+        const term = this.facultyWorkloadSearch.value.toLowerCase().trim();
+        this.facultyMetersContainer.querySelectorAll(".faculty-workload-item").forEach(item => {
+          const text = item.textContent.toLowerCase();
+          item.style.display = text.includes(term) ? "" : "none";
+        });
+      }
     },
 
     renderRoomsTable(rooms) {

@@ -106,15 +106,28 @@
   <div class="reports-charts-grid">
     <!-- Chart Card 1: Room Utilization Rate -->
     <div class="report-chart-card">
-      <div class="report-chart-header">
+      <div class="report-chart-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
         <div>
           <h2 class="report-chart-title">Room Utilization &amp; Facility Load</h2>
           <p class="report-chart-subtitle">Weekly scheduled hours against 72-hour operating capacity (Mon–Sat 7:00 AM – 7:00 PM)</p>
         </div>
-        <div class="report-chart-legend">
-          <span class="legend-item"><span class="legend-dot" style="background: #3B82F6;"></span> &lt; 50% Safe</span>
-          <span class="legend-item"><span class="legend-dot" style="background: #F59E0B;"></span> 50–75% Moderate</span>
-          <span class="legend-item"><span class="legend-dot" style="background: #8B5CF6;"></span> &gt; 75% Peak</span>
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+          <div class="relative w-48 sm:w-60 report-search-wrap">
+            <input 
+              type="text" 
+              id="room-util-search" 
+              placeholder="Search room (e.g., CE Lab, 201)..." 
+              class="w-full text-xs py-1.5 pl-8 pr-3 rounded-lg border border-maroon-100/60 bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#6E1717]/20 text-gray-800 placeholder-gray-400"
+            >
+            <svg class="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+          <div class="report-chart-legend">
+            <span class="legend-item"><span class="legend-dot" style="background: #3B82F6;"></span> &lt; 50% Safe</span>
+            <span class="legend-item"><span class="legend-dot" style="background: #F59E0B;"></span> 50–75% Moderate</span>
+            <span class="legend-item"><span class="legend-dot" style="background: #8B5CF6;"></span> &gt; 75% Peak</span>
+          </div>
         </div>
       </div>
       <div class="meter-list" id="room-meters-container">
@@ -124,15 +137,28 @@
 
     <!-- Chart Card 2: Faculty Workload Allocation -->
     <div class="report-chart-card">
-      <div class="report-chart-header">
+      <div class="report-chart-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
         <div>
           <h2 class="report-chart-title">Faculty Workload Distribution</h2>
           <p class="report-chart-subtitle">Assigned teaching units against the College of Engineering 21-unit maximum limit</p>
         </div>
-        <div class="report-chart-legend">
-          <span class="legend-item"><span class="legend-dot" style="background: #10B981;"></span> &le; 18 Normal</span>
-          <span class="legend-item"><span class="legend-dot" style="background: #F59E0B;"></span> 19–21 Near Max</span>
-          <span class="legend-item"><span class="legend-dot" style="background: #EF4444;"></span> &gt; 21 Overload</span>
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+          <div class="relative w-48 sm:w-60 report-search-wrap">
+            <input 
+              type="text" 
+              id="faculty-workload-search" 
+              placeholder="Search faculty name..." 
+              class="w-full text-xs py-1.5 pl-8 pr-3 rounded-lg border border-maroon-100/60 bg-white/70 focus:outline-none focus:ring-2 focus:ring-[#6E1717]/20 text-gray-800 placeholder-gray-400"
+            >
+            <svg class="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+            </svg>
+          </div>
+          <div class="report-chart-legend">
+            <span class="legend-item"><span class="legend-dot" style="background: #10B981;"></span> &le; 18 Normal</span>
+            <span class="legend-item"><span class="legend-dot" style="background: #F59E0B;"></span> 19–21 Near Max</span>
+            <span class="legend-item"><span class="legend-dot" style="background: #EF4444;"></span> &gt; 21 Overload</span>
+          </div>
         </div>
       </div>
       <div class="meter-list" id="faculty-meters-container">

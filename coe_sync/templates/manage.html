@@ -3,12 +3,12 @@
 {% block title %}Master Data Management | COE SYNC 2026{% endblock %}
 
 {% block content %}
-<div class="manage-header-row">
+<!-- Legacy header preserved in DOM with display:none to preserve backward compatibility without visual clutter -->
+<div class="manage-header-row" style="display: none !important;" aria-hidden="true">
   <div class="page-header" style="margin-bottom: 0;">
     <h1 class="page-title">Master Data Management</h1>
     <p class="page-subtitle">Configure physical facilities, teaching faculty, student cohorts, and course catalogs.</p>
   </div>
-
   <div class="admin-only">
     <button id="btn-add-entity" class="btn btn-primary" data-target-modal="modal-add-rooms">
       + Add Room
@@ -16,8 +16,8 @@
   </div>
 </div>
 
-<!-- Horizontal Tab Bar with Count Indicators -->
-<nav class="manage-tabs" aria-label="Master Data Entities">
+<!-- Preserved in DOM with display:none to maintain count badges and JS query compatibility -->
+<nav class="manage-tabs" aria-label="Master Data Entities" style="display: none !important;" aria-hidden="true">
   <button class="tab-btn manage-tab-btn active" data-tab="rooms">
     Rooms <span class="manage-tab-count" id="count-rooms">0</span>
   </button>
@@ -236,7 +236,17 @@
 </div>
 
 <!-- Tab 2: Faculty Table Panel -->
-<div id="tab-panel-faculty" class="tab-panel manage-panel hidden">
+<div id="tab-panel-faculty" class="tab-panel manage-panel hidden" data-tab-content="faculty">
+  <!-- Section View Header Bar -->
+  <div class="rooms-view-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
+    <div class="rooms-view-title-group">
+      <h2 style="font-size: 18px; font-weight: 700; color: var(--text-dark); margin:0;">Faculty Teaching Workloads &amp; Availability</h2>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">Manage 126 college instructors, contact emails, unit assignments, and weekly availability constraints.</p>
+    </div>
+    <div class="admin-only">
+      <button type="button" class="btn btn-primary" onclick="openAddModal('faculty')">+ Add Faculty</button>
+    </div>
+  </div>
   <div class="table-card">
     <div class="manage-filter-bar">
       <div class="manage-search-wrap">
@@ -284,7 +294,17 @@
 </div>
 
 <!-- Tab 3: Sections Table Panel -->
-<div id="tab-panel-sections" class="tab-panel manage-panel hidden">
+<div id="tab-panel-sections" class="tab-panel manage-panel hidden" data-tab-content="sections">
+  <!-- Section View Header Bar -->
+  <div class="rooms-view-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
+    <div class="rooms-view-title-group">
+      <h2 style="font-size: 18px; font-weight: 700; color: var(--text-dark); margin:0;">Section Cohorts &amp; Class Rosters</h2>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">Configure 90 student cohorts across engineering departments and track class sizes.</p>
+    </div>
+    <div class="admin-only">
+      <button type="button" class="btn btn-primary" onclick="openAddModal('sections')">+ Add Section</button>
+    </div>
+  </div>
   <div class="table-card">
     <div class="manage-filter-bar">
       <div class="manage-search-wrap">
@@ -332,7 +352,17 @@
 </div>
 
 <!-- Tab 4: Subjects Table Panel -->
-<div id="tab-panel-subjects" class="tab-panel manage-panel hidden">
+<div id="tab-panel-subjects" class="tab-panel manage-panel hidden" data-tab-content="subjects">
+  <!-- Section View Header Bar -->
+  <div class="rooms-view-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
+    <div class="rooms-view-title-group">
+      <h2 style="font-size: 18px; font-weight: 700; color: var(--text-dark); margin:0;">Curricular Course Offerings &amp; Catalogs</h2>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">Browse accredited course offerings, unit requirements, and laboratory/lecture split preferences.</p>
+    </div>
+    <div class="admin-only">
+      <button type="button" class="btn btn-primary" onclick="openAddModal('subjects')">+ Add Subject</button>
+    </div>
+  </div>
   <div class="table-card">
     <div class="manage-filter-bar">
       <div class="manage-search-wrap">

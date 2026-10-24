@@ -45,7 +45,7 @@
         </a>
         {% endif %}
         {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
-        <a href="/manage?tab=rooms" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'rooms' %}active{% endif %}" id="nav-rooms">
+        <a href="/manage?tab=rooms" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab', 'rooms') == 'rooms' %}active{% endif %}" id="nav-rooms">
           <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/><path d="M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1"/></svg>
           <span>Rooms</span>
         </a>

@@ -65,6 +65,30 @@ def manage():
     )
 
 
+@views_bp.route("/rooms")
+@login_required
+def rooms():
+    return redirect("/manage?tab=rooms")
+
+
+@views_bp.route("/faculty")
+@login_required
+def faculty():
+    return redirect("/manage?tab=faculty")
+
+
+@views_bp.route("/sections")
+@login_required
+def sections():
+    return redirect("/manage?tab=sections")
+
+
+@views_bp.route("/subjects")
+@login_required
+def subjects():
+    return redirect("/manage?tab=subjects")
+
+
 @views_bp.route("/schedules")
 @login_required
 def schedules():

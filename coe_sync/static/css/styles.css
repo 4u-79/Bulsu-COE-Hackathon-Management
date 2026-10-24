@@ -1655,6 +1655,42 @@ a {
   border-radius: 2px;
 }
 
+.report-search-wrap {
+  position: relative;
+  width: 220px;
+  max-width: 100%;
+}
+
+.report-search-wrap input {
+  width: 100%;
+  font-size: 12px;
+  padding: 6px 12px 6px 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(110, 23, 23, 0.18);
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px);
+  color: #1F2937;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.report-search-wrap input:focus {
+  border-color: #6E1717;
+  box-shadow: 0 0 0 2px rgba(110, 23, 23, 0.15);
+  background: #ffffff;
+}
+
+.report-search-wrap svg {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: #9CA3AF;
+  pointer-events: none;
+}
+
 .meter-list {
   display: flex;
   flex-direction: column;
