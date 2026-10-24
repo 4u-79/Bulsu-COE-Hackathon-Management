@@ -79,10 +79,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!prog) return "";
     const p = String(prog).toUpperCase().trim();
     if (p === "BSCE" || p === "CIVIL" || p === "CE") return "CE";
-    if (p === "BSEE" || p === "BSECE" || p === "ECE" || p === "ELECTRONICS") return "ECE";
-    if (p === "BSME" || p === "BSMEE" || p === "MEE" || p === "MECHANICAL") return "MEE";
-    if (p === "BSMFE" || p === "BSIE" || p === "MFE" || p === "MANUFACTURING") return "MFE";
-    if (p === "BSCPE" || p === "CPE") return "ECE";
+    if (p === "BSCPE" || p === "CPE") return "CPE";
+    if (p === "BSEE" || p === "EE") return "EE";
+    if (p === "BSECE" || p === "ECE" || p === "ELECTRONICS") return "ECE";
+    if (p === "BSIE" || p === "IE") return "IE";
+    if (p === "BSMFGE" || p === "BSMFE" || p === "MFGE" || p === "MFE" || p === "MANUFACTURING") return "MFGE";
+    if (p === "BSME" || p === "ME") return "ME";
+    if (p === "BSMEE" || p === "MEE" || p === "MECHATRONICS") return "MEE";
+    if (p === "GEN" || p === "GENERAL") return "GEN";
     return p;
   }
 
@@ -377,9 +381,14 @@ document.addEventListener("DOMContentLoaded", () => {
       manualProgram.innerHTML = `
         <option value="">-- All Programs --</option>
         <option value="CE">Civil Engineering (CE)</option>
+        <option value="CPE">Computer Engineering (CPE)</option>
+        <option value="EE">Electrical Engineering (EE)</option>
         <option value="ECE">Electronics Engineering (ECE)</option>
-        <option value="MEE">Mechanical Engineering (MEE)</option>
-        <option value="MFE">Manufacturing Engineering (MFE)</option>
+        <option value="IE">Industrial Engineering (IE)</option>
+        <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+        <option value="ME">Mechanical Engineering (ME)</option>
+        <option value="MEE">Mechatronics Engineering (MEE)</option>
+        <option value="GEN">General Engineering (GEN)</option>
       `;
     }
 
