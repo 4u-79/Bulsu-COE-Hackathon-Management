@@ -251,7 +251,7 @@
 /* ── Day Header Row ── */
 .timetable-header {
   display: grid;
-  grid-template-columns: 64px repeat(7, 1fr);
+  grid-template-columns: 64px repeat(6, 1fr);
   border-bottom: 1.5px solid var(--border-light);
   background: var(--bg-surface-alt);
   position: sticky;
@@ -311,8 +311,8 @@
 .timetable-body {
   display: grid;
   grid-template-columns: 64px 1fr;
-  height: 832px;
-  max-height: 832px;
+  height: 768px;
+  max-height: 768px;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
@@ -326,7 +326,7 @@
   left: 0;
   z-index: 5;
   background: var(--bg-surface);
-  height: 832px;
+  height: 768px;
 }
 
 .gutter-slot {
@@ -348,18 +348,18 @@
   opacity: 0.4;
 }
 
-/* ── Day Columns Container ── */
+/* ── Day Columns Container (Monday through Saturday) ── */
 .timetable-columns {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   min-width: 0;
-  height: 832px;
+  height: 768px;
 }
 
 /* ── Individual Day Column & Day View Container ── */
 .day-column-body, .day-column, .timetable-day-column {
   position: relative;
-  height: 832px; /* 13 hours * 64px */
+  height: 768px; /* 12 hours * 64px = 768px */
   overflow: hidden;
   border-right: 1px solid rgba(110, 23, 23, 0.08);
   box-sizing: border-box;
@@ -1343,36 +1343,115 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   PRINT MEDIA STYLESHEET
+   MINIMALIST 16PX CUSTOM CHECKBOXES (BULSU ROSE / MAROON THEME)
+══════════════════════════════════════════════════════════════════ */
+input[type="checkbox"],
+.custom-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  border: 1.5px solid #C4909B;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  vertical-align: middle;
+}
+
+input[type="checkbox"]:hover {
+  border-color: #681C2E;
+  background: rgba(253, 242, 244, 0.95);
+  box-shadow: 0 0 0 2px rgba(104, 28, 46, 0.12);
+}
+
+input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #681C2E 0%, #4A121E 100%);
+  border-color: #681C2E;
+  box-shadow: 0 1px 3px rgba(104, 28, 46, 0.25);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid #FFFFFF;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-0.5px, -0.5px);
+  display: block;
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(104, 28, 46, 0.2);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   PRINT MEDIA STYLESHEET (Landscape A4 Layout)
 ══════════════════════════════════════════════════════════════════ */
 @media print {
-  .sidebar, .top-bar, .sched-header-actions, .sched-toolbar, .timetable-legend,
-  .radar-drawer, .radar-overlay, .sched-modal-backdrop, #app-toast {
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
+  .app-sidebar, .sidebar, .app-header, .top-bar, .sched-filter-bar, .chair-action-row,
+  .radar-drawer, .radar-overlay, .sched-modal-backdrop, #app-toast, .sched-utilization-badge,
+  .view-segmented-toggle, .sched-nav-group, #btn-print-schedule, .faculty-teaching-load-banner,
+  .student-portal-banner, .btn, .notification-panel, .role-dropdown-menu, .modal-backdrop {
     display: none !important;
   }
-  .app-shell, .main-wrapper, .page-container, .sched-page {
+  body, html {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    font-size: 11px !important;
+    width: 100% !important;
+  }
+  .app-layout, .app-main, .main-wrapper, .page-container, .sched-page {
     margin: 0 !important;
     padding: 0 !important;
     display: block !important;
     width: 100% !important;
-    background: #fff !important;
+    max-width: 100% !important;
+    background: #FFFFFF !important;
   }
   .timetable-shell {
     box-shadow: none !important;
-    border: 1px solid #ccc !important;
+    border: 1px solid #999 !important;
+    background: #FFFFFF !important;
+    page-break-inside: avoid !important;
+  }
+  .timetable-header {
+    background: #F3F4F6 !important;
+    grid-template-columns: 64px repeat(6, 1fr) !important;
   }
   .timetable-body {
     max-height: none !important;
     overflow: visible !important;
+    height: auto !important;
   }
-  .sched-page-header {
-    margin-bottom: 12px !important;
+  .timetable-columns {
+    height: 768px !important;
+    grid-template-columns: repeat(6, 1fr) !important;
   }
-  .sched-page-header h1::after {
-    content: " — Official Academic Schedule Report";
-    font-size: 14px;
-    font-weight: normal;
-    color: #555;
+  .day-column {
+    height: 768px !important;
+  }
+  .event-card-v2 {
+    box-shadow: none !important;
+    border: 1px solid #666 !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+  .timetable-footer-legend {
+    display: flex !important;
+    margin-top: 10px !important;
   }
 }
 

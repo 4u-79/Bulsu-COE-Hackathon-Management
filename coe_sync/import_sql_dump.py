@@ -5,7 +5,7 @@ cleans corrupted faculty, sections, and subjects, and yields unified datasets.
 
 import re
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 def parse_insert_tuples(sql_text: str, table_name: str) -> List[tuple]:
@@ -143,6 +143,225 @@ def generate_faculty_email(name: str, dept_code: str, existing_emails: set) -> s
         counter += 1
     existing_emails.add(email)
     return email
+
+
+def match_faculty_for_user(uname: str, faculty_list: List[Dict[str, Any]], user_id: int) -> Optional[Dict[str, Any]]:
+    """Match FAC-<SURNAME> and CHAIR-<SURNAME> users against coe facculty names."""
+    clean = uname.replace("FAC-", "").replace("CHAIR-", "").strip()
+    initial = clean[0].lower() if len(clean) > 1 else ""
+    surname = clean[1:].lower() if len(clean) > 1 else clean.lower()
+    surname_compact = surname.replace(" ", "")
+
+    candidates = []
+    for f in faculty_list:
+        fname = f["name"].lower()
+        fname_compact = fname.replace(" ", "")
+        if surname_compact in fname_compact or surname in fname:
+            candidates.append(f)
+
+    if len(candidates) == 1:
+        return candidates[0]
+    elif len(candidates) > 1:
+        filtered = []
+        for c in candidates:
+            tokens = c["name"].upper().replace("ENGR.", "").replace("DR.", "").replace("PROF.", "").strip().split()
+            if tokens and tokens[0].lower().startswith(initial):
+                filtered.append(c)
+        if len(filtered) == 1:
+            return filtered[0]
+        elif len(filtered) > 1:
+            # Disambiguate by ID proximity/order
+            return filtered[0] if int(user_id) < 60 else filtered[-1]
+        return candidates[0]
+    return None
+
+
+def load_and_clean_data_final_sql(sql_file_path: Path = None) -> Dict[str, Any]:
+    """
+    Parse and clean data-final.sql (Authoritative Primary SQL Dump for NEXUS 2.0).
+    Ingests all 539 Subjects, 90 Sections, 126 Faculty, and 129 Users.
+    Disambiguates duplicate lab codes, cleans whitespace, normalizes departments,
+    and resolves user-faculty/section relationships automatically.
+    """
+    if sql_file_path is None:
+        sql_file_path = Path(__file__).resolve().parent / "data-final.sql"
+
+    if not sql_file_path.exists():
+        raise FileNotFoundError(f"data-final.sql not found at {sql_file_path}")
+
+    sql_text = sql_file_path.read_text(encoding="utf-8", errors="ignore")
+
+    # 1. Faculty (126 real BulSU COE faculty across 8 depts + General Engineering)
+    raw_fac = parse_insert_tuples(sql_text, "coe facculty")
+    if not raw_fac:
+        raw_fac = parse_insert_tuples(sql_text, "coe faculty")
+    faculty_list = []
+    existing_emails = set()
+
+    for r in raw_fac:
+        row_id = int(r[0])
+        name = " ".join(r[1].split())
+        dept_raw = r[3].strip()
+        prog = DEPT_MAP.get(dept_raw, "GEN")
+        raw_email = r[2].strip() if len(r) > 2 and r[2] else ""
+        if raw_email and "@" in raw_email:
+            email = raw_email
+            existing_emails.add(email)
+        else:
+            email = generate_faculty_email(name, prog, existing_emails)
+
+        max_units = int(r[4]) if len(r) > 4 and r[4] and r[4].isdigit() else 21
+        curr_units = int(r[5]) if len(r) > 5 and r[5] and r[5].isdigit() else 0
+
+        faculty_list.append({
+            "id": row_id,
+            "name": name,
+            "email": email,
+            "program": prog,
+            "max_units": max_units,
+            "current_units": curr_units,
+            "preferred_session_type": "SPLIT",
+        })
+
+    # 2. Sections (90 sections across 8 departments, student_count = 40)
+    raw_sec = parse_insert_tuples(sql_text, "coe sections")
+    sections_list = []
+
+    for r in raw_sec:
+        row_id = int(r[0])
+        sec_name = " ".join(r[1].split())
+        dept_raw = r[2].strip()
+        yr = int(r[3]) if len(r) > 3 and r[3] and r[3] != "NULL" else 1
+        prog = DEPT_MAP.get(dept_raw, "GEN")
+
+        sections_list.append({
+            "id": row_id,
+            "name": sec_name,
+            "program": prog,
+            "year_level": yr,
+            "student_count": 40,
+        })
+
+    # Find MEE - 1A section id for student mayor
+    mee_1a_sec = next((s for s in sections_list if "MEE" in s["name"] and "1A" in s["name"].replace(" ", "")), None)
+    mee_1a_id = mee_1a_sec["id"] if mee_1a_sec else 81
+
+    # 3. Subjects (539 Curricular Subjects in 9-column format)
+    # (ID, Subject Code, Course Description, No. of Units, Total Hours, Type, Department, Year Level, Semester)
+    raw_subj = parse_insert_tuples(sql_text, "coe subjects")
+    subjects_list = []
+    seen_codes = set()
+
+    for r in raw_subj:
+        row_id = int(r[0])
+        raw_code = r[1]
+        raw_desc = r[2]
+        units = int(r[3]) if len(r) > 3 and r[3] and r[3] != "NULL" else 3
+        hours = int(r[4]) if len(r) > 4 and r[4] and r[4] != "NULL" else 3
+        stype_raw = r[5] if len(r) > 5 and r[5] else "Lecture"
+        dept_raw = r[6] if len(r) > 6 and r[6] else "General Subject"
+        yr = int(r[7]) if len(r) > 7 and r[7] and r[7] != "NULL" else 1
+        sem = int(r[8]) if len(r) > 8 and r[8] and r[8] != "NULL" else 1
+
+        # Anomaly Fix 1: Collapse extra whitespace (e.g. 'Introduction     to     Mechatronics Engineering')
+        desc = " ".join(raw_desc.split())
+
+        # Anomaly Fix 2: Clean subject codes (strip trailing periods, normalize internal space before lab suffixes L/D/F)
+        code = " ".join(raw_code.split()).rstrip(".").strip()
+        code = re.sub(r"\s+([LDF])$", r"\1", code)
+
+        prog = DEPT_MAP.get(dept_raw.strip(), "GEN")
+        is_lab = "LAB" in stype_raw.strip().upper()
+        norm_type = "LAB" if is_lab else "LECTURE"
+
+        # Anomaly Fix 3: Disambiguate duplicate lecture/lab subject codes (e.g. MFG 221 Lecture vs Lab)
+        if is_lab and (not (code.endswith("L") or code.endswith("D") or code.endswith("F")) or code in seen_codes):
+            code += "L"
+
+        seen_codes.add(code)
+
+        is_gen = (prog == "GEN")
+        req_grouping = is_lab or code.endswith("D") or code.endswith("F") or "DESIGN" in desc.upper() or "FIELD" in desc.upper()
+        pref_session = "STRAIGHT" if norm_type == "LAB" else ("SPLIT" if (hours == 3 or units == 3) else "STRAIGHT")
+        split_pref = "3_HOUR_BLOCK" if pref_session == "STRAIGHT" else "1.5_HOUR_SPLIT"
+
+        subjects_list.append({
+            "id": row_id,
+            "code": code,
+            "title": desc,
+            "program": prog,
+            "units": units,
+            "hours_per_week": hours,
+            "subject_type": norm_type,
+            "year_level": yr,
+            "semester": sem,
+            "is_general": is_gen,
+            "requires_grouping": req_grouping,
+            "preferred_session_type": pref_session,
+            "split_preference": split_pref,
+        })
+
+    # 4. Users (129 users: admin, DEAN-AAlba, 10 CHAIRs, 116 FACs, SMIDeJesus)
+    raw_users = parse_insert_tuples(sql_text, "users")
+    users_list = []
+    seen_usernames = set()
+
+    for r in raw_users:
+        user_id = int(r[0])
+        raw_uname = r[1].strip()
+        raw_pwd = r[2].strip() if len(r) > 2 else "password"
+        raw_role = r[3].strip() if len(r) > 3 else "FCLTY_DEPT"
+
+        assigned_role = raw_role
+        assigned_prog = None
+        assigned_ref = None
+
+        if raw_uname == "admin":
+            assigned_role = "ADMIN"
+            assigned_prog = None
+            assigned_ref = None
+        elif raw_uname == "DEAN-AAlba":
+            assigned_role = "DEAN"
+            assigned_prog = None
+            assigned_ref = None
+        elif raw_uname == "SMIDeJesus":
+            assigned_role = "STUDENT"
+            assigned_prog = "MEE"
+            assigned_ref = mee_1a_id
+        elif raw_uname.startswith("CHAIR-"):
+            assigned_role = "PROG_CHA"
+            fac = match_faculty_for_user(raw_uname, faculty_list, user_id)
+            if fac:
+                assigned_ref = fac["id"]
+                assigned_prog = fac["program"]
+        elif raw_uname.startswith("FAC-"):
+            assigned_role = "FCLTY_DEPT"
+            fac = match_faculty_for_user(raw_uname, faculty_list, user_id)
+            if fac:
+                assigned_ref = fac["id"]
+                assigned_prog = fac["program"]
+
+        # Disambiguate duplicate usernames to guarantee zero duplicate-key drops
+        unique_uname = raw_uname
+        if unique_uname in seen_usernames:
+            unique_uname = f"{raw_uname}-{assigned_prog}" if assigned_prog else f"{raw_uname}2"
+        seen_usernames.add(unique_uname)
+
+        users_list.append({
+            "id": user_id,
+            "username": unique_uname,
+            "password": raw_pwd,
+            "role": assigned_role,
+            "program": assigned_prog,
+            "reference_id": assigned_ref,
+        })
+
+    return {
+        "faculty": faculty_list,
+        "sections": sections_list,
+        "subjects": subjects_list,
+        "users": users_list,
+    }
 
 
 def load_and_clean_data3_sql(sql_file_path: Path = None) -> Dict[str, Any]:
@@ -375,13 +594,19 @@ def load_and_clean_data2_sql(sql_file_path: Path = None) -> Dict[str, Any]:
 
 
 def load_and_clean_sql_dump(sql_file_path: Path = None) -> Dict[str, Any]:
-    """Parse and clean SQL dump data. Prioritizes data-3.sql with backward-compatible fallback to data-2.sql."""
+    """Parse and clean SQL dump data. Prioritizes data-final.sql with backward-compatible fallback to data-3.sql and data-2.sql."""
     base_dir = Path(__file__).resolve().parent
     if sql_file_path is None:
+        p_final = base_dir / "data-final.sql"
+        if p_final.exists():
+            return load_and_clean_data_final_sql(p_final)
         p3 = base_dir / "data-3.sql"
         if p3.exists():
             return load_and_clean_data3_sql(p3)
         sql_file_path = base_dir / "data-2.sql"
+
+    if str(sql_file_path).endswith("data-final.sql"):
+        return load_and_clean_data_final_sql(sql_file_path)
 
     if str(sql_file_path).endswith("data-3.sql"):
         return load_and_clean_data3_sql(sql_file_path)

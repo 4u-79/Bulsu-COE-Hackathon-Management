@@ -53,8 +53,8 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
         db.create_all()
         print("[COE SYNC 2026] Schema recreated successfully.")
 
-        # Load cleaned data from data-2.sql (Single Source of Truth)
-        print("[COE SYNC 2026] Loading and cleaning data-2.sql...")
+        # Load cleaned data from data-final.sql (Single Source of Truth)
+        print("[COE SYNC 2026] Loading and cleaning data-final.sql...")
         dump_data = load_and_clean_sql_dump()
 
         # -------------------------------------------------------------
@@ -269,15 +269,13 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
         db.session.flush()
 
         # -------------------------------------------------------------
-        # 5. Seed Realistic User Accounts
+        # 5. Seed Authoritative Ground-Truth Users & Aliases
         # -------------------------------------------------------------
         print("[COE SYNC 2026] Seeding User accounts with role-based reference IDs...")
         first_faculty = faculty_members[0]
-        # Prefer a CPE faculty if available or first
         cpe_faculty = next((f for f in faculty_members if f.program == "CPE"), first_faculty)
         cpe_section = next((s for s in sections if "CPE" in s.name and "2" in s.name), sections[0])
 
-        # Find specific faculty and sections for demo accounts
         tullao_fac = next((f for f in faculty_members if "TULLAO" in f.name.upper()), first_faculty)
         bugayong_fac = next((f for f in faculty_members if "BUGAYONG" in f.name.upper()), first_faculty)
         roque_fac = next((f for f in faculty_members if "ROQUE" in f.name.upper()), first_faculty)
@@ -285,239 +283,73 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
         mee_section = next((s for s in sections if "MEE" in s.name and "1A" in s.name.replace(" ", "")), sections[0])
         ce_section = next((s for s in sections if "CE" in s.name and "1A" in s.name.replace(" ", "")), sections[0])
 
-        default_pwd_hash = generate_password_hash("nexus2026")
+        default_pwd_hash = generate_password_hash("password")
+        seeded_usernames = set()
+        user_objects = []
 
-        users = [
-            # College Dean (Sees all COE departments, read-only on generation, no subjects tab)
-            User(
-                username="dean",
-                password_hash=default_pwd_hash,
-                role="DEAN",
-                program=None,
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            # Global Administrator
-            User(
-                username="admin",
-                password_hash=default_pwd_hash,
-                role="ADMIN",
-                program=None,
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            # 8 Program-Scoped Program Chairs
-            User(
-                username="chair_cpe",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="CPE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="chair_mee",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="MEE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="chair_ce",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="CE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="chair_ee",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="EE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="chair_ece",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="ECE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="chair_ie",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="IE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="chair_mfge",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="MFGE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="chair_me",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="ME",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            # Legacy chair alias for test suite backwards compatibility
-            User(
-                username="chair",
-                password_hash=default_pwd_hash,
-                role="CHAIR",
-                program="CPE",
-                reference_id=None,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            # Faculty Accounts
-            User(
-                username="tullao",
-                password_hash=default_pwd_hash,
-                role="FACULTY",
-                program="MEE",
-                reference_id=tullao_fac.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="bugayong",
-                password_hash=default_pwd_hash,
-                role="FACULTY",
-                program="MEE",
-                reference_id=bugayong_fac.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="roque",
-                password_hash=default_pwd_hash,
-                role="FACULTY",
-                program="CE",
-                reference_id=roque_fac.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            # Legacy faculty aliases
-            User(
-                username="faculty",
-                password_hash=default_pwd_hash,
-                role="FACULTY",
-                program="CPE",
-                reference_id=cpe_faculty.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="prof_santos",
-                password_hash=default_pwd_hash,
-                role="FACULTY",
-                program="CPE",
-                reference_id=cpe_faculty.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="fac_santos",
-                password_hash=default_pwd_hash,
-                role="FACULTY",
-                program="CPE",
-                reference_id=cpe_faculty.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            # Student Accounts
-            User(
-                username="student_mee1a",
-                password_hash=default_pwd_hash,
-                role="STUDENT",
-                program="MEE",
-                reference_id=mee_section.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="mayor_mee1a",
-                password_hash=default_pwd_hash,
-                role="STUDENT",
-                program="MEE",
-                reference_id=mee_section.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="student_ce1a",
-                password_hash=default_pwd_hash,
-                role="STUDENT",
-                program="CE",
-                reference_id=ce_section.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            # Legacy student aliases
-            User(
-                username="student",
-                password_hash=default_pwd_hash,
-                role="STUDENT",
-                program="CPE",
-                reference_id=cpe_section.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
-            User(
-                username="student_cpe2a",
-                password_hash=default_pwd_hash,
-                role="STUDENT",
-                program="CPE",
-                reference_id=cpe_section.id,
-                must_change_credentials=False,
-                is_active_status=True,
-                demo_password="nexus2026",
-            ),
+        # 5a. Seed 129 Authoritative Users from data-final.sql
+        if "users" in dump_data:
+            print(f"[COE SYNC 2026] Ingesting {len(dump_data['users'])} authoritative users from SQL dump...")
+            for u in dump_data["users"]:
+                uname = u["username"]
+                seeded_usernames.add(uname)
+                user_objects.append(
+                    User(
+                        id=u["id"],
+                        username=uname,
+                        password_hash=default_pwd_hash,
+                        role=u["role"],
+                        program=u.get("program"),
+                        reference_id=u.get("reference_id"),
+                        must_change_credentials=False,
+                        is_active_status=True,
+                        demo_password="password",
+                    )
+                )
+
+        # 5b. Seed Backward-Compatible Aliases (if username not already registered)
+        alias_accounts = [
+            ("dean", "DEAN", None, None),
+            ("admin", "ADMIN", None, None),
+            ("chair_cpe", "CHAIR", "CPE", None),
+            ("chair_mee", "CHAIR", "MEE", None),
+            ("chair_ce", "CHAIR", "CE", None),
+            ("chair_ee", "CHAIR", "EE", None),
+            ("chair_ece", "CHAIR", "ECE", None),
+            ("chair_ie", "CHAIR", "IE", None),
+            ("chair_mfge", "CHAIR", "MFGE", None),
+            ("chair_me", "CHAIR", "ME", None),
+            ("chair", "CHAIR", "CPE", None),
+            ("tullao", "FACULTY", "MEE", tullao_fac.id),
+            ("bugayong", "FACULTY", "MEE", bugayong_fac.id),
+            ("roque", "FACULTY", "CE", roque_fac.id),
+            ("faculty", "FACULTY", "CPE", cpe_faculty.id),
+            ("prof_santos", "FACULTY", "CPE", cpe_faculty.id),
+            ("fac_santos", "FACULTY", "CPE", cpe_faculty.id),
+            ("student_mee1a", "STUDENT", "MEE", mee_section.id),
+            ("mayor_mee1a", "STUDENT", "MEE", mee_section.id),
+            ("student_ce1a", "STUDENT", "CE", ce_section.id),
+            ("student", "STUDENT", "CPE", cpe_section.id),
+            ("student_cpe2a", "STUDENT", "CPE", cpe_section.id),
         ]
-        db.session.add_all(users)
+
+        for uname, urole, uprog, uref in alias_accounts:
+            if uname not in seeded_usernames:
+                seeded_usernames.add(uname)
+                user_objects.append(
+                    User(
+                        username=uname,
+                        password_hash=default_pwd_hash,
+                        role=urole,
+                        program=uprog,
+                        reference_id=uref,
+                        must_change_credentials=False,
+                        is_active_status=True,
+                        demo_password="nexus2026",
+                    )
+                )
+
+        db.session.add_all(user_objects)
         db.session.flush()
 
         # -------------------------------------------------------------
@@ -567,23 +399,23 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
         # -------------------------------------------------------------
         # 8. Seed Audit Log Entry
         # -------------------------------------------------------------
-        admin_user = next(u for u in users if u.username == "admin")
+        admin_user = next(u for u in user_objects if u.username == "admin")
         audit_entry = AuditLog(
             user_id=admin_user.id,
             action="DATABASE_SEEDED",
             details=(
-                f"data-2.sql ingestion complete: {len(faculty_members)} faculty, "
+                f"data-final.sql ingestion complete: {len(faculty_members)} faculty, "
                 f"{len(sections)} sections, {len(subjects)} subjects, {len(rooms)} rooms, "
-                f"{len(schedules_data)} schedules."
+                f"{len(user_objects)} users."
             ),
         )
         db.session.add(audit_entry)
 
         db.session.commit()
-        print(f"[COE SYNC 2026] Database successfully seeded with {len(faculty_members)} faculty, {len(sections)} sections, {len(subjects)} subjects, {len(rooms)} rooms, and {len(schedules_data)} schedules.")
+        print(f"[COE SYNC 2026] Database successfully seeded with {len(faculty_members)} faculty, {len(sections)} sections, {len(subjects)} subjects, {len(rooms)} rooms, and {len(user_objects)} users.")
 
         return {
-            "users": len(users),
+            "users": len(user_objects),
             "faculty": len(faculty_members),
             "sections": len(sections),
             "rooms": len(rooms),

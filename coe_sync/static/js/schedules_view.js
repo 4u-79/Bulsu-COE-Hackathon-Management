@@ -14,12 +14,12 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 const GRID_START_HOUR   = 7;    // 7:00 AM
-const GRID_END_HOUR     = 20;   // 8:00 PM (13 hours = 832px height at 64px/hr)
+const GRID_END_HOUR     = 19;   // 7:00 PM (12 hours = 768px height at 32px per 30-min slot)
 const SLOT_MINUTES      = 30;   // each row = 30 min
 const ROW_PX            = 32;   // pixel height of one 30-min slot (64px per hour)
-const PIXELS_PER_MINUTE = 64 / 60; // 64px per hour
-const DAYS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
-const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const PIXELS_PER_MINUTE = ROW_PX / SLOT_MINUTES; // 32px / 30min
+const DAYS = ["MON","TUE","WED","THU","FRI","SAT"];
+const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat"];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -207,7 +207,7 @@ function buildDayHeaders() {
     `;
     header.appendChild(cell);
   } else {
-    header.style.gridTemplateColumns = "64px repeat(7, 1fr)";
+    header.style.gridTemplateColumns = "64px repeat(6, 1fr)";
     DAYS.forEach((_, i) => {
       const date = new Date(monday);
       date.setDate(monday.getDate() + i);
@@ -651,7 +651,7 @@ function renderEventCards(schedules) {
     if (dayContainer) {
       dayContainer.style.display = "block";
       dayContainer.style.position = "relative";
-      dayContainer.style.height = "832px";
+      dayContainer.style.height = "768px";
       dayContainer.style.overflow = "hidden";
       dayContainer.style.width = "100%";
       dayContainer.querySelectorAll(".event-card-day").forEach(el => el.remove());
@@ -1651,17 +1651,17 @@ function updateWeekLabel() {
   const label = document.getElementById("week-label");
   if (!label) return;
   if (_activeViewMode === "DAY") {
-    const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const monday = getWeekMonday(new Date(), _weekOffset);
     const date = new Date(monday);
     date.setDate(monday.getDate() + _activeDayIndex);
     label.textContent = `${dayNames[_activeDayIndex]} (${date.toLocaleDateString("en-US", { month:"short", day:"numeric" })})`;
   } else {
     const monday = getWeekMonday(new Date(), _weekOffset);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
+    const saturday = new Date(monday);
+    saturday.setDate(monday.getDate() + 5);
     const fmt = (d) => d.toLocaleDateString("en-US", { month:"short", day:"numeric" });
-    label.textContent = `${fmt(monday)} – ${fmt(sunday)}`;
+    label.textContent = `${fmt(monday)} – ${fmt(saturday)}`;
   }
 }
 
@@ -1685,8 +1685,11 @@ function refreshWeekHeaders() {
 // 10. Event Bindings
 // ─────────────────────────────────────────────────────────────────────────────
 function bindEvents() {
-  // Add schedule button
+  // Add schedule button & Smart Generator CTA
   document.getElementById("btn-add-schedule")?.addEventListener("click", () => openModal());
+  document.getElementById("btn-create-schedule-cta")?.addEventListener("click", () => {
+    window.location.href = "/schedules/create";
+  });
 
   // Week | Day View Toggle
   document.getElementById("toggle-view-week")?.addEventListener("click", () => {

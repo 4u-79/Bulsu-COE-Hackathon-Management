@@ -610,6 +610,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
         "unplaced_items": unplaced_items,
         "quality_score": quality_score,
         "hard_conflicts": 0,
+        "schedules": [s.to_dict() for s in placed_schedules],
         "metrics": {
             "classes_scheduled": len(placed_schedules),
             "rooms_used": len(used_rooms),

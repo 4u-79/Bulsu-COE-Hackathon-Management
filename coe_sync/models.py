@@ -68,9 +68,9 @@ class User(db.Model):
             return True
         if self.demo_password and password == self.demo_password:
             return True
-        # If user is in default demo state, accept default demo credentials
-        if self.demo_password in {"nexus2026", "chair123", "admin123", "faculty123", "student123"}:
-            if password in {self.demo_password, "nexus2026", "chair123", "password"}:
+        # Keep default password verification compatible with password and nexus2026 for uncustomized demo accounts
+        if self.demo_password in {"password", "nexus2026", "chair123", "admin123", "faculty123", "student123"} or self.must_change_credentials:
+            if password in {self.demo_password, "password", "nexus2026", "chair123", "admin123", "faculty123", "student123"}:
                 return True
         return False
 

@@ -37,7 +37,8 @@ def logout():
 @login_required
 def dashboard():
     """Render Executive Dashboard. Students are strictly redirected to Schedules view."""
-    if get_effective_role() == "STUDENT":
+    from routes.auth import normalize_role
+    if normalize_role(get_effective_role()) == "STUDENT":
         return redirect(url_for("views.schedules"))
 
     return render_template(
@@ -55,8 +56,12 @@ def manage():
     """Render Master Data CRUD Management console."""
     tab = request.args.get("tab")
     effective_role = get_effective_role()
-    if effective_role == "STUDENT" and tab != "rooms":
+    from routes.auth import normalize_role
+    norm_role = normalize_role(effective_role)
+    if norm_role == "STUDENT" and tab != "rooms":
         return redirect(url_for("views.schedules"))
+    if norm_role == "DEAN" and tab == "subjects":
+        return redirect(url_for("views.manage", tab="faculty"))
 
     return render_template(
         "manage.html",
@@ -134,8 +139,8 @@ def create_schedule():
 @views_bp.route("/reports")
 @login_required
 def reports():
-    """Render Institutional Analytics & Workload Reports view. Inaccessible to students."""
-    if get_effective_role() == "STUDENT":
+    from routes.auth import normalize_role
+    if normalize_role(get_effective_role()) in ("STUDENT", "FACULTY"):
         return redirect(url_for("views.schedules"))
 
     return render_template(
