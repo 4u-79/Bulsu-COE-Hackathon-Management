@@ -125,16 +125,26 @@ function updateProfilePillUI(role) {
   const avatarEl = document.getElementById("profile-avatar-circle");
   if (!nameEl || !roleEl || !avatarEl) return;
 
-  avatarEl.classList.remove("avatar-chair", "avatar-faculty", "avatar-student");
+  avatarEl.classList.remove("avatar-dean", "avatar-admin", "avatar-chair", "avatar-faculty", "avatar-student");
 
-  if (role === "FACULTY") {
-    nameEl.textContent = "Prof. Robles";
+  if (role === "DEAN") {
+    nameEl.textContent = "Dr. College Dean";
+    roleEl.textContent = "College Dean";
+    avatarEl.textContent = "DN";
+    avatarEl.classList.add("avatar-dean");
+  } else if (role === "ADMIN") {
+    nameEl.textContent = "Administrator";
+    roleEl.textContent = "Global Admin";
+    avatarEl.textContent = "AD";
+    avatarEl.classList.add("avatar-admin");
+  } else if (role === "FACULTY" || role === "FCLTY_DEPT") {
+    nameEl.textContent = "Engr. Tullao";
     roleEl.textContent = "Faculty Member";
-    avatarEl.textContent = "PR";
+    avatarEl.textContent = "AT";
     avatarEl.classList.add("avatar-faculty");
-  } else if (role === "STUDENT") {
-    nameEl.textContent = "BSMEE-1A";
-    roleEl.textContent = "Student";
+  } else if (role === "STUDENT" || role === "STDN_MYR") {
+    nameEl.textContent = "MEE - 1A";
+    roleEl.textContent = "Student Mayor";
     avatarEl.textContent = "1A";
     avatarEl.classList.add("avatar-student");
   } else {
@@ -170,6 +180,7 @@ async function executeRoleSwitch(chosenRole) {
 
     await updateChairStatusUI();
     await updateReschedulesBadge();
+    await updateRequestsInbox();
     await updateGlobalAlertPill();
 
     window.dispatchEvent(new CustomEvent("roleChanged", { detail: { role: chosenRole, reference_id: result?.active_reference_id } }));
@@ -195,7 +206,7 @@ async function initViewAsSelector() {
       }
       updateProfilePillUI(effectiveRole);
 
-      if (sessionInfo.role !== "CHAIR" && sessionInfo.role !== "ADMIN") {
+      if (sessionInfo.role !== "CHAIR" && sessionInfo.role !== "ADMIN" && sessionInfo.role !== "DEAN") {
         const container = document.getElementById("view-as-container");
         if (container) container.remove();
         applyRolePermissions(effectiveRole);
@@ -219,14 +230,22 @@ async function initViewAsSelector() {
 }
 
 /**
- * Apply role-based UI restrictions (Hide Add/Edit/Delete buttons when not CHAIR or ADMIN)
+ * Apply role-based UI restrictions according to NEXUS 2.0 access matrix
  */
 window.applyRolePermissions = function (role) {
-  const isAdminOrChair = role === "CHAIR" || role === "ADMIN";
-  const isStudent = role === "STUDENT";
-  const isFaculty = role === "FACULTY";
+  let normalizedRole = role || "CHAIR";
+  if (role === "PROG_CHA") normalizedRole = "CHAIR";
+  if (role === "FCLTY_DEPT") normalizedRole = "FACULTY";
+  if (role === "STDN_MYR") normalizedRole = "STUDENT";
 
-  updateProfilePillUI(role);
+  const isDean = normalizedRole === "DEAN";
+  const isAdmin = normalizedRole === "ADMIN";
+  const isChair = normalizedRole === "CHAIR";
+  const isFaculty = normalizedRole === "FACULTY";
+  const isStudent = normalizedRole === "STUDENT";
+  const isAdminOrChair = isChair || isAdmin;
+
+  updateProfilePillUI(normalizedRole);
 
   // Admin/Chair only mutation controls
   const adminElements = document.querySelectorAll(".admin-only");
@@ -239,16 +258,33 @@ window.applyRolePermissions = function (role) {
     }
   });
 
-  // Strict Student View Simplification:
-  const nonStudentElements = document.querySelectorAll(
-    ".non-student, #nav-dashboard, #nav-reports, #nav-conflict-radar, #btn-conflict-radar, #nav-rooms, #nav-faculty, #nav-sections, #nav-subjects, a[href^='/manage']"
-  );
-  nonStudentElements.forEach((el) => {
-    el.style.display = isStudent ? "none" : "";
-  });
+  // Navigation tabs visibility
+  const navDashboard = document.getElementById("nav-dashboard");
+  const navSchedules = document.getElementById("nav-schedules");
+  const navCreateSchedule = document.getElementById("nav-create-schedule");
+  const navRooms = document.getElementById("nav-rooms");
+  const navMyProfile = document.getElementById("nav-my-profile");
+  const navFaculty = document.getElementById("nav-faculty");
+  const navSections = document.getElementById("nav-sections");
+  const navSubjects = document.getElementById("nav-subjects");
+  const navConflictRadar = document.getElementById("nav-conflict-radar");
+  const navReports = document.getElementById("nav-reports");
+
+  if (navDashboard) navDashboard.style.display = ""; // All see dashboard
+  if (navSchedules) navSchedules.style.display = ""; // All see schedules
+  if (navRooms) navRooms.style.display = ""; // All see rooms
+
+  if (navCreateSchedule) navCreateSchedule.style.display = isAdminOrChair ? "" : "none";
+  if (navMyProfile) navMyProfile.style.display = isFaculty ? "" : "none";
+  if (navFaculty) navFaculty.style.display = (isAdminOrChair || isDean) ? "" : "none";
+  if (navSections) navSections.style.display = isStudent ? "none" : "";
+  // Dean CANNOT see subjects per NEXUS 2.0 Part 2 spec:
+  if (navSubjects) navSubjects.style.display = (isAdminOrChair || isFaculty) ? "" : "none";
+  if (navConflictRadar) navConflictRadar.style.display = isAdminOrChair ? "" : "none";
+  if (navReports) navReports.style.display = (isAdminOrChair || isDean) ? "" : "none";
 
   // Role Impersonator lockdown: If native session role is FACULTY or STUDENT, remove View As toggle
-  if (window.AUTHENTIC_USER_ROLE && window.AUTHENTIC_USER_ROLE !== "CHAIR" && window.AUTHENTIC_USER_ROLE !== "ADMIN") {
+  if (window.AUTHENTIC_USER_ROLE && window.AUTHENTIC_USER_ROLE !== "CHAIR" && window.AUTHENTIC_USER_ROLE !== "ADMIN" && window.AUTHENTIC_USER_ROLE !== "DEAN") {
     const viewAsEl = document.getElementById("view-as-container");
     if (viewAsEl) viewAsEl.remove();
   }
@@ -342,16 +378,23 @@ function renderChairStatus(isActive, chairName = "") {
 // -------------------------------------------------------------
 // 2-Tier Student Reschedule Pipeline Controller
 // -------------------------------------------------------------
+let _activeInboxTab = "interdept";
 let _activeRescheduleTab = "pending";
 let _allRescheduleRequests = [];
+let _allInterdeptRequests = [];
 
 function initReschedulePipeline() {
   const headerBtn = document.getElementById("btn-header-reschedules");
+  const inboxPill = document.getElementById("requests-inbox-pill");
   const modal = document.getElementById("reschedule-modal-backdrop");
   const closeBtn = document.getElementById("reschedule-modal-close-btn");
 
   if (headerBtn) {
-    headerBtn.addEventListener("click", () => openRescheduleModal("pending"));
+    headerBtn.addEventListener("click", () => openUnifiedInboxModal("reschedules"));
+  }
+
+  if (inboxPill) {
+    inboxPill.addEventListener("click", () => openUnifiedInboxModal());
   }
 
   if (closeBtn && modal) {
@@ -361,7 +404,17 @@ function initReschedulePipeline() {
     });
   }
 
-  // Tabs navigation
+  // Top Inbox Tabs navigation
+  const tabInterdept = document.getElementById("inbox-tab-interdept");
+  const tabResched = document.getElementById("inbox-tab-reschedules");
+  if (tabInterdept) {
+    tabInterdept.addEventListener("click", () => switchInboxTab("interdept"));
+  }
+  if (tabResched) {
+    tabResched.addEventListener("click", () => switchInboxTab("reschedules"));
+  }
+
+  // Reschedule Sub-Tabs navigation
   const tabPending = document.getElementById("reschedule-tab-pending");
   const tabAll = document.getElementById("reschedule-tab-all");
   const tabNew = document.getElementById("reschedule-tab-new");
@@ -392,7 +445,187 @@ function initReschedulePipeline() {
   }
 
   updateReschedulesBadge();
+  updateRequestsInbox();
 }
+
+window.openUnifiedInboxModal = async function (preferredTab = null) {
+  const modal = document.getElementById("reschedule-modal-backdrop");
+  if (!modal) return;
+
+  modal.classList.add("active");
+  await updateRequestsInbox();
+  await updateReschedulesBadge();
+
+  if (preferredTab) {
+    switchInboxTab(preferredTab);
+  } else {
+    const interCount = parseInt(document.getElementById("count-badge-interdept")?.textContent || "0", 10);
+    switchInboxTab(interCount > 0 ? "interdept" : "reschedules");
+  }
+};
+
+window.switchInboxTab = function (tab) {
+  _activeInboxTab = tab;
+  const tabInterdept = document.getElementById("inbox-tab-interdept");
+  const tabResched = document.getElementById("inbox-tab-reschedules");
+  const interContainer = document.getElementById("interdept-list-container");
+  const reschedContainer = document.getElementById("reschedule-list-container");
+  const subfilterBar = document.getElementById("reschedule-subfilter-bar");
+  const formContainer = document.getElementById("reschedule-new-form");
+  const tabNew = document.getElementById("reschedule-tab-new");
+
+  if (tab === "interdept") {
+    if (tabInterdept) tabInterdept.className = "btn btn-sm btn-primary active";
+    if (tabResched) tabResched.className = "btn btn-sm btn-secondary";
+    if (interContainer) interContainer.style.display = "flex";
+    if (reschedContainer) reschedContainer.style.display = "none";
+    if (subfilterBar) subfilterBar.style.display = "none";
+    if (formContainer) formContainer.style.display = "none";
+    if (tabNew) tabNew.style.display = "none";
+    renderInterdeptCards();
+  } else {
+    if (tabResched) tabResched.className = "btn btn-sm btn-primary active";
+    if (tabInterdept) tabInterdept.className = "btn btn-sm btn-secondary";
+    if (interContainer) interContainer.style.display = "none";
+    if (reschedContainer) reschedContainer.style.display = "flex";
+    if (subfilterBar) subfilterBar.style.display = "flex";
+    if (tabNew) {
+      tabNew.style.display = window.CURRENT_ROLE === "STUDENT" ? "inline-block" : "none";
+    }
+    switchRescheduleTab("pending");
+  }
+};
+
+window.updateRequestsInbox = async function () {
+  try {
+    const res = await API.get("/api/requests/pending-summary");
+    if (res.status === "success" && res.data) {
+      const d = res.data;
+      const totalPending = d.total_pending || 0;
+      const interCount = d.interdept_count || 0;
+      const reschedCount = d.reschedule_count || 0;
+
+      const inboxText = document.getElementById("requests-inbox-text");
+      const inboxDot = document.getElementById("requests-dot");
+      const badgeInter = document.getElementById("count-badge-interdept");
+      const badgeResched = document.getElementById("count-badge-resched");
+
+      if (inboxText) {
+        inboxText.textContent = `🔔 ${totalPending} Request${totalPending === 1 ? '' : 's'}`;
+      }
+      if (inboxDot) {
+        inboxDot.style.background = totalPending > 0 ? "#EF4444" : "#10B981";
+      }
+      if (badgeInter) badgeInter.textContent = interCount;
+      if (badgeResched) badgeResched.textContent = reschedCount;
+    }
+  } catch (err) {
+    // soft catch
+  }
+};
+
+window.renderInterdeptCards = async function () {
+  const container = document.getElementById("interdept-list-container");
+  if (!container) return;
+
+  container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 24px;">Loading inter-department requests...</div>`;
+
+  try {
+    const res = await API.get("/api/interdept/requests");
+    if (res.status === "success" && Array.isArray(res.data)) {
+      _allInterdeptRequests = res.data;
+      const items = res.data;
+
+      if (items.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--text-muted); padding: 36px 20px;">
+            <div style="font-size: 28px; margin-bottom: 8px;">✓</div>
+            <div>No pending inter-department room / conflict requests found.</div>
+          </div>
+        `;
+        return;
+      }
+
+      const role = window.CURRENT_ROLE || "CHAIR";
+      const canAct = role === "CHAIR" || role === "ADMIN" || role === "DEAN";
+
+      container.innerHTML = items.map(r => {
+        let statusPill = "";
+        if (r.status === "PENDING_APPROVAL") {
+          statusPill = `<span class="step-pill pending">⏳ Pending Approval</span>`;
+        } else if (r.status === "APPROVED") {
+          statusPill = `<span class="step-pill approved">✓ Approved &amp; Allocated</span>`;
+        } else {
+          statusPill = `<span class="step-pill rejected">✕ Declined</span>`;
+        }
+
+        return `
+          <div class="reschedule-card" data-id="${r.id}" style="border-left: 4px solid #3B82F6;">
+            <div class="reschedule-card-header">
+              <div>
+                <div class="reschedule-card-title">
+                  <span style="background: #DBEAFE; color: #1D4ED8; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">
+                    ${escapeHtml(r.requesting_dept)} &rarr; ${escapeHtml(r.target_dept || 'GEN')}
+                  </span>
+                  ${escapeHtml(r.subject_code || 'Subject')} &bull; ${escapeHtml(r.section_name || 'Section')}
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                  Room Requested: <strong>${escapeHtml(r.target_room_code || 'Any')}</strong> (${escapeHtml(r.target_dept || 'General COE')})
+                  &bull; Requested by Chair (${escapeHtml(r.requesting_dept)})
+                </div>
+              </div>
+              <div>${statusPill}</div>
+            </div>
+
+            <div class="reschedule-details-row" style="margin-top: 6px;">
+              <div><strong>Requested Slot:</strong> ${r.day_of_week || 'MON'} ${r.start_time ? r.start_time.slice(0,5) : ''}&ndash;${r.end_time ? r.end_time.slice(0,5) : ''}</div>
+              <div><strong>Capacity Needed:</strong> ${r.capacity_needed || 40} seats</div>
+            </div>
+
+            <div style="font-size: 12px; background: #F1F5F9; padding: 8px 12px; border-radius: var(--radius-xs); margin-top: 6px;">
+              <strong>Justification:</strong> ${escapeHtml(r.reason || 'Department room overflow capacity')}
+            </div>
+
+            <!-- AI / Algorithmic Alternative Recommendations -->
+            <div style="margin-top: 6px; padding: 10px 12px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: var(--radius-xs);">
+              <div style="font-size: 11.5px; font-weight: 700; color: #065F46; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
+                <span>💡 Algorithmic Alternative Recommendation:</span>
+              </div>
+              <div style="font-size: 12px; color: #047857;">
+                Assign to <strong>${escapeHtml(r.recommended_alt_room || 'COE 102')}</strong> &bull; Recommended Slot: <strong>${escapeHtml(r.recommended_alt_time || 'Alternate Free Window')}</strong>
+              </div>
+            </div>
+
+            ${r.status === "PENDING_APPROVAL" && canAct ? `
+              <div class="reschedule-actions-row" style="margin-top: 10px; display:flex; gap: 8px;">
+                <button class="btn btn-sm btn-primary" onclick="handleInterdeptAction(${r.id}, 'APPROVE')">
+                  ✓ Approve &amp; Apply Alternative
+                </button>
+                <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleInterdeptAction(${r.id}, 'DECLINE')">
+                  ✕ Decline
+                </button>
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }).join("");
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="text-align: center; color: #DC2626; padding: 24px;">Failed to load inter-department requests: ${escapeHtml(err.message)}</div>`;
+  }
+};
+
+window.handleInterdeptAction = async function (id, action) {
+  try {
+    const res = await API.post(`/api/interdept/${id}/action`, { action });
+    showToast(res.message || `Request ${action.toLowerCase()}d successfully`);
+    await updateRequestsInbox();
+    renderInterdeptCards();
+    if (window.fetchAndRender) window.fetchAndRender();
+  } catch (err) {
+    showToast(err.message || "Failed to process inter-department action", true);
+  }
+};
 
 async function updateReschedulesBadge() {
   const badge = document.getElementById("reschedule-count-badge");
@@ -433,23 +666,10 @@ async function updateReschedulesBadge() {
 }
 
 window.openRescheduleModal = async function (defaultTab = "pending", preselectedScheduleId = null) {
-  const modal = document.getElementById("reschedule-modal-backdrop");
-  if (!modal) return;
-
-  modal.classList.add("active");
-  await updateReschedulesBadge();
-
-  const tabNew = document.getElementById("reschedule-tab-new");
-  if (tabNew) {
-    // Only students can propose new reschedules
-    tabNew.style.display = window.CURRENT_ROLE === "STUDENT" ? "inline-block" : "none";
-  }
-
+  openUnifiedInboxModal("reschedules");
   if (defaultTab === "new") {
     await populateRescheduleScheduleSelect(preselectedScheduleId);
     switchRescheduleTab("new");
-  } else {
-    switchRescheduleTab(defaultTab);
   }
 };
 

@@ -285,11 +285,19 @@ def create_app(config_name=None):
         search = request.args.get("search", "").strip()
         program = request.args.get("program", "").strip()
         year_level = request.args.get("year_level", type=int)
+        faculty_id = request.args.get("faculty_id", type=int)
 
         effective_role = session.get("active_role") or session.get("role")
         effective_prog = session.get("active_program") or session.get("program")
         if not program and effective_role == "CHAIR" and effective_prog:
             program = effective_prog
+
+        if not faculty_id and effective_role in ("FACULTY", "FCLTY_DEPT"):
+            faculty_id = session.get("active_reference_id") or session.get("reference_id")
+
+        if faculty_id:
+            sec_ids = [row[0] for row in db.session.query(Schedule.section_id).filter(Schedule.faculty_id == faculty_id).distinct().all()]
+            query = query.filter(Section.id.in_(sec_ids))
 
         if search:
             query = query.filter(Section.name.ilike(f"%{search}%"))
@@ -324,11 +332,20 @@ def create_app(config_name=None):
         semester = request.args.get("semester", type=int)
         subject_type = request.args.get("type", "").strip().upper()
         units = request.args.get("units", type=int)
+        faculty_id = request.args.get("faculty_id", type=int)
+        curriculum = str(request.args.get("curriculum", "")).lower() == "true"
 
         effective_role = session.get("active_role") or session.get("role")
         effective_prog = session.get("active_program") or session.get("program")
         if not program and effective_role == "CHAIR" and effective_prog:
             program = effective_prog
+
+        if not faculty_id and effective_role in ("FACULTY", "FCLTY_DEPT") and not curriculum:
+            faculty_id = session.get("active_reference_id") or session.get("reference_id")
+
+        if faculty_id and not curriculum:
+            sub_ids = [row[0] for row in db.session.query(Schedule.subject_id).filter(Schedule.faculty_id == faculty_id).distinct().all()]
+            query = query.filter(Subject.id.in_(sub_ids))
 
         if search:
             query = query.filter(

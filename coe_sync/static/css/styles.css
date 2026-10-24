@@ -351,6 +351,8 @@ a {
   transition: background-color 0.2s ease;
 }
 
+.role-profile-avatar.avatar-dean { background-color: #701A75; }
+.role-profile-avatar.avatar-admin { background-color: #374151; }
 .role-profile-avatar.avatar-chair { background-color: #6E1717; }
 .role-profile-avatar.avatar-faculty { background-color: #1E56C5; }
 .role-profile-avatar.avatar-student { background-color: #D97706; }

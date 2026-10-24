@@ -18,9 +18,11 @@ from models import (
     Room,
     Faculty,
     AuditLog,
+    InterDepartmentRequest,
 )
 from services.conflict_detector import (
     validate_schedule_slot,
+    find_alternatives,
     parse_time,
     time_to_minutes,
     times_overlap,
@@ -149,13 +151,16 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
         ("16:00", "17:30"),
     ]
     lab_slots = [
+        ("07:00", "10:00"),
         ("08:00", "11:00"),
+        ("10:00", "13:00"),
         ("13:00", "16:00"),
         ("16:00", "19:00"),
     ]
     block_3_hour_slots = [
+        ("07:00", "10:00"),
         ("08:00", "11:00"),
-        ("09:00", "12:00"),
+        ("10:00", "13:00"),
         ("13:00", "16:00"),
         ("16:00", "19:00"),
     ]
@@ -243,9 +248,19 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                 })
                 continue
 
-            # Soft constraint: Optimize room utilization (order available rooms)
+            # Two-Tier Room Allocation:
+            # Rule 1 (Department Rooms First): Prioritize rooms where Room.department == sec_p
+            # Rule 2 (Overflow / Inter-Department & General Rooms): GEN rooms, then other dept rooms
+            tier1_rooms = [r for r in valid_rooms if getattr(r, "department", "GEN") == sec_p]
+            tier2_gen = [r for r in valid_rooms if getattr(r, "department", "GEN") == "GEN"]
+            tier2_other = [r for r in valid_rooms if getattr(r, "department", "GEN") not in (sec_p, "GEN")]
+
             if optimize_utilization:
-                valid_rooms.sort(key=lambda r: r.room_code)
+                tier1_rooms.sort(key=lambda r: r.room_code)
+                tier2_gen.sort(key=lambda r: r.room_code)
+                tier2_other.sort(key=lambda r: r.room_code)
+
+            ordered_rooms = tier1_rooms + tier2_gen + tier2_other
 
             # Candidate faculty matching program & workload
             sub_p = normalize_prog_code(sub.program)
@@ -271,12 +286,27 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                     )
                 )
 
-            # Check if 1.5-hour split preference applies for 3-unit lecture course
-            is_split_lecture = (
-                sub.subject_type == "LECTURE"
-                and (sub.units == 3 or sub.hours_per_week == 3)
-                and getattr(sub, "split_preference", "1.5_HOUR_SPLIT") == "1.5_HOUR_SPLIT"
-            )
+            # Check session split preferences: [2x 1.5-Hr Split | 3-Hr Straight | Auto]
+            session_split_mode = str(
+                config.get("session_split_mode")
+                or preferences.get("session_split_mode")
+                or "auto"
+            ).strip().lower()
+
+            fac_pref = getattr(valid_faculty[0], "preferred_session_type", "SPLIT") if valid_faculty else "SPLIT"
+            sub_pref = getattr(sub, "preferred_session_type", getattr(sub, "split_preference", "SPLIT"))
+
+            if session_split_mode in ("straight", "3_hour_straight", "3-hr straight"):
+                is_split_lecture = False
+            elif session_split_mode in ("split", "2x 1.5-hr split", "1.5_hour_split"):
+                is_split_lecture = (sub.subject_type == "LECTURE" and (sub.units == 3 or sub.hours_per_week == 3))
+            else:  # auto
+                is_split_lecture = (
+                    sub.subject_type == "LECTURE"
+                    and (sub.units == 3 or sub.hours_per_week == 3)
+                    and fac_pref != "STRAIGHT"
+                    and sub_pref in ("SPLIT", "1.5_HOUR_SPLIT")
+                )
 
             slot_placed = False
 
@@ -296,7 +326,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                         if is_sec_busy(sec.id, day1, st, et) or is_sec_busy(sec.id, day2, st, et):
                             continue
 
-                        for r in valid_rooms:
+                        for r in ordered_rooms:
                             if slot_placed:
                                 break
                             # Fast pre-check: room must be free on both days
@@ -361,6 +391,34 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     used_faculty.add(fac.id)
                                     faculty_units_assigned[fac.id] = faculty_units_assigned.get(fac.id, 0) + sub.units
 
+                                    # Check Rule 2: If placed in overflow/interdepartmental room, create InterDepartmentRequest
+                                    r_dept = getattr(r, "department", "GEN")
+                                    if r_dept != sec_p and sec_p not in ("GEN", "", None):
+                                        import json
+                                        target_dept = r_dept if r_dept != "GEN" else "ADMIN"
+                                        alt_payload = {
+                                            "subject_id": sub.id,
+                                            "section_id": sec.id,
+                                            "faculty_id": fac.id,
+                                            "room_id": r.id,
+                                            "day_of_week": day1,
+                                            "start_time": st_str,
+                                            "end_time": et_str,
+                                        }
+                                        alts = find_alternatives(alt_payload, exclude_schedule_id=sched1.id)
+                                        inter_req = InterDepartmentRequest(
+                                            source_department=sec_p,
+                                            target_department=target_dept,
+                                            schedule_id=sched1.id,
+                                            room_id=r.id,
+                                            requested_by_role="CHAIR",
+                                            requested_by_name=f"Program Chair ({sec_p})",
+                                            reason=f"Automated Overflow Allocation: All {sec_p} department rooms occupied for {sub.code} ({sec.name}). Room {r.room_code} requested from {r_dept}.",
+                                            status="PENDING_APPROVAL",
+                                            alternative_recommendations=json.dumps(alts) if alts else None,
+                                        )
+                                        db.session.add(inter_req)
+
                                     slot_placed = True
                                     break
 
@@ -394,7 +452,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                         if is_sec_busy(sec.id, day, st, et):
                             continue
 
-                        for r in valid_rooms:
+                        for r in ordered_rooms:
                             if slot_placed:
                                 break
                             # Fast pre-check: room free
@@ -437,6 +495,34 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     used_rooms.add(r.id)
                                     used_faculty.add(fac.id)
                                     faculty_units_assigned[fac.id] = faculty_units_assigned.get(fac.id, 0) + sub.units
+
+                                    # Check Rule 2: If placed in overflow/interdepartmental room, create InterDepartmentRequest
+                                    r_dept = getattr(r, "department", "GEN")
+                                    if r_dept != sec_p and sec_p not in ("GEN", "", None):
+                                        import json
+                                        target_dept = r_dept if r_dept != "GEN" else "ADMIN"
+                                        alt_payload = {
+                                            "subject_id": sub.id,
+                                            "section_id": sec.id,
+                                            "faculty_id": fac.id,
+                                            "room_id": r.id,
+                                            "day_of_week": day,
+                                            "start_time": st_str,
+                                            "end_time": et_str,
+                                        }
+                                        alts = find_alternatives(alt_payload, exclude_schedule_id=new_sched.id)
+                                        inter_req = InterDepartmentRequest(
+                                            source_department=sec_p,
+                                            target_department=target_dept,
+                                            schedule_id=new_sched.id,
+                                            room_id=r.id,
+                                            requested_by_role="CHAIR",
+                                            requested_by_name=f"Program Chair ({sec_p})",
+                                            reason=f"Automated Overflow Allocation: All {sec_p} department rooms occupied for {sub.code} ({sec.name}). Room {r.room_code} requested from {r_dept}.",
+                                            status="PENDING_APPROVAL",
+                                            alternative_recommendations=json.dumps(alts) if alts else None,
+                                        )
+                                        db.session.add(inter_req)
 
                                     slot_placed = True
                                     break

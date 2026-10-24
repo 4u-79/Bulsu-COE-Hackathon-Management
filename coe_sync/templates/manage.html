@@ -365,14 +365,20 @@
 
         <!-- Column 3: Preferred Load & Current Load -->
         <div>
-          <!-- Preferred Load -->
-          <div style="margin-bottom: 28px;">
+          <!-- Preferred Load & Session Preference -->
+          <div style="margin-bottom: 24px;">
             <div style="font-size: 14px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Preferred Load</div>
             <div style="font-size: 26px; font-weight: 800; color: #1E293B; margin-bottom: 8px;">
               <span id="detailed-preferred-units">18</span> <span style="font-size: 14px; font-weight: 600; color: #64748B;">Units</span>
             </div>
-            <div style="width: 100%; height: 16px; background: #E2E8F0; border-radius: 9999px; overflow:hidden;">
+            <div style="width: 100%; height: 16px; background: #E2E8F0; border-radius: 9999px; overflow:hidden; margin-bottom: 12px;">
               <div id="detailed-preferred-bar" style="width: 85%; height: 100%; background: #A78BFA; border-radius: 9999px; transition: width 0.3s ease;"></div>
+            </div>
+            <div style="font-size: 12.5px; color: #475569; display: flex; align-items: center; gap: 6px;">
+              <span style="font-weight: 700;">Session Format:</span>
+              <span id="detailed-session-pref-badge" style="background:#EDE9FE; color:#6D28D9; font-weight:700; padding:2px 8px; border-radius:9999px; font-size:11px;">
+                2x 1.5-Hr Split
+              </span>
             </div>
           </div>
 
@@ -408,9 +414,18 @@
             <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Official Email</label>
             <input type="email" id="edit-fac-email" class="form-input" style="width:100%;" required>
           </div>
-          <div>
-            <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Preferred Max Load (Units)</label>
-            <input type="number" id="edit-fac-max-units" class="form-input" min="3" max="30" value="21" style="width:100%;" required>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Preferred Max Load (Units)</label>
+              <input type="number" id="edit-fac-max-units" class="form-input" min="3" max="30" value="21" style="width:100%;" required>
+            </div>
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Session Preference</label>
+              <select id="edit-fac-session-pref" class="form-select" style="width:100%; font-size:12px; padding:8px 10px;">
+                <option value="SPLIT">2x 1.5-Hr Split</option>
+                <option value="STRAIGHT">3-Hr Straight Block</option>
+              </select>
+            </div>
           </div>
           <div>
             <label style="font-size: 12px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px; display:block;">Weekly Availability Windows</label>
@@ -494,8 +509,13 @@
       <h2 style="font-size: 18px; font-weight: 700; color: var(--text-dark); margin:0;">Curricular Course Offerings &amp; Catalogs</h2>
       <p style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">Browse accredited course offerings, unit requirements, and laboratory/lecture split preferences.</p>
     </div>
-    <div class="admin-only">
-      <button type="button" class="btn btn-primary" onclick="openAddModal('subjects')">+ Add Subject</button>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <button type="button" id="btn-toggle-faculty-curriculum" class="btn btn-secondary btn-sm" onclick="toggleFacultyCurriculumView()" style="display:none; font-weight:600;">
+        📚 View Full Curriculum
+      </button>
+      <div class="admin-only">
+        <button type="button" class="btn btn-primary" onclick="openAddModal('subjects')">+ Add Subject</button>
+      </div>
     </div>
   </div>
   <div class="table-card">

@@ -52,11 +52,14 @@ def create_room():
     if Room.query.filter_by(room_code=room_code).first():
         return jsonify({"error": f"Room code '{room_code}' already exists."}), 409
 
+    department = str(data.get("department", "GEN")).strip().upper() or "GEN"
+
     room = Room(
         room_code=room_code,
         room_type=room_type,
         capacity=capacity,
         is_available=is_available,
+        department=department,
     )
     db.session.add(room)
     db.session.flush()
@@ -64,7 +67,7 @@ def create_room():
     audit = AuditLog(
         user_id=session.get("user_id"),
         action="ROOM_CREATED",
-        details=f"Created room {room.room_code} ({room.room_type}, capacity: {room.capacity}).",
+        details=f"Created room {room.room_code} ({room.room_type}, capacity: {room.capacity}, dept: {room.department}).",
     )
     db.session.add(audit)
     db.session.commit()
@@ -107,6 +110,14 @@ def update_room(room_id: int):
 
     if "is_available" in data:
         room.is_available = bool(data["is_available"])
+
+    if "department" in data:
+        dept = str(data["department"]).strip().upper()
+        if dept:
+            room.department = dept
+
+    if "booked_by_label" in data:
+        room.booked_by_label = data["booked_by_label"]
 
     audit = AuditLog(
         user_id=session.get("user_id"),
@@ -272,6 +283,11 @@ def update_faculty(faculty_id: int):
             faculty.max_units = m
         except (ValueError, TypeError):
             return jsonify({"error": "Max units must be greater than 0."}), 400
+
+    if "preferred_session_type" in data:
+        sess_pref = str(data["preferred_session_type"]).strip().upper()
+        if sess_pref in {"SPLIT", "STRAIGHT"}:
+            faculty.preferred_session_type = sess_pref
 
     if "availabilities" in data and isinstance(data["availabilities"], list):
         # Update or set availability windows

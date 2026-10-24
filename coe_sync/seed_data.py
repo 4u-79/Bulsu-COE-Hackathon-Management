@@ -31,6 +31,7 @@ from models import (
     AuditLog,
     RescheduleRequest,
     Conflict,
+    InterDepartmentRequest,
 )
 from import_sql_dump import load_and_clean_sql_dump
 
@@ -70,6 +71,7 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     program=f["program"],
                     max_units=f.get("max_units", 21),
                     current_units=0,
+                    preferred_session_type=f.get("preferred_session_type", "SPLIT"),
                 )
             )
         db.session.add_all(faculty_members)
@@ -110,7 +112,10 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     hours_per_week=s["hours_per_week"],
                     year_level=s["year_level"],
                     semester=s["semester"],
-                    split_preference=s["split_preference"],
+                    split_preference=s.get("split_preference", "1.5_HOUR_SPLIT"),
+                    is_general=s.get("is_general", False),
+                    requires_grouping=s.get("requires_grouping", False),
+                    preferred_session_type=s.get("preferred_session_type", "SPLIT"),
                 )
             )
         db.session.add_all(subjects)
@@ -118,14 +123,27 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
 
         # -------------------------------------------------------------
         # 4. Seed Realistic BulSU COE Rooms (COE 1 & COE 2 Buildings)
+        # Allocated across the 8 Engineering Departments + GEN Pool
         # -------------------------------------------------------------
-        print("[COE SYNC 2026] Seeding realistic BulSU COE Rooms (COE 1 & COE 2 Buildings)...")
+        print("[COE SYNC 2026] Seeding department-allocated BulSU COE Rooms (COE 1 & COE 2 Buildings)...")
         rooms = []
+
+        # Department room assignment mapping for lecture halls
+        coe1_lecture_depts = {
+            101: "CE",
+            102: "CE",
+            103: "EE",
+            104: "EE",
+            105: "MFGE",
+            106: "MFGE",
+            107: "ME",
+        }
 
         # COE 1 Building: COE 101 - COE 107 (Lecture rooms)
         for room_num in range(101, 108):
             code = f"COE {room_num}"
             cap = 30 if room_num == 104 else 45  # COE 104 has capacity 30 for overcapacity test
+            dept = coe1_lecture_depts.get(room_num, "GEN")
             rooms.append(
                 Room(
                     room_code=code,
@@ -134,19 +152,21 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     building="COE 1 Building",
                     equipment="Multimedia Projector, Whiteboard, Audio System" if room_num != 104 else "Whiteboard, TV Display",
                     is_available=True,
+                    department=dept,
+                    booked_by_label=None,
                 )
             )
 
         # COE 1 Building: Specialized Laboratories
         coe1_labs = [
-            ("CE Lab", "Civil Engineering Materials & Surveying Station"),
-            ("EE Lab", "Electrical Machines & Power Systems Trainer"),
-            ("MFGE Lab", "CNC Lathes, 3D Printers, CAD/CAM Workstations"),
-            ("ME Lab", "Thermodynamics & Fluid Mechanics Apparatus"),
-            ("Physics Lab", "Optics & Mechanics Experimental Benches"),
-            ("Chem Lab", "Fume Hoods, Analytical Balances & Chemistry Benches"),
+            ("CE Lab", "Civil Engineering Materials & Surveying Station", "CE"),
+            ("EE Lab", "Electrical Machines & Power Systems Trainer", "EE"),
+            ("MFGE Lab", "CNC Lathes, 3D Printers, CAD/CAM Workstations", "MFGE"),
+            ("ME Lab", "Thermodynamics & Fluid Mechanics Apparatus", "ME"),
+            ("Physics Lab", "Optics & Mechanics Experimental Benches", "GEN"),
+            ("Chem Lab", "Fume Hoods, Analytical Balances & Chemistry Benches", "GEN"),
         ]
-        for lab_code, equip in coe1_labs:
+        for lab_code, equip, dept in coe1_labs:
             rooms.append(
                 Room(
                     room_code=lab_code,
@@ -155,11 +175,23 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     building="COE 1 Building",
                     equipment=equip,
                     is_available=True,
+                    department=dept,
+                    booked_by_label=None,
                 )
             )
 
         # COE 2 Building: COE 2 - 101 to COE 2 - 107
+        coe2_floor1_depts = {
+            101: "ME",
+            102: "CPE",
+            103: "CPE",
+            104: "ECE",
+            105: "ECE",
+            106: "IE",
+            107: "IE",
+        }
         for room_num in range(101, 108):
+            dept = coe2_floor1_depts.get(room_num, "GEN")
             rooms.append(
                 Room(
                     room_code=f"COE 2 - {room_num}",
@@ -168,11 +200,22 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     building="COE 2 Building",
                     equipment="Smart Display, Whiteboard, Podium",
                     is_available=True,
+                    department=dept,
+                    booked_by_label=None,
                 )
             )
 
         # COE 2 Building: COE 2 - 201 to COE 2 - 206
+        coe2_floor2_depts = {
+            201: "MEE",
+            202: "MEE",
+            203: "GEN",
+            204: "GEN",
+            205: "GEN",
+            206: "GEN",
+        }
         for room_num in range(201, 207):
+            dept = coe2_floor2_depts.get(room_num, "GEN")
             rooms.append(
                 Room(
                     room_code=f"COE 2 - {room_num}",
@@ -181,10 +224,12 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     building="COE 2 Building",
                     equipment="Multimedia Projector, Whiteboard",
                     is_available=True,
+                    department=dept,
+                    booked_by_label=None,
                 )
             )
 
-        # COE 2 Building: COE 2 - 301 to COE 2 - 306
+        # COE 2 Building: COE 2 - 301 to COE 2 - 306 (General COE Lecture Halls)
         for room_num in range(301, 307):
             rooms.append(
                 Room(
@@ -194,17 +239,19 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     building="COE 2 Building",
                     equipment="Smart TV, Whiteboard, Audio System",
                     is_available=True,
+                    department="GEN",
+                    booked_by_label=None,
                 )
             )
 
         # COE 2 Building: Specialized Laboratories
         coe2_labs = [
-            ("CPE Lab", "Workstations, Gigabit Switch, Cisco Routers"),
-            ("ECE Lab", "Oscilloscopes, Signal Generators, FPGA Kits"),
-            ("IE Lab", "Human Factors & Ergonomics Workstations"),
-            ("MEE Lab", "PLC Automation Trainers, Mechatronics Benches"),
+            ("CPE Lab", "Workstations, Gigabit Switch, Cisco Routers", "CPE"),
+            ("ECE Lab", "Oscilloscopes, Signal Generators, FPGA Kits", "ECE"),
+            ("IE Lab", "Human Factors & Ergonomics Workstations", "IE"),
+            ("MEE Lab", "PLC Automation Trainers, Mechatronics Benches", "MEE"),
         ]
-        for lab_code, equip in coe2_labs:
+        for lab_code, equip, dept in coe2_labs:
             rooms.append(
                 Room(
                     room_code=lab_code,
@@ -213,6 +260,8 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     building="COE 2 Building",
                     equipment=equip,
                     is_available=True,
+                    department=dept,
+                    booked_by_label=None,
                 )
             )
 
@@ -239,6 +288,17 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
         default_pwd_hash = generate_password_hash("nexus2026")
 
         users = [
+            # College Dean (Sees all COE departments, read-only on generation, no subjects tab)
+            User(
+                username="dean",
+                password_hash=default_pwd_hash,
+                role="DEAN",
+                program=None,
+                reference_id=None,
+                must_change_credentials=False,
+                is_active_status=True,
+                demo_password="nexus2026",
+            ),
             # Global Administrator
             User(
                 username="admin",
@@ -407,6 +467,16 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
             # Student Accounts
             User(
                 username="student_mee1a",
+                password_hash=default_pwd_hash,
+                role="STUDENT",
+                program="MEE",
+                reference_id=mee_section.id,
+                must_change_credentials=False,
+                is_active_status=True,
+                demo_password="nexus2026",
+            ),
+            User(
+                username="mayor_mee1a",
                 password_hash=default_pwd_hash,
                 role="STUDENT",
                 program="MEE",

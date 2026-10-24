@@ -145,6 +145,124 @@ def generate_faculty_email(name: str, dept_code: str, existing_emails: set) -> s
     return email
 
 
+def load_and_clean_data3_sql(sql_file_path: Path = None) -> Dict[str, Any]:
+    """
+    Parse and clean data-3.sql (Primary SQL Dump for NEXUS 2.0).
+    Ingests all 539 Subjects, 90 Sections, and 126 Faculty.
+    Applies exact column parsing for 9-column coe subjects:
+    (ID, Subject Code, Course Description, No. of Units, Total Hours, Type, Department, Year Level, Semester)
+    """
+    if sql_file_path is None:
+        sql_file_path = Path(__file__).resolve().parent / "data-3.sql"
+
+    if not sql_file_path.exists():
+        raise FileNotFoundError(f"data-3.sql not found at {sql_file_path}")
+
+    sql_text = sql_file_path.read_text(encoding="utf-8")
+
+    # 1. Faculty (126 real BulSU COE faculty across 8 depts + General Engineering)
+    raw_fac = parse_insert_tuples(sql_text, "coe facculty")
+    faculty_list = []
+    existing_emails = set()
+
+    for r in raw_fac:
+        row_id = int(r[0])
+        name = " ".join(r[1].split())
+        dept_raw = r[3].strip()
+        prog = DEPT_MAP.get(dept_raw, "GEN")
+        email = generate_faculty_email(name, prog, existing_emails)
+
+        faculty_list.append({
+            "id": row_id,
+            "name": name,
+            "email": email,
+            "program": prog,
+            "max_units": 21,
+            "current_units": 0,
+            "preferred_session_type": "SPLIT",
+        })
+
+    # 2. Sections (90 sections across 8 departments, student_count = 40)
+    raw_sec = parse_insert_tuples(sql_text, "coe sections")
+    sections_list = []
+
+    for r in raw_sec:
+        row_id = int(r[0])
+        sec_name = " ".join(r[1].split())
+        dept_raw = r[2].strip()
+        yr = int(r[3]) if len(r) > 3 and r[3] and r[3] != "NULL" else 1
+        prog = DEPT_MAP.get(dept_raw, "GEN")
+
+        sections_list.append({
+            "id": row_id,
+            "name": sec_name,
+            "program": prog,
+            "year_level": yr,
+            "student_count": 40,
+        })
+
+    # 3. Subjects (539 Curricular Subjects in 9-column format)
+    # (ID, Subject Code, Course Description, No. of Units, Total Hours, Type, Department, Year Level, Semester)
+    raw_subj = parse_insert_tuples(sql_text, "coe subjects")
+    subjects_list = []
+    seen_codes = set()
+
+    for r in raw_subj:
+        row_id = int(r[0])
+        raw_code = r[1]
+        raw_desc = r[2]
+        units = int(r[3]) if len(r) > 3 and r[3] and r[3] != "NULL" else 3
+        hours = int(r[4]) if len(r) > 4 and r[4] and r[4] != "NULL" else 3
+        stype_raw = r[5] if len(r) > 5 and r[5] else "Lecture"
+        dept_raw = r[6] if len(r) > 6 and r[6] else "General Subject"
+        yr = int(r[7]) if len(r) > 7 and r[7] and r[7] != "NULL" else 1
+        sem = int(r[8]) if len(r) > 8 and r[8] and r[8] != "NULL" else 1
+
+        # Anomaly Fix 1: Collapse extra whitespace (IDs 471-536 e.g. MEE course descriptions)
+        desc = " ".join(raw_desc.split())
+
+        # Anomaly Fix 2: Clean subject codes (strip trailing periods, normalize internal space before lab suffixes L/D/F)
+        code = " ".join(raw_code.split()).rstrip(".").strip()
+        code = re.sub(r"\s+([LDF])$", r"\1", code)
+
+        prog = DEPT_MAP.get(dept_raw.strip(), "GEN")
+        is_lab = "LAB" in stype_raw.strip().upper()
+        norm_type = "LAB" if is_lab else "LECTURE"
+
+        # Anomaly Fix 3: Disambiguate duplicate lecture/lab subject codes in MFG & CPE
+        if is_lab and (not (code.endswith("L") or code.endswith("D") or code.endswith("F")) or code in seen_codes):
+            code += "L"
+
+        seen_codes.add(code)
+
+        is_gen = (prog == "GEN")
+        req_grouping = is_lab or code.endswith("D") or code.endswith("F") or "DESIGN" in desc.upper() or "FIELD" in desc.upper()
+        pref_session = "STRAIGHT" if norm_type == "LAB" else ("SPLIT" if (hours == 3 or units == 3) else "STRAIGHT")
+        split_pref = "3_HOUR_BLOCK" if pref_session == "STRAIGHT" else "1.5_HOUR_SPLIT"
+
+        subjects_list.append({
+            "id": row_id,
+            "code": code,
+            "title": desc,
+            "program": prog,
+            "units": units,
+            "hours_per_week": hours,
+            "subject_type": norm_type,
+            "year_level": yr,
+            "semester": sem,
+            "is_general": is_gen,
+            "requires_grouping": req_grouping,
+            "preferred_session_type": pref_session,
+            "split_preference": split_pref,
+        })
+
+    return {
+        "faculty": faculty_list,
+        "sections": sections_list,
+        "subjects": subjects_list,
+    }
+
+
 def load_and_clean_data2_sql(sql_file_path: Path = None) -> Dict[str, Any]:
     """
     Parse and clean data-2.sql (Single Source of Truth for Faculty, Sections, Subjects).
@@ -257,12 +375,19 @@ def load_and_clean_data2_sql(sql_file_path: Path = None) -> Dict[str, Any]:
 
 
 def load_and_clean_sql_dump(sql_file_path: Path = None) -> Dict[str, Any]:
-    """Parse and clean SQL dump data. Strictly uses data-2.sql as the single source of truth."""
+    """Parse and clean SQL dump data. Prioritizes data-3.sql with backward-compatible fallback to data-2.sql."""
+    base_dir = Path(__file__).resolve().parent
     if sql_file_path is None:
-        sql_file_path = Path(__file__).resolve().parent / "data-2.sql"
+        p3 = base_dir / "data-3.sql"
+        if p3.exists():
+            return load_and_clean_data3_sql(p3)
+        sql_file_path = base_dir / "data-2.sql"
+
+    if str(sql_file_path).endswith("data-3.sql"):
+        return load_and_clean_data3_sql(sql_file_path)
 
     if not sql_file_path.exists():
-        raise FileNotFoundError(f"data-2.sql not found at {sql_file_path}. Legacy coe-database.sql is deprecated and purged.")
+        raise FileNotFoundError(f"SQL dump not found at {sql_file_path}.")
 
     return load_and_clean_data2_sql(sql_file_path)
 

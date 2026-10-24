@@ -22,7 +22,17 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(
-        db.Enum("ADMIN", "CHAIR", "FACULTY", "STUDENT", name="user_role_enum"),
+        db.Enum(
+            "DEAN",
+            "ADMIN",
+            "CHAIR",
+            "PROG_CHA",
+            "FACULTY",
+            "FCLTY_DEPT",
+            "STUDENT",
+            "STDN_MYR",
+            name="user_role_enum",
+        ),
         nullable=False,
     )
     program = db.Column(db.String(20), nullable=True)
@@ -66,10 +76,21 @@ class User(db.Model):
 
     def to_dict(self, include_sensitive: bool = False) -> dict:
         """Serialize User to dictionary."""
+        title = "System Administrator"
+        if self.role == "DEAN":
+            title = "College Dean"
+        elif self.role in ("CHAIR", "PROG_CHA"):
+            title = f"{self.program or ''} Program Chair".strip()
+        elif self.role in ("FACULTY", "FCLTY_DEPT"):
+            title = "Faculty Member"
+        elif self.role in ("STUDENT", "STDN_MYR"):
+            title = "Student Mayor"
+
         data = {
             "id": self.id,
             "username": self.username,
             "role": self.role,
+            "title": title,
             "program": self.program,
             "reference_id": self.reference_id,
             "is_active_status": self.is_active_status,
@@ -104,6 +125,7 @@ class Faculty(db.Model):
     program = db.Column(db.String(50), default="CE", nullable=False, index=True)
     max_units = db.Column(db.Integer, default=21, nullable=False)
     current_units = db.Column(db.Integer, default=0, nullable=False)
+    preferred_session_type = db.Column(db.String(20), default="SPLIT", nullable=False)
 
     # Relationships
     schedules = db.relationship(
@@ -131,6 +153,7 @@ class Faculty(db.Model):
             "department": self.program,
             "max_units": self.max_units,
             "current_units": self.current_units,
+            "preferred_session_type": self.preferred_session_type or "SPLIT",
         }
 
     def __repr__(self) -> str:
@@ -197,6 +220,9 @@ class Subject(db.Model):
         default="1.5_HOUR_SPLIT",
         nullable=False,
     )
+    is_general = db.Column(db.Boolean, default=False, nullable=False)
+    requires_grouping = db.Column(db.Boolean, default=False, nullable=False)
+    preferred_session_type = db.Column(db.String(20), default="SPLIT", nullable=False)
 
     # Relationships
     schedules = db.relationship(
@@ -220,6 +246,9 @@ class Subject(db.Model):
             "year_level": self.year_level,
             "semester": self.semester,
             "split_preference": self.split_preference,
+            "is_general": self.is_general,
+            "requires_grouping": self.requires_grouping,
+            "preferred_session_type": self.preferred_session_type or "SPLIT",
         }
 
     def __repr__(self) -> str:
@@ -245,6 +274,8 @@ class Room(db.Model):
     equipment = db.Column(db.String(255), nullable=True)
     building = db.Column(db.String(100), default="COE 1 Building", nullable=True)
     is_available = db.Column(db.Boolean, default=True, nullable=False)
+    department = db.Column(db.String(20), default="GEN", nullable=False)
+    booked_by_label = db.Column(db.String(120), nullable=True)
 
     # Relationships
     schedules = db.relationship(
@@ -265,6 +296,8 @@ class Room(db.Model):
             "equipment": self.equipment,
             "building": self.building or ("COE 2 Building" if "COE 2" in self.room_code else "COE 1 Building"),
             "is_available": self.is_available,
+            "department": self.department or "GEN",
+            "booked_by_label": self.booked_by_label,
         }
 
     def __repr__(self) -> str:
@@ -521,7 +554,7 @@ class RescheduleRequest(db.Model):
     schedule_id = db.Column(
         db.Integer,
         db.ForeignKey("schedule.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     student_section_id = db.Column(
@@ -660,4 +693,97 @@ class RescheduleRequest(db.Model):
             f"<RescheduleRequest id={self.id} schedule_id={self.schedule_id} "
             f"section_id={self.student_section_id} status='{self.status}'>"
         )
+
+
+class InterDepartmentRequest(db.Model):
+    """
+    NEXUS 2.0 Inter-Department Room & Conflict Request Model.
+    Tracks overflow requests into GEN or other department rooms and room bookings.
+    """
+
+    __tablename__ = "inter_department_request"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    source_department = db.Column(db.String(20), nullable=False, default="GEN")
+    target_department = db.Column(db.String(20), nullable=False, default="GEN")
+    schedule_id = db.Column(
+        db.Integer,
+        db.ForeignKey("schedule.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    room_id = db.Column(
+        db.Integer,
+        db.ForeignKey("room.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    requested_by_role = db.Column(db.String(30), nullable=True, default="CHAIR")
+    requested_by_name = db.Column(db.String(120), nullable=True)
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(
+        db.String(30),
+        default="PENDING_APPROVAL",
+        nullable=False,
+        index=True,
+    )
+    alternative_recommendations = db.Column(db.Text, nullable=True)
+    chair_feedback = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    schedule = db.relationship(
+        "Schedule",
+        backref=db.backref("interdept_requests", cascade="all, delete-orphan", lazy=True),
+    )
+    room = db.relationship(
+        "Room",
+        foreign_keys=[room_id],
+        lazy=True,
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize InterDepartmentRequest to dictionary."""
+        import json
+        now = datetime.utcnow()
+        days_passed = (now - self.created_at).days if self.created_at else 0
+        expires_days = max(0, 7 - days_passed)
+
+        alts = []
+        if self.alternative_recommendations:
+            try:
+                alts = json.loads(self.alternative_recommendations)
+            except Exception:
+                alts = [{"description": self.alternative_recommendations}]
+
+        return {
+            "id": self.id,
+            "type": "INTER_DEPARTMENT",
+            "source_department": self.source_department,
+            "target_department": self.target_department,
+            "schedule_id": self.schedule_id,
+            "room_id": self.room_id,
+            "room_code": self.room.room_code if self.room else None,
+            "requested_by_role": self.requested_by_role or "CHAIR",
+            "requested_by_name": self.requested_by_name,
+            "reason": self.reason,
+            "status": self.status,
+            "alternative_recommendations": alts,
+            "chair_feedback": self.chair_feedback,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "expires_in_days": expires_days,
+            "subject_code": self.schedule.subject.code if self.schedule and self.schedule.subject else None,
+            "subject_title": self.schedule.subject.title if self.schedule and self.schedule.subject else None,
+            "section_name": self.schedule.section.name if self.schedule and self.schedule.section else None,
+            "faculty_name": self.schedule.faculty.name if self.schedule and self.schedule.faculty else None,
+            "current_day": self.schedule.day_of_week if self.schedule else None,
+            "current_start_time": self.schedule.start_time.strftime("%H:%M") if self.schedule and self.schedule.start_time else None,
+            "current_end_time": self.schedule.end_time.strftime("%H:%M") if self.schedule and self.schedule.end_time else None,
+        }
+
+    def __repr__(self) -> str:
+        return (
+            f"<InterDepartmentRequest id={self.id} from={self.source_department} "
+            f"to={self.target_department} status='{self.status}'>"
+        )
+
 

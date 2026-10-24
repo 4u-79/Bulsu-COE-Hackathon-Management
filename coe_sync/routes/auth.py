@@ -85,14 +85,27 @@ def login_required(f):
     return decorated_function
 
 
+def normalize_role(r: str) -> str:
+    """Normalize NEXUS 2.0 and legacy role names to standard role identifier."""
+    up = str(r or "").strip().upper()
+    if up in ("CHAIR", "PROG_CHA"):
+        return "CHAIR"
+    if up in ("FACULTY", "FCLTY_DEPT"):
+        return "FACULTY"
+    if up in ("STUDENT", "STDN_MYR"):
+        return "STUDENT"
+    return up
+
+
 def require_roles(*roles):
     """
     Role-Based Access Control decorator.
-    Enforces that the active session holds one of the specified roles.
+    Enforces that the active session holds one of the specified roles (supporting aliases).
     Fails closed:
       - HTTP 401 Unauthorized if unauthenticated.
       - HTTP 403 Forbidden if active role lacks required permissions.
     """
+    target_roles = {normalize_role(r) for r in roles} | {str(r).upper() for r in roles}
 
     def decorator(f):
         @wraps(f)
@@ -103,7 +116,8 @@ def require_roles(*roles):
                     401,
                 )
             current_role = get_effective_role()
-            if not current_role or current_role not in roles:
+            norm_current = normalize_role(current_role)
+            if not current_role or (current_role not in target_roles and norm_current not in target_roles):
                 return (
                     jsonify({"error": "Unauthorized: Insufficient permissions"}),
                     403,
@@ -224,15 +238,16 @@ def get_demo_credentials():
     """
     show_creds = current_app.config.get("SHOW_DEMO_CREDENTIALS", True)
 
+    dean = User.query.filter_by(role="DEAN").first()
     chair = User.query.filter_by(role="CHAIR").first()
     admin = User.query.filter_by(role="ADMIN").first()
     faculty = User.query.filter_by(role="FACULTY").first()
     student = User.query.filter_by(role="STUDENT").first()
 
     all_users = User.query.filter(User.username.in_([
-        "admin", "chair_mee", "chair_ce", "chair_cpe", "chair_ee", "chair_ece",
+        "dean", "admin", "chair_mee", "chair_ce", "chair_cpe", "chair_ee", "chair_ece",
         "chair_ie", "chair_mfge", "chair_me", "tullao", "bugayong", "roque",
-        "student_mee1a", "student_ce1a"
+        "student_mee1a", "mayor_mee1a", "student_ce1a"
     ])).all()
 
     accounts_list = [u.to_dict() for u in all_users]
@@ -242,6 +257,14 @@ def get_demo_credentials():
             {
                 "status": "success",
                 "show_demo_credentials": show_creds,
+                "dean": {
+                    "username": dean.username if dean else "dean",
+                    "password": (
+                        dean.demo_password if dean and dean.demo_password else "nexus2026"
+                    ),
+                    "role": "College Dean (DEAN)",
+                    "program": "ALL",
+                },
                 "chair": {
                     "username": chair.username if chair else "chair_mee",
                     "password": (
@@ -367,7 +390,7 @@ def impersonate():
     """
     # Enforce role restriction: genuine Students and Faculty cannot impersonate
     auth_role = session.get("role")
-    if auth_role not in ["CHAIR", "ADMIN"]:
+    if auth_role not in ["CHAIR", "ADMIN", "DEAN"]:
         return (
             jsonify(
                 {
@@ -378,23 +401,24 @@ def impersonate():
         )
 
     data = request.get_json(silent=True) or {}
-    target_role = str(data.get("role", "")).strip().upper()
+    raw_role = str(data.get("role", "")).strip().upper()
     target_program = data.get("program")
     reference_id = data.get("reference_id")
 
-    allowed_roles = {"ADMIN", "CHAIR", "FACULTY", "STUDENT"}
-    if target_role not in allowed_roles:
+    target_role = normalize_role(raw_role)
+    allowed_roles = {"DEAN", "ADMIN", "CHAIR", "PROG_CHA", "FACULTY", "FCLTY_DEPT", "STUDENT", "STDN_MYR"}
+    if target_role not in allowed_roles and raw_role not in allowed_roles:
         return (
             jsonify(
                 {
-                    "error": f"Invalid role: '{target_role}'. Must be one of {sorted(list(allowed_roles))}."
+                    "error": f"Invalid role: '{raw_role}'. Must be one of {sorted(list(allowed_roles))}."
                 }
             ),
             400,
         )
 
     # Scoping assignments for role impersonation
-    if target_role == "ADMIN":
+    if target_role in ("DEAN", "ADMIN"):
         target_program = None
         reference_id = None
     elif target_role == "CHAIR":

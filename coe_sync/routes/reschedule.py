@@ -9,9 +9,9 @@ Endpoints:
 
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session
-from models import db, Schedule, Section, Faculty, RescheduleRequest, AuditLog
+from models import db, Schedule, Section, Faculty, Room, RescheduleRequest, InterDepartmentRequest, AuditLog
 from services.conflict_detector import validate_schedule_slot, parse_time, find_alternatives
-from routes.auth import require_roles, get_effective_role, get_effective_reference_id
+from routes.auth import require_roles, get_effective_role, get_effective_reference_id, get_effective_program, login_required
 
 reschedule_bp = Blueprint("reschedule", __name__)
 
@@ -322,13 +322,14 @@ def chair_decision_reschedule(request_id: int):
         )
 
     payload = request.get_json(silent=True) or {}
-    if request.path.endswith("/approve"):
+    action_val = str(payload.get("action") or "").upper()
+    if request.path.endswith("/approve") or action_val == "APPROVE":
         approved = True
-    elif request.path.endswith("/reject"):
+    elif request.path.endswith("/reject") or action_val in ("REJECT", "DECLINE"):
         approved = False
     else:
         approved = bool(payload.get("approved"))
-    feedback = (payload.get("feedback") or "").strip()
+    feedback = (payload.get("feedback") or payload.get("remarks") or "").strip()
 
     req_obj.chair_feedback = feedback
 
@@ -355,6 +356,32 @@ def chair_decision_reschedule(request_id: int):
     # Validating current slot conflicts before applying atomic timetable mutation
     sched = req_obj.schedule
     if not sched:
+        # Handle standalone room booking request (schedule_id is None)
+        if req_obj.proposed_room_id:
+            target_rm = db.session.get(Room, req_obj.proposed_room_id)
+            if target_rm:
+                target_rm.booked_by_label = (
+                    f"Requested by: {req_obj.requested_by_name or 'Faculty/Student'} "
+                    f"(Approved by {session.get('username') or 'Program Chair'})"
+                )
+            req_obj.status = "APPROVED"
+            audit = AuditLog(
+                user_id=session.get("user_id"),
+                action="ROOM_BOOKING_APPROVED",
+                details=f"Chair approved room reservation #{req_obj.id} for {target_rm.room_code if target_rm else 'room'}.",
+            )
+            db.session.add(audit)
+            db.session.commit()
+            return (
+                jsonify(
+                    {
+                        "status": "success",
+                        "message": f"Room reservation for {target_rm.room_code if target_rm else 'room'} approved.",
+                        "data": req_obj.to_dict(),
+                    }
+                ),
+                200,
+            )
         return jsonify({"error": "Associated schedule record no longer exists."}), 404
 
     target_room_id = req_obj.proposed_room_id or sched.room_id
@@ -388,6 +415,11 @@ def chair_decision_reschedule(request_id: int):
         sched.end_time = req_obj.proposed_end_time
         if req_obj.proposed_room_id:
             sched.room_id = req_obj.proposed_room_id
+            target_rm = db.session.get(Room, req_obj.proposed_room_id)
+            if target_rm:
+                target_rm.booked_by_label = f"Requested by: {req_obj.requested_by_name or 'Faculty/Student'} (Approved by {session.get('username') or 'Chair'})"
+        elif sched.room:
+            sched.room.booked_by_label = f"Requested by: {req_obj.requested_by_name or 'Faculty/Student'} (Approved by {session.get('username') or 'Chair'})"
         req_obj.status = "APPROVED"
 
         audit = AuditLog(
@@ -442,3 +474,207 @@ def reject_reschedule_alias(request_id: int):
     if effective_role == "FACULTY":
         return faculty_review_reschedule(request_id)
     return chair_decision_reschedule(request_id)
+
+
+# -----------------------------------------------------------------
+# NEXUS 2.0 Inter-Department Requests & Approvals
+# -----------------------------------------------------------------
+@reschedule_bp.route("/interdept/requests", methods=["GET"])
+def get_interdept_requests():
+    """List inter-department room and conflict requests."""
+    cutoff = datetime.utcnow() - timedelta(days=7)
+    try:
+        InterDepartmentRequest.query.filter(
+            InterDepartmentRequest.status == "PENDING_APPROVAL",
+            InterDepartmentRequest.created_at < cutoff,
+        ).update({"status": "EXPIRED"}, synchronize_session=False)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    effective_role = get_effective_role()
+    effective_prog = get_effective_program()
+
+    query = InterDepartmentRequest.query
+    if effective_role == "CHAIR" and effective_prog and effective_prog != "ALL":
+        query = query.filter(
+            db.or_(
+                InterDepartmentRequest.target_department == effective_prog,
+                InterDepartmentRequest.source_department == effective_prog,
+                InterDepartmentRequest.target_department == "ADMIN",
+            )
+        )
+
+    reqs = query.order_by(InterDepartmentRequest.created_at.desc()).all()
+    return jsonify({
+        "status": "success",
+        "count": len(reqs),
+        "data": [r.to_dict() for r in reqs]
+    }), 200
+
+
+@reschedule_bp.route("/interdept/<int:req_id>/action", methods=["POST"])
+@require_roles("CHAIR", "ADMIN")
+def act_on_interdept_request(req_id: int):
+    """
+    Approve or decline an inter-department room request.
+    If approved:
+      - Automatically applies recommended alternative slot/room to resolve conflict.
+      - Sets Room.booked_by_label.
+    """
+    req_obj = db.session.get(InterDepartmentRequest, req_id)
+    if not req_obj:
+        return jsonify({"error": f"InterDepartmentRequest #{req_id} not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    action = str(data.get("action", "APPROVE")).strip().upper()
+    feedback = (data.get("feedback") or "").strip()
+    apply_alt = data.get("apply_alternative", True)
+
+    req_obj.chair_feedback = feedback
+
+    if action in ("DECLINE", "REJECT"):
+        req_obj.status = "DECLINED"
+        audit = AuditLog(
+            user_id=session.get("user_id"),
+            action="INTERDEPT_REQUEST_DECLINED",
+            details=f"Chair declined InterDepartmentRequest #{req_id}. Reason: {feedback or 'None'}",
+        )
+        db.session.add(audit)
+        db.session.commit()
+        return jsonify({
+            "status": "success",
+            "message": "Inter-department request declined.",
+            "data": req_obj.to_dict()
+        }), 200
+
+    # APPROVE
+    req_obj.status = "APPROVED"
+    if apply_alt and req_obj.schedule and req_obj.alternative_recommendations:
+        import json
+        try:
+            alts = json.loads(req_obj.alternative_recommendations)
+            if alts and isinstance(alts, list) and len(alts) > 0:
+                first_alt = alts[0]
+                if "day_of_week" in first_alt:
+                    req_obj.schedule.day_of_week = first_alt["day_of_week"]
+                if "start_time" in first_alt:
+                    req_obj.schedule.start_time = parse_time(first_alt["start_time"])
+                if "end_time" in first_alt:
+                    req_obj.schedule.end_time = parse_time(first_alt["end_time"])
+                if "room_id" in first_alt:
+                    req_obj.schedule.room_id = first_alt["room_id"]
+        except Exception as e:
+            print(f"[INTERDEPT ALT WARNING] Could not apply alternative: {e}", flush=True)
+
+    if req_obj.room:
+        req_obj.room.booked_by_label = f"Allocated to {req_obj.source_department} (Approved by {session.get('username') or 'Chair'})"
+
+    audit = AuditLog(
+        user_id=session.get("user_id"),
+        action="INTERDEPT_REQUEST_APPROVED",
+        details=f"Chair approved InterDepartmentRequest #{req_id} for {req_obj.source_department}.",
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "message": "Inter-department request approved. Timetable updated.",
+        "data": req_obj.to_dict()
+    }), 200
+
+
+@reschedule_bp.route("/rooms/request", methods=["POST"])
+@login_required
+def request_room_booking():
+    """
+    POST /api/rooms/request
+    Student Mayor or Faculty submits an ad-hoc room reservation request.
+    """
+    data = request.get_json(silent=True) or {}
+    room_id = data.get("room_id")
+    day = (data.get("day") or "MON").strip().upper()
+    start_time_str = (data.get("start_time") or "10:00").strip()
+    end_time_str = (data.get("end_time") or "11:30").strip()
+    reason = (data.get("reason") or "Class / Section Activity").strip()
+
+    room = db.session.get(Room, room_id) if room_id else None
+    if not room:
+        return jsonify({"error": "Valid room_id is required."}), 400
+
+    effective_role = get_effective_role()
+    effective_ref_id = get_effective_reference_id()
+    effective_prog = get_effective_program()
+
+    sched = Schedule.query.filter_by(room_id=room.id).first()
+    sec = db.session.get(Section, effective_ref_id) if (effective_role == "STUDENT" and effective_ref_id) else None
+    if not sec and effective_prog:
+        sec = Section.query.filter_by(program=effective_prog).first()
+    sec_id = sec.id if sec else 1
+
+    req = RescheduleRequest(
+        schedule_id=sched.id if sched else None,
+        student_section_id=sec_id,
+        proposed_day=day,
+        proposed_start_time=parse_time(start_time_str) or parse_time("10:00"),
+        proposed_end_time=parse_time(end_time_str) or parse_time("11:30"),
+        proposed_room_id=room.id,
+        requested_by_role=effective_role,
+        requested_by_name=session.get("username") or "Student Mayor",
+        reason=f"[Room Booking Request] {reason} for room {room.room_code}",
+        status="PENDING_CHAIR",
+    )
+    db.session.add(req)
+    db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Room reservation request for {room.room_code} submitted successfully.",
+        "data": req.to_dict()
+    }), 201
+
+
+@reschedule_bp.route("/requests/pending-summary", methods=["GET"])
+def get_pending_requests_summary():
+    """
+    GET /api/requests/pending-summary
+    Returns counts of pending inter-department and reschedule requests for notification bell.
+    """
+    purge_expired_reschedule_requests()
+    effective_role = get_effective_role()
+    effective_prog = get_effective_program()
+
+    reschedule_q = RescheduleRequest.query.filter(
+        RescheduleRequest.status.in_(["PENDING", "PENDING_FACULTY", "PENDING_CHAIR"])
+    )
+    if effective_role == "STUDENT" and session.get("reference_id"):
+        reschedule_q = reschedule_q.filter(RescheduleRequest.student_section_id == session.get("reference_id"))
+    elif effective_role == "FACULTY" and session.get("reference_id"):
+        reschedule_q = reschedule_q.join(Schedule, RescheduleRequest.schedule_id == Schedule.id).filter(
+            Schedule.faculty_id == session.get("reference_id")
+        )
+
+    reschedule_count = reschedule_q.count()
+
+    interdept_q = InterDepartmentRequest.query.filter_by(status="PENDING_APPROVAL")
+    if effective_role == "CHAIR" and effective_prog and effective_prog != "ALL":
+        interdept_q = interdept_q.filter(
+            db.or_(
+                InterDepartmentRequest.target_department == effective_prog,
+                InterDepartmentRequest.source_department == effective_prog,
+                InterDepartmentRequest.target_department == "ADMIN",
+            )
+        )
+    elif effective_role not in ("CHAIR", "ADMIN", "DEAN"):
+        interdept_q = interdept_q.filter(InterDepartmentRequest.id == -1)
+
+    interdept_count = interdept_q.count()
+    total = reschedule_count + interdept_count
+
+    return jsonify({
+        "status": "success",
+        "total_pending": total,
+        "reschedule_count": reschedule_count,
+        "interdept_count": interdept_count,
+    }), 200

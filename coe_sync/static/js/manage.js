@@ -383,18 +383,26 @@ window.openFacultyDetailed = async function (facultyId) {
         }).join("");
       }
 
-      // 3. Column 3: Preferred & Current Load
+      // 3. Column 3: Preferred & Current Load & Session Preference
       const maxU = f.max_units || 21;
       const curU = f.current_units || 0;
       const prefEl = document.getElementById("detailed-preferred-units");
       const prefBar = document.getElementById("detailed-preferred-bar");
       const curEl = document.getElementById("detailed-current-units");
       const curBar = document.getElementById("detailed-current-bar");
+      const prefSessionBadge = document.getElementById("detailed-session-pref-badge");
 
       if (prefEl) prefEl.textContent = maxU;
       if (prefBar) prefBar.style.width = `${Math.min(100, Math.round((maxU / 24) * 100))}%`;
       if (curEl) curEl.textContent = curU;
       if (curBar) curBar.style.width = `${Math.min(100, Math.round((curU / maxU) * 100))}%`;
+
+      if (prefSessionBadge) {
+        const isStraight = f.preferred_session_type === "STRAIGHT";
+        prefSessionBadge.textContent = isStraight ? "3-Hr Straight Block" : "2x 1.5-Hr Split";
+        prefSessionBadge.style.background = isStraight ? "#FEF3C7" : "#EDE9FE";
+        prefSessionBadge.style.color = isStraight ? "#92400E" : "#6D28D9";
+      }
     }
   } catch (err) {
     showToast(err.message || "Failed to load faculty details", true);
@@ -417,6 +425,8 @@ window.openFacultyDetailedEditModal = function () {
   document.getElementById("edit-fac-name").value = f.name || "";
   document.getElementById("edit-fac-email").value = f.email || "";
   document.getElementById("edit-fac-max-units").value = f.max_units || 21;
+  const sessPref = document.getElementById("edit-fac-session-pref");
+  if (sessPref) sessPref.value = f.preferred_session_type || "SPLIT";
 
   const daysList = document.getElementById("edit-fac-days-list");
   if (daysList) {
@@ -463,6 +473,7 @@ window.submitFacultyDetailedEdit = async function (e) {
   const name = document.getElementById("edit-fac-name").value.trim();
   const email = document.getElementById("edit-fac-email").value.trim();
   const maxUnits = parseInt(document.getElementById("edit-fac-max-units").value, 10);
+  const sessionPref = document.getElementById("edit-fac-session-pref")?.value || "SPLIT";
 
   const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const availability = [];
@@ -485,6 +496,7 @@ window.submitFacultyDetailedEdit = async function (e) {
       name,
       email,
       max_units: maxUnits,
+      preferred_session_type: sessionPref,
       availability
     });
     showToast(res.message || "Profile & availability updated successfully!");
@@ -498,7 +510,11 @@ window.submitFacultyDetailedEdit = async function (e) {
 
 async function fetchSections() {
   try {
-    const res = await API.get("/api/sections");
+    let url = "/api/master/sections";
+    if (window.CURRENT_ROLE === "FACULTY" && window.CURRENT_REF_ID) {
+      url += `?faculty_id=${window.CURRENT_REF_ID}`;
+    }
+    const res = await API.get(url);
     if (res.status === "success") {
       masterDataCache.sections = res.data;
       document.getElementById("count-sections").textContent = res.count;
@@ -530,7 +546,7 @@ function renderSectionsTable(sections) {
         <div class="table-actions">
           <a href="/schedules?section=${s.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Section Timetable">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            Schedule
+            View Section Schedule
           </a>
           <span class="admin-only" style="display:inline-flex; gap: 4px;">
             <button class="btn btn-secondary btn-sm" onclick="openEditModal('sections', ${s.id})">Edit</button>
@@ -544,9 +560,34 @@ function renderSectionsTable(sections) {
     .join("");
 }
 
+let _facultyCurriculumMode = false;
+
+window.toggleFacultyCurriculumView = function () {
+  _facultyCurriculumMode = !_facultyCurriculumMode;
+  const toggleBtn = document.getElementById("btn-toggle-faculty-curriculum");
+  if (toggleBtn) {
+    toggleBtn.textContent = _facultyCurriculumMode ? "👨‍🏫 View My Assigned Subjects" : "📚 View Full Curriculum";
+  }
+  fetchSubjects();
+};
+
 async function fetchSubjects() {
+  const isFaculty = window.CURRENT_ROLE === "FACULTY";
+  const toggleBtn = document.getElementById("btn-toggle-faculty-curriculum");
+  if (toggleBtn) {
+    toggleBtn.style.display = isFaculty ? "inline-flex" : "none";
+  }
+
   try {
-    const res = await API.get("/api/subjects");
+    let url = "/api/master/subjects";
+    if (isFaculty && window.CURRENT_REF_ID) {
+      if (_facultyCurriculumMode) {
+        url += "?curriculum=true";
+      } else {
+        url += `?faculty_id=${window.CURRENT_REF_ID}`;
+      }
+    }
+    const res = await API.get(url);
     if (res.status === "success") {
       masterDataCache.subjects = res.data;
       document.getElementById("count-subjects").textContent = res.count;
@@ -1448,10 +1489,14 @@ function updateRoomAvailabilityBoard() {
           return `
             <div class="glass-card" style="padding: 14px 16px; background: rgba(255,255,255,0.85); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <div style="font-size:15px; font-weight:800; color:var(--text-dark);">${escapeHtml(room.room_code)}</div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="font-size:15px; font-weight:800; color:var(--text-dark);">${escapeHtml(room.room_code)}</span>
+                  <span style="background:#EDE9FE; color:#5B21B6; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;">${escapeHtml(room.department || 'GEN')}</span>
+                </div>
                 <span style="background:#EF4444; color:#FFFFFF; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:9999px; text-transform:uppercase;">Occupied</span>
               </div>
               <div style="font-size:12px; color:var(--text-secondary); margin-bottom:4px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
+              ${room.booked_by_label ? `<div style="font-size:11.5px; color:#B45309; font-weight:700; margin-bottom:4px;">🏷️ Requested by: ${escapeHtml(room.booked_by_label)}</div>` : ''}
               <div style="font-size:12.5px; font-weight:600; color:var(--sidebar-bg); margin-bottom:8px;">${escapeHtml(s.section_name || 'Section')} • ${escapeHtml(s.faculty_name || 'Faculty')}</div>
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid rgba(0,0,0,0.06); padding-top:6px;">
                 <span>Occupied from ${formatTimeShort(s.start_time)} - ${formatTimeShort(s.end_time)}</span>
@@ -1470,6 +1515,8 @@ function updateRoomAvailabilityBoard() {
     if (availableList.length === 0) {
       availContainer.innerHTML = `<div style="text-align:center; padding: 32px; color: var(--text-muted); font-size: 13px;">No available rooms match the selected criteria.</div>`;
     } else {
+      const canRequestRoom = window.CURRENT_ROLE === "STUDENT" || window.CURRENT_ROLE === "FACULTY";
+
       availContainer.innerHTML = availableList
         .map(({ room, nextSchedule: nextS }) => {
           let nextBookingText = "No more bookings today";
@@ -1486,14 +1533,25 @@ function updateRoomAvailabilityBoard() {
           return `
             <div class="glass-card" style="padding: 14px 18px; background: rgba(255,255,255,0.88); border: 1px solid rgba(34,197,94,0.3); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                <div style="font-size:15px; font-weight:800; color:var(--text-dark);">${escapeHtml(room.room_code)}</div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="font-size:15px; font-weight:800; color:var(--text-dark);">${escapeHtml(room.room_code)}</span>
+                  <span style="background:#EDE9FE; color:#5B21B6; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;">${escapeHtml(room.department || 'GEN')}</span>
+                </div>
                 <span style="background:#86EFAC; color:#14532D; font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:9999px; text-transform:uppercase;">AVAILABLE</span>
               </div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
+              ${room.booked_by_label ? `<div style="font-size:11.5px; color:#B45309; font-weight:700; margin-bottom:6px;">🏷️ Requested by: ${escapeHtml(room.booked_by_label)}</div>` : ''}
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid rgba(0,0,0,0.06); padding-top:6px;">
                 <span>${nextBookingText}</span>
                 <span style="font-weight:700; color:#15803D;">${hoursLeftText}</span>
               </div>
+              ${canRequestRoom ? `
+                <div style="margin-top: 8px; text-align: right; border-top: 1px dashed rgba(0,0,0,0.06); padding-top: 6px;">
+                  <button type="button" class="btn btn-sm btn-primary" onclick="requestRoomBooking(${room.id}, '${escapeAttr(room.room_code)}')" style="font-size: 11px; padding: 3px 10px;">
+                    + Request Room
+                  </button>
+                </div>
+              ` : ''}
             </div>
           `;
         })
@@ -1501,6 +1559,33 @@ function updateRoomAvailabilityBoard() {
     }
   }
 }
+
+window.requestRoomBooking = async function (roomId, roomCode) {
+  const day = prompt(`Enter day of week for booking ${roomCode} (MON, TUE, WED, THU, FRI, SAT):`, "MON");
+  if (!day) return;
+  const startTime = prompt(`Enter start time (HH:MM):`, "13:00");
+  if (!startTime) return;
+  const endTime = prompt(`Enter end time (HH:MM):`, "16:00");
+  if (!endTime) return;
+  const reason = prompt(`Enter justification / reason for requesting ${roomCode}:`, "Department project review and cohort class session");
+  if (!reason) return;
+
+  try {
+    const res = await API.post("/api/rooms/request", {
+      room_id: roomId,
+      day_of_week: day.trim().toUpperCase(),
+      start_time: startTime.trim(),
+      end_time: endTime.trim(),
+      reason: reason.trim()
+    });
+    showToast(res.message || "Room booking request submitted! Pending Program Chair approval.");
+    await fetchRooms();
+    updateRoomAvailabilityBoard();
+    if (typeof updateRequestsInbox === "function") updateRequestsInbox();
+  } catch (err) {
+    showToast(err.message || "Failed to submit room request", true);
+  }
+};
 
 function renderRoomTimetable() {
   const roomSelect = document.getElementById("room-timetable-select");
