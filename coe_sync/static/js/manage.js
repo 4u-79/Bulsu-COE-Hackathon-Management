@@ -134,6 +134,15 @@ function initManageTabs() {
   // Activate initial tab on load
   switchTab(initialTab);
 
+  if (initialTab === 'faculty') {
+    const viewParam = urlParams.get('view');
+    const idParam = urlParams.get('id');
+    if (viewParam === 'detailed' || idParam || window.CURRENT_ROLE === 'FACULTY') {
+      const targetId = idParam || window.CURRENT_REF_ID || 109;
+      setTimeout(() => openFacultyDetailed(targetId), 300);
+    }
+  }
+
   if (addBtn) {
     addBtn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -252,27 +261,20 @@ function renderFacultyTable(faculty) {
 
   tbody.innerHTML = faculty
     .map((f) => {
-      const pct = Math.min(100, Math.round((f.current_units / f.max_units) * 100));
-      const fillClass = f.current_units > f.max_units ? "danger" : pct >= 80 ? "warning" : "";
+      const dept = f.department || normalizeProgram(f.program) || "MEE";
 
       return `
       <tr>
-        <td><strong>${escapeHtml(f.name)}</strong></td>
-        <td>${escapeHtml(f.email)}</td>
-        <td>${f.max_units} Units</td>
+        <td><strong style="color: var(--text-dark);">${escapeHtml(f.name)}</strong></td>
+        <td><span style="font-weight: 600; color: var(--text-secondary);">${escapeHtml(dept)}</span></td>
         <td>
-          <div style="font-size: 13px; font-weight: 600;">${f.current_units} / ${f.max_units} u (${pct}%)</div>
-          <div class="workload-bar-wrap">
-            <div class="workload-bar-fill ${fillClass}" style="width: ${pct}%;"></div>
-          </div>
+          <span style="background: #86EFAC; color: #14532D; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; text-transform: capitalize;">Active</span>
         </td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="openFacultyAvailabilityModal(${f.id}, '${escapeAttr(f.name)}')">
-            Availability
-          </button>
-        </td>
-        <td>
-          <div class="table-actions">
+        <td style="text-align: right;">
+          <div style="display:flex; justify-content:flex-end; align-items:center; gap: 8px;">
+            <button class="btn btn-sm" onclick="openFacultyDetailed(${f.id})" style="background: #60A5FA; color: #FFFFFF; font-weight: 600; padding: 4px 18px; border-radius: 9999px; border:none; cursor:pointer;" title="View Faculty Profile">
+              About
+            </button>
             <a href="/schedules?faculty=${f.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Faculty Timetable">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               Schedule
@@ -288,6 +290,211 @@ function renderFacultyTable(faculty) {
     })
     .join("");
 }
+
+// -------------------------------------------------------------
+// Faculty Detailed Profile & Availability Controller (Screenshot 2026-10-24 192019.png)
+// -------------------------------------------------------------
+let _currentDetailedFaculty = null;
+
+window.openFacultyDetailed = async function (facultyId) {
+  if (!facultyId) return;
+  const dirCont = document.getElementById("faculty-directory-container");
+  const detCont = document.getElementById("faculty-detailed-container");
+  if (dirCont) dirCont.style.display = "none";
+  if (detCont) detCont.style.display = "block";
+
+  const breadcrumbEl = document.getElementById("breadcrumb-page-name");
+  const mainTitleEl = document.getElementById("page-main-title");
+  if (breadcrumbEl) breadcrumbEl.textContent = "Faculty";
+  if (mainTitleEl) mainTitleEl.textContent = "Faculty Detailed";
+
+  const backBtn = document.getElementById("btn-back-to-faculty-list");
+  if (backBtn) {
+    backBtn.style.display = (window.CURRENT_ROLE === "FACULTY" && !["ADMIN", "CHAIR"].includes(window.AUTHENTIC_USER_ROLE)) ? "none" : "inline-flex";
+  }
+
+  try {
+    const res = await API.get(`/api/faculty/${facultyId}`);
+    if (res.status === "success") {
+      const f = res.data;
+      _currentDetailedFaculty = f;
+
+      document.getElementById("detailed-faculty-name").textContent = f.name || "Faculty Member";
+      document.getElementById("detailed-faculty-dept").textContent = f.department || f.program || "Engineering";
+      document.getElementById("detailed-faculty-email").textContent = f.email || "";
+
+      // Check edit permissions: ADMIN, CHAIR, or if the faculty user owns this profile
+      const canEdit = ["ADMIN", "CHAIR"].includes(window.CURRENT_ROLE) ||
+                      (window.CURRENT_ROLE === "FACULTY" && String(window.CURRENT_REF_ID) === String(f.id));
+      const editWrap = document.getElementById("detailed-edit-btn-wrap");
+      if (editWrap) {
+        editWrap.style.display = canEdit ? "block" : "none";
+      }
+
+      // 1. Column 1: Subjects
+      const subjectsList = document.getElementById("detailed-subjects-list");
+      if (subjectsList) {
+        const subjects = f.assigned_subjects || [];
+        if (subjects.length === 0) {
+          subjectsList.innerHTML = `<div style="color: #64748B; font-size: 13px; font-style: italic;">No subjects assigned yet.</div>`;
+        } else {
+          subjectsList.innerHTML = subjects.map(s => `
+            <div style="background: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.6); border-radius: 8px; padding: 10px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.03);">
+              <div style="font-size: 13px; font-weight: 700; color: #1E293B;">${escapeHtml(s.code || "")}</div>
+              <div style="font-size: 12px; color: #475569; margin: 2px 0;">${escapeHtml(s.title || "")}</div>
+              <div style="font-size: 11px; font-weight: 600; color: var(--bulsu-maroon);">${s.units || 3} Units &bull; ${escapeHtml(s.subject_type || "Lecture")}</div>
+            </div>
+          `).join("");
+        }
+      }
+
+      // 2. Column 2: Availability (Monday - Saturday)
+      const availList = document.getElementById("detailed-availability-list");
+      if (availList) {
+        const days = [
+          { code: "MON", label: "Monday" },
+          { code: "TUE", label: "Tuesday" },
+          { code: "WED", label: "Wednesday" },
+          { code: "THU", label: "Thursday" },
+          { code: "FRI", label: "Friday" },
+          { code: "SAT", label: "Saturday" },
+        ];
+        const avails = f.availabilities || [];
+
+        availList.innerHTML = days.map(d => {
+          const match = avails.find(a => a.day_of_week === d.code);
+          let badgeHtml = "";
+          if (match) {
+            if (match.is_preferred) {
+              badgeHtml = `<span style="background: #C7D2FE; color: #3730A3; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px;">Preferred (${match.start_time.slice(0,5)}–${match.end_time.slice(0,5)})</span>`;
+            } else {
+              badgeHtml = `<span style="background: #FECACA; color: #991B1B; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px;">Unavailable (${match.start_time.slice(0,5)}–${match.end_time.slice(0,5)})</span>`;
+            }
+          } else {
+            badgeHtml = `<span style="background: #86EFAC; color: #14532D; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px;">Available</span>`;
+          }
+
+          return `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding: 6px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+              <span style="font-size: 13.5px; font-weight: 600; color: #334155;">${d.label}</span>
+              ${badgeHtml}
+            </div>
+          `;
+        }).join("");
+      }
+
+      // 3. Column 3: Preferred & Current Load
+      const maxU = f.max_units || 21;
+      const curU = f.current_units || 0;
+      const prefEl = document.getElementById("detailed-preferred-units");
+      const prefBar = document.getElementById("detailed-preferred-bar");
+      const curEl = document.getElementById("detailed-current-units");
+      const curBar = document.getElementById("detailed-current-bar");
+
+      if (prefEl) prefEl.textContent = maxU;
+      if (prefBar) prefBar.style.width = `${Math.min(100, Math.round((maxU / 24) * 100))}%`;
+      if (curEl) curEl.textContent = curU;
+      if (curBar) curBar.style.width = `${Math.min(100, Math.round((curU / maxU) * 100))}%`;
+    }
+  } catch (err) {
+    showToast(err.message || "Failed to load faculty details", true);
+  }
+};
+
+window.closeFacultyDetailed = function () {
+  const dirCont = document.getElementById("faculty-directory-container");
+  const detCont = document.getElementById("faculty-detailed-container");
+  if (dirCont) dirCont.style.display = "block";
+  if (detCont) detCont.style.display = "none";
+
+  const mainTitleEl = document.getElementById("page-main-title");
+  if (mainTitleEl) mainTitleEl.textContent = "Faculty Status";
+};
+
+window.openFacultyDetailedEditModal = function () {
+  if (!_currentDetailedFaculty) return;
+  const f = _currentDetailedFaculty;
+  document.getElementById("edit-fac-name").value = f.name || "";
+  document.getElementById("edit-fac-email").value = f.email || "";
+  document.getElementById("edit-fac-max-units").value = f.max_units || 21;
+
+  const daysList = document.getElementById("edit-fac-days-list");
+  if (daysList) {
+    const days = [
+      { code: "MON", label: "Monday" },
+      { code: "TUE", label: "Tuesday" },
+      { code: "WED", label: "Wednesday" },
+      { code: "THU", label: "Thursday" },
+      { code: "FRI", label: "Friday" },
+      { code: "SAT", label: "Saturday" },
+    ];
+    const avails = f.availabilities || [];
+    daysList.innerHTML = days.map(d => {
+      const match = avails.find(a => a.day_of_week === d.code);
+      const isBlackout = match && !match.is_preferred;
+      return `
+        <div style="display:grid; grid-template-columns: 85px 1.2fr 1fr 1fr; gap: 8px; align-items:center; background:#F8FAFC; padding: 6px 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
+          <span style="font-size: 12px; font-weight: 700; color: #334155;">${d.label}</span>
+          <select id="edit-avail-type-${d.code}" class="form-select" style="font-size: 11.5px; padding: 4px;">
+            <option value="available" ${!match ? "selected" : ""}>Available</option>
+            <option value="blackout" ${isBlackout ? "selected" : ""}>Unavailable</option>
+            <option value="preferred" ${match && match.is_preferred ? "selected" : ""}>Preferred</option>
+          </select>
+          <input type="time" id="edit-avail-start-${d.code}" class="form-input" value="${match ? match.start_time.slice(0,5) : "08:00"}" style="font-size: 11.5px; padding: 4px;">
+          <input type="time" id="edit-avail-end-${d.code}" class="form-input" value="${match ? match.end_time.slice(0,5) : "12:00"}" style="font-size: 11.5px; padding: 4px;">
+        </div>
+      `;
+    }).join("");
+  }
+
+  const modal = document.getElementById("modal-edit-faculty-detailed");
+  if (modal) modal.style.display = "flex";
+};
+
+window.closeFacultyDetailedEditModal = function () {
+  const modal = document.getElementById("modal-edit-faculty-detailed");
+  if (modal) modal.style.display = "none";
+};
+
+window.submitFacultyDetailedEdit = async function (e) {
+  e.preventDefault();
+  if (!_currentDetailedFaculty) return;
+  const facultyId = _currentDetailedFaculty.id;
+  const name = document.getElementById("edit-fac-name").value.trim();
+  const email = document.getElementById("edit-fac-email").value.trim();
+  const maxUnits = parseInt(document.getElementById("edit-fac-max-units").value, 10);
+
+  const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const availability = [];
+  days.forEach(code => {
+    const type = document.getElementById(`edit-avail-type-${code}`)?.value;
+    if (type === "blackout" || type === "preferred") {
+      const st = document.getElementById(`edit-avail-start-${code}`)?.value || "08:00";
+      const et = document.getElementById(`edit-avail-end-${code}`)?.value || "12:00";
+      availability.push({
+        day_of_week: code,
+        start_time: st,
+        end_time: et,
+        is_preferred: type === "preferred"
+      });
+    }
+  });
+
+  try {
+    const res = await API.put(`/api/faculty/${facultyId}`, {
+      name,
+      email,
+      max_units: maxUnits,
+      availability
+    });
+    showToast(res.message || "Profile & availability updated successfully!");
+    closeFacultyDetailedEditModal();
+    await fetchFaculty();
+    await openFacultyDetailed(facultyId);
+  } catch (err) {
+    showToast(err.message || "Failed to update profile", true);
+  }
+};
 
 async function fetchSections() {
   try {
@@ -1030,12 +1237,16 @@ function initRoomAvailabilityControls() {
   const buildingFilter = document.getElementById("room-avail-filter-building");
   const facultyFilter = document.getElementById("room-avail-filter-faculty");
   const programFilter = document.getElementById("room-avail-filter-program");
+  const stuGroupFilter = document.getElementById("student-filter-room-group");
+  const stuSecFilter = document.getElementById("student-filter-section");
 
   daySelect?.addEventListener("change", updateRoomAvailabilityBoard);
   hourSelect?.addEventListener("change", updateRoomAvailabilityBoard);
   buildingFilter?.addEventListener("change", updateRoomAvailabilityBoard);
   facultyFilter?.addEventListener("change", updateRoomAvailabilityBoard);
   programFilter?.addEventListener("change", updateRoomAvailabilityBoard);
+  stuGroupFilter?.addEventListener("change", updateRoomAvailabilityBoard);
+  stuSecFilter?.addEventListener("change", updateRoomAvailabilityBoard);
 }
 
 function populateRoomAvailabilityFilters() {
@@ -1047,6 +1258,17 @@ function populateRoomAvailabilityFilters() {
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`)
+        .join("");
+  }
+
+  // Populate student section filter
+  const stuSecSel = document.getElementById("student-filter-section");
+  if (stuSecSel && masterDataCache.sections.length > 0) {
+    stuSecSel.innerHTML = `<option value="">All Section ▾</option>` +
+      masterDataCache.sections
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`)
         .join("");
   }
 
@@ -1082,11 +1304,42 @@ function formatTimeShort(t) {
 }
 
 function updateRoomAvailabilityBoard() {
+  const isStudent = window.CURRENT_ROLE === "STUDENT";
+  const defFilters = document.getElementById("filter-controls-default");
+  const stuFilters = document.getElementById("filter-controls-student");
+  const colOcc = document.getElementById("col-occupied-rooms");
+  const splitBoard = document.getElementById("room-split-board");
+  const modeToggle = document.getElementById("room-mode-toggle");
+
+  if (isStudent) {
+    if (defFilters) defFilters.style.display = "none";
+    if (stuFilters) stuFilters.style.display = "grid";
+    if (colOcc) colOcc.style.display = "none";
+    if (splitBoard) splitBoard.style.gridTemplateColumns = "1fr";
+    if (modeToggle) modeToggle.style.display = "none";
+  } else {
+    if (defFilters) defFilters.style.display = "grid";
+    if (stuFilters) stuFilters.style.display = "none";
+    if (colOcc) colOcc.style.display = "block";
+    if (splitBoard) splitBoard.style.gridTemplateColumns = "1fr 1fr";
+    if (modeToggle) modeToggle.style.display = "inline-flex";
+  }
+
   const day = document.getElementById("check-time-day")?.value || "MON";
   const hourVal = document.getElementById("check-time-hour")?.value || "10:00";
-  const buildingVal = document.getElementById("room-avail-filter-building")?.value || "";
-  const facVal = document.getElementById("room-avail-filter-faculty")?.value || "";
-  const progVal = document.getElementById("room-avail-filter-program")?.value || "";
+  
+  let buildingVal = document.getElementById("room-avail-filter-building")?.value || "";
+  let facVal = document.getElementById("room-avail-filter-faculty")?.value || "";
+  let progVal = document.getElementById("room-avail-filter-program")?.value || "";
+  let secVal = "";
+
+  if (isStudent) {
+    const stuGroup = document.getElementById("student-filter-room-group")?.value || "";
+    secVal = document.getElementById("student-filter-section")?.value || "";
+    if (stuGroup === "COE 1" || stuGroup === "COE 2" || stuGroup === "LAB") {
+      buildingVal = stuGroup;
+    }
+  }
 
   const checkMins = timeToMinutes(hourVal);
   const displayTime = formatTimeShort(hourVal);
@@ -1122,6 +1375,7 @@ function updateRoomAvailabilityBoard() {
     if (activeSched) {
       // Room is occupied
       if (facVal && String(activeSched.faculty_id) !== String(facVal)) return;
+      if (secVal && String(activeSched.section_id) !== String(secVal)) return;
       if (progVal) {
         const schedProg = normalizeProgram(activeSched.program || (activeSched.section_name ? activeSched.section_name.split("-")[0].trim() : ""));
         if (schedProg !== normalizeProgram(progVal)) return;
@@ -1135,6 +1389,7 @@ function updateRoomAvailabilityBoard() {
       const nextSched = upcoming[0] || null;
 
       if (facVal && nextSched && String(nextSched.faculty_id) !== String(facVal)) return;
+      if (secVal && nextSched && String(nextSched.section_id) !== String(secVal)) return;
       if (progVal && nextSched) {
         const schedProg = normalizeProgram(nextSched.program || (nextSched.section_name ? nextSched.section_name.split("-")[0].trim() : ""));
         if (schedProg !== normalizeProgram(progVal)) return;
@@ -1209,7 +1464,7 @@ function updateRoomAvailabilityBoard() {
     }
   }
 
-  // Render Available Rooms
+  // Render Available Rooms (Matches Screenshot 2026-10-24 191953.png)
   const availContainer = document.getElementById("list-available-rooms");
   if (availContainer) {
     if (availableList.length === 0) {
@@ -1229,10 +1484,10 @@ function updateRoomAvailabilityBoard() {
           }
 
           return `
-            <div class="glass-card" style="padding: 14px 16px; background: rgba(255,255,255,0.85); border: 1px solid rgba(34,197,94,0.3); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+            <div class="glass-card" style="padding: 14px 18px; background: rgba(255,255,255,0.88); border: 1px solid rgba(34,197,94,0.3); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <div style="font-size:15px; font-weight:800; color:var(--text-dark);">${escapeHtml(room.room_code)}</div>
-                <span style="background:#86EFAC; color:#14532D; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:9999px; text-transform:uppercase;">AVAILABLE</span>
+                <span style="background:#86EFAC; color:#14532D; font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:9999px; text-transform:uppercase;">AVAILABLE</span>
               </div>
               <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid rgba(0,0,0,0.06); padding-top:6px;">

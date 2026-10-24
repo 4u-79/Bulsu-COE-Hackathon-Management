@@ -257,18 +257,14 @@ def load_and_clean_data2_sql(sql_file_path: Path = None) -> Dict[str, Any]:
 
 
 def load_and_clean_sql_dump(sql_file_path: Path = None) -> Dict[str, Any]:
-    """Parse and clean SQL dump data. Prioritizes data-2.sql as the single source of truth."""
-    data2_path = Path(__file__).resolve().parent / "data-2.sql"
-    if data2_path.exists():
-        return load_and_clean_data2_sql(data2_path)
-
+    """Parse and clean SQL dump data. Strictly uses data-2.sql as the single source of truth."""
     if sql_file_path is None:
-        sql_file_path = Path(__file__).resolve().parent / "coe-database.sql"
+        sql_file_path = Path(__file__).resolve().parent / "data-2.sql"
 
     if not sql_file_path.exists():
-        raise FileNotFoundError(f"SQL dump file not found at {sql_file_path}")
+        raise FileNotFoundError(f"data-2.sql not found at {sql_file_path}. Legacy coe-database.sql is deprecated and purged.")
 
-    sql_text = sql_file_path.read_text(encoding="utf-8")
+    return load_and_clean_data2_sql(sql_file_path)
 
     # 1. Faculty Unification
     faculty_list: List[Dict[str, Any]] = []

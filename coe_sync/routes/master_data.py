@@ -17,6 +17,7 @@ from models import (
     Subject,
     AuditLog,
     FacultyAvailability,
+    Schedule,
 )
 from routes.auth import require_roles
 
@@ -184,13 +185,68 @@ def create_faculty():
     return jsonify({"status": "success", "message": "Faculty member created successfully.", "data": faculty.to_dict()}), 201
 
 
-@master_data_bp.route("/faculty/<int:faculty_id>", methods=["PUT"])
-@require_roles("CHAIR", "ADMIN")
-def update_faculty(faculty_id: int):
-    """Update an existing Faculty member."""
+@master_data_bp.route("/faculty/<int:faculty_id>", methods=["GET"])
+@master_data_bp.route("/master/faculty/<int:faculty_id>", methods=["GET"])
+def get_faculty_detail(faculty_id: int):
+    """Retrieve detailed profile of a faculty member including assigned subjects and availability."""
     faculty = db.session.get(Faculty, faculty_id)
     if not faculty:
         return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
+
+    # Fetch assigned schedules & subjects
+    assigned_schedules = (
+        Schedule.query.filter_by(faculty_id=faculty_id)
+        .order_by(Schedule.day_of_week.asc(), Schedule.start_time.asc())
+        .all()
+    )
+    subjects_dict = {}
+    total_units = 0
+    for s in assigned_schedules:
+        if s.subject:
+            total_units += (s.subject.units or 0)
+            if s.subject.id not in subjects_dict:
+                subjects_dict[s.subject.id] = {
+                    "id": s.subject.id,
+                    "code": s.subject.code,
+                    "title": s.subject.title,
+                    "units": s.subject.units,
+                    "type": s.subject.subject_type,
+                    "sections": [s.section.name] if s.section else [],
+                }
+            else:
+                if s.section and s.section.name not in subjects_dict[s.subject.id]["sections"]:
+                    subjects_dict[s.subject.id]["sections"].append(s.section.name)
+
+    # Fetch availability records
+    avails = FacultyAvailability.query.filter_by(faculty_id=faculty_id).all()
+
+    return jsonify({
+        "status": "success",
+        "data": {
+            **faculty.to_dict(),
+            "current_units": total_units or faculty.current_units,
+            "assigned_subjects": list(subjects_dict.values()),
+            "schedules": [s.to_dict() for s in assigned_schedules],
+            "availabilities": [a.to_dict() for a in avails],
+        }
+    }), 200
+
+
+@master_data_bp.route("/faculty/<int:faculty_id>", methods=["PUT"])
+@master_data_bp.route("/master/faculty/<int:faculty_id>", methods=["PUT"])
+@require_roles("CHAIR", "ADMIN", "FACULTY")
+def update_faculty(faculty_id: int):
+    """Update an existing Faculty member with strict self-ownership validation for FACULTY role."""
+    faculty = db.session.get(Faculty, faculty_id)
+    if not faculty:
+        return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
+
+    effective_role = session.get("active_role") or session.get("role")
+    effective_ref_id = session.get("active_reference_id") or session.get("reference_id")
+
+    if effective_role == "FACULTY":
+        if not effective_ref_id or int(effective_ref_id) != int(faculty_id):
+            return jsonify({"error": "Unauthorized: You are only permitted to update your own faculty profile."}), 403
 
     data = request.get_json(silent=True) or {}
     if "name" in data:
@@ -216,6 +272,24 @@ def update_faculty(faculty_id: int):
             faculty.max_units = m
         except (ValueError, TypeError):
             return jsonify({"error": "Max units must be greater than 0."}), 400
+
+    if "availabilities" in data and isinstance(data["availabilities"], list):
+        # Update or set availability windows
+        FacultyAvailability.query.filter_by(faculty_id=faculty_id).delete()
+        for item in data["availabilities"]:
+            day = (item.get("day_of_week") or "").strip().upper()
+            if day in {"MON", "TUE", "WED", "THU", "FRI", "SAT"}:
+                st_parts = [int(p) for p in str(item.get("start_time", "08:00")).split(":")[:2]]
+                et_parts = [int(p) for p in str(item.get("end_time", "17:00")).split(":")[:2]]
+                db.session.add(
+                    FacultyAvailability(
+                        faculty_id=faculty_id,
+                        day_of_week=day,
+                        start_time=time(st_parts[0], st_parts[1]),
+                        end_time=time(et_parts[0], et_parts[1]),
+                        is_preferred=bool(item.get("is_preferred", True)),
+                    )
+                )
 
     audit = AuditLog(
         user_id=session.get("user_id"),

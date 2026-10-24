@@ -43,16 +43,17 @@ def get_analytics_summary():
     # -------------------------------------------------------------
     # 1. Room Utilization Calculation
     # Mon-Sat (6 days) x 12 hours (07:00 to 19:00) = 72 available hours per room
+    # Calculated strictly per available room
     # -------------------------------------------------------------
     total_available_room_hours = len(rooms) * 72.0
     total_scheduled_hours = 0.0
 
-    for s in schedules:
-        duration_minutes = time_to_minutes(s.end_time) - time_to_minutes(
-            s.start_time
-        )
-        if duration_minutes > 0:
-            total_scheduled_hours += duration_minutes / 60.0
+    for r in rooms:
+        r_scheds = [s for s in schedules if s.room_id == r.id]
+        for s in r_scheds:
+            dm = time_to_minutes(s.end_time) - time_to_minutes(s.start_time)
+            if dm > 0:
+                total_scheduled_hours += dm / 60.0
 
     room_utilization = 0.0
     if total_available_room_hours > 0:
@@ -241,6 +242,7 @@ def get_analytics_summary():
                 "data": {
                     "total_classes": total_classes,
                     "room_utilization": room_utilization,
+                    "overall_room_utilization_pct": room_utilization,
                     "unresolved_conflicts": unresolved_conflicts,
                     "schedule_quality_score": quality_score,
                     "faculty_workloads": faculty_workloads,
@@ -297,7 +299,7 @@ def get_analytics_reports():
     avg_room_utilization = 0.0
     total_avail_hours = len(rooms) * 72.0
     if total_avail_hours > 0:
-        avg_room_utilization = round((total_scheduled_room_hours / total_avail_hours) * 100.0, 1)
+        avg_room_utilization = round((total_scheduled_room_hours / total_avail_hours) * 100.0, 2)
 
     # 2. Faculty Workload Distribution (Max Limit: 21 Units)
     faculty_workload_list = []
@@ -386,6 +388,7 @@ def get_analytics_reports():
                 "data": {
                     "room_utilization": {
                         "average_percentage": avg_room_utilization,
+                        "overall_room_utilization_pct": avg_room_utilization,
                         "rooms": room_utilization_list,
                         "weekly_capacity_benchmark_hours": 72.0,
                     },

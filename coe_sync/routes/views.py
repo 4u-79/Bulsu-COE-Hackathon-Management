@@ -6,9 +6,9 @@ Handles frontend routing for:
 - GET /schedules: Interactive Weekly Timetable Grid
 """
 
-from flask import Blueprint, render_template, session, redirect, url_for, current_app
+from flask import Blueprint, render_template, session, redirect, url_for, current_app, request
 from models import Room, Faculty, Section, Subject, Schedule, AuditLog
-from routes.auth import login_required, require_roles, get_effective_role
+from routes.auth import login_required, require_roles, get_effective_role, get_current_user
 
 views_bp = Blueprint("views", __name__)
 
@@ -52,15 +52,30 @@ def dashboard():
 @views_bp.route("/manage")
 @login_required
 def manage():
-    """Render Master Data CRUD Management console. Inaccessible to students."""
-    if get_effective_role() == "STUDENT":
+    """Render Master Data CRUD Management console."""
+    tab = request.args.get("tab")
+    effective_role = get_effective_role()
+    if effective_role == "STUDENT" and tab != "rooms":
         return redirect(url_for("views.schedules"))
 
     return render_template(
         "manage.html",
         active_page="manage",
-        active_role=get_effective_role(),
+        active_role=effective_role,
         current_username=session.get("username") or "chair_cpe",
+        must_change_credentials=session.get("must_change_credentials", False),
+    )
+
+
+@views_bp.route("/settings")
+@login_required
+def settings():
+    """Render NEXUS Settings console."""
+    return render_template(
+        "settings.html",
+        active_page="settings",
+        active_role=get_effective_role(),
+        current_username=session.get("username") or "admin",
         must_change_credentials=session.get("must_change_credentials", False),
     )
 
@@ -128,6 +143,25 @@ def reports():
         active_page="reports",
         active_role=get_effective_role(),
         current_username=session.get("username") or "chair_cpe",
+        must_change_credentials=session.get("must_change_credentials", False),
+    )
+
+
+@views_bp.route("/settings")
+@login_required
+def settings_page():
+    """Render NEXUS Settings & Governance Workspace."""
+    user = get_current_user()
+    effective_role = get_effective_role()
+    effective_program = session.get("active_program") or (user.program if user else "MEE")
+
+    return render_template(
+        "settings.html",
+        active_page="settings",
+        active_role=effective_role,
+        user=user,
+        effective_program=effective_program,
+        current_username=session.get("username") or (user.username if user else "user"),
         must_change_credentials=session.get("must_change_credentials", False),
     )
 

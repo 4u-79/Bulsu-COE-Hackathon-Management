@@ -33,6 +33,7 @@ from routes.auth import (
     require_roles,
     get_effective_role,
     get_effective_reference_id,
+    get_effective_program,
 )
 
 schedules_bp = Blueprint("schedules", __name__)
@@ -72,43 +73,65 @@ def get_schedules():
 
     # Enforce row-level security
     if effective_role == "STUDENT":
-        # Students can only view approved PUBLISHED classes
-        query = query.filter(Schedule.status == "PUBLISHED")
+        auth_role = session.get("role")
+        is_impersonating = auth_role in ("CHAIR", "ADMIN") and session.get("impersonated_role") == "STUDENT"
         req_section_id = request.args.get("section_id", type=int)
-        if effective_ref_id:
-            if req_section_id and req_section_id != effective_ref_id:
-                return (
-                    jsonify(
-                        {
-                            "status": "error",
-                            "error": "Unauthorized: Cross-section schedule viewing is forbidden for student accounts.",
-                        }
-                    ),
-                    403,
-                )
-            query = query.filter(Schedule.section_id == effective_ref_id)
-        elif req_section_id:
-            query = query.filter(Schedule.section_id == req_section_id)
+        target_section_id = req_section_id or effective_ref_id
+
+        if not is_impersonating:
+            # Genuine students can only view approved PUBLISHED classes
+            query = query.filter(Schedule.status == "PUBLISHED")
+            if effective_ref_id:
+                if req_section_id and req_section_id != effective_ref_id:
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "error": "Unauthorized: Cross-section schedule viewing is forbidden for student accounts.",
+                            }
+                        ),
+                        403,
+                    )
+                query = query.filter(Schedule.section_id == effective_ref_id)
+            elif req_section_id:
+                query = query.filter(Schedule.section_id == req_section_id)
+            else:
+                query = query.filter(Schedule.id == -1)
         else:
-            query = query.filter(Schedule.id == -1)
+            # Chair/Admin impersonating student: view selected section or default section
+            if target_section_id:
+                query = query.filter(Schedule.section_id == target_section_id)
+            else:
+                query = query.filter(Schedule.id == -1)
     elif effective_role == "FACULTY":
+        auth_role = session.get("role")
+        is_impersonating = auth_role in ("CHAIR", "ADMIN") and session.get("impersonated_role") == "FACULTY"
         req_faculty_id = request.args.get("faculty_id", type=int)
-        if effective_ref_id:
-            if req_faculty_id and req_faculty_id != effective_ref_id:
-                return (
-                    jsonify(
-                        {
-                            "status": "error",
-                            "error": "Unauthorized: Access restricted to your own instructional assignments.",
-                        }
-                    ),
-                    403,
-                )
-            query = query.filter(Schedule.faculty_id == effective_ref_id)
-        elif req_faculty_id:
-            query = query.filter(Schedule.faculty_id == req_faculty_id)
+        target_faculty_id = req_faculty_id or effective_ref_id
+
+        if not is_impersonating:
+            if effective_ref_id:
+                if req_faculty_id and req_faculty_id != effective_ref_id:
+                    return (
+                        jsonify(
+                            {
+                                "status": "error",
+                                "error": "Unauthorized: Access restricted to your own instructional assignments.",
+                            }
+                        ),
+                        403,
+                    )
+                query = query.filter(Schedule.faculty_id == effective_ref_id)
+            elif req_faculty_id:
+                query = query.filter(Schedule.faculty_id == req_faculty_id)
+            else:
+                query = query.filter(Schedule.id == -1)
         else:
-            query = query.filter(Schedule.id == -1)
+            # Chair/Admin impersonating faculty: view selected instructor or default
+            if target_faculty_id:
+                query = query.filter(Schedule.faculty_id == target_faculty_id)
+            else:
+                query = query.filter(Schedule.id == -1)
     else:
         # Standard administrative query filters
         section_id = request.args.get("section_id", type=int)
@@ -119,6 +142,10 @@ def get_schedules():
         program = request.args.get("program", type=str)
         year_level = request.args.get("year_level", type=int)
         search = request.args.get("search", type=str)
+
+        effective_prog = get_effective_program()
+        if effective_role == "CHAIR" and effective_prog and not program:
+            program = effective_prog
 
         if section_id:
             query = query.filter(Schedule.section_id == section_id)
@@ -148,6 +175,10 @@ def get_schedules():
             query = query.join(Subject, Schedule.subject_id == Subject.id).filter(
                 (Subject.code.ilike(search_str)) | (Subject.title.ilike(search_str))
             )
+
+    semester = request.args.get("semester", type=int)
+    if semester:
+        query = query.filter(Schedule.subject.has(Subject.semester == semester))
 
     schedules = query.order_by(
         Schedule.day_of_week.asc(), Schedule.start_time.asc()
@@ -561,13 +592,16 @@ def update_schedule_status(schedule_id: int):
 def api_smart_generate_schedule():
     """
     POST /api/scheduler/generate
-    Smart Schedule Generator with Program, Year Level, Section, Room, Faculty, and Preference options.
+    Smart Schedule Generator with Program, Year Level, Semester, Section, Room, Faculty, and Preference options.
     """
     payload = request.get_json(silent=True) or {}
     user_id = session.get("user_id")
     result = run_smart_scheduler(payload, user_id=user_id)
-    status_code = 200 if result.get("status") == "success" else 400
-    return jsonify(result), status_code
+    if result.get("status") == "error":
+        msg = str(result.get("message", "")).lower()
+        status_code = 409 if ("conflict" in msg or "impossible" in msg) else 400
+        return jsonify(result), status_code
+    return jsonify(result), 200
 
 
 @schedules_bp.route("/schedules/generate-draft", methods=["POST"])
@@ -758,20 +792,25 @@ def generate_draft_schedules():
 def publish_all_schedules():
     """
     POST /api/schedules/publish-all
-    Validates that zero hard conflicts exist before batch-publishing all DRAFT schedules.
+    Validates that zero hard conflicts exist before publishing DRAFT schedules.
     If hard conflicts exist, returns HTTP 409 with details.
+    Supports optional scope filtering by 'program' and 'section_id'.
     """
     from services.conflict_detector import times_overlap
 
-    schedules = Schedule.query.all()
+    data = request.get_json(silent=True) or {}
+    program = str(data.get("program") or request.args.get("program") or "").strip()
+    section_id = data.get("section_id") or request.args.get("section_id", type=int)
+
+    all_schedules = Schedule.query.all()
     conflicts = []
 
-    # Check pairwise hard conflicts
-    n = len(schedules)
+    # Check pairwise hard conflicts across the timetable
+    n = len(all_schedules)
     for i in range(n):
-        s1 = schedules[i]
+        s1 = all_schedules[i]
         for j in range(i + 1, n):
-            s2 = schedules[j]
+            s2 = all_schedules[j]
             if s1.day_of_week == s2.day_of_week:
                 if times_overlap(s1.start_time, s1.end_time, s2.start_time, s2.end_time):
                     if s1.room_id == s2.room_id:
@@ -788,9 +827,18 @@ def publish_all_schedules():
                             f"Section overlap: {s1.section.name} assigned to two classes simultaneously on {s1.day_of_week}."
                         )
 
-        # Room capacity is no longer checked or enforced
+    # Resolve target drafts based on scope
+    draft_query = Schedule.query.filter_by(status="DRAFT")
+    if section_id:
+        draft_query = draft_query.filter(Schedule.section_id == int(section_id))
+    elif program and program.upper() != "ALL":
+        norm_p = normalize_prog_code(program)
+        draft_query = draft_query.join(Section, Schedule.section_id == Section.id).filter(
+            db.or_(Section.program == norm_p, Section.program == program)
+        )
+    drafts = draft_query.all()
 
-    if conflicts:
+    if conflicts and len(drafts) > 0:
         return (
             jsonify(
                 {
@@ -803,8 +851,6 @@ def publish_all_schedules():
             409,
         )
 
-    # Publish all draft schedules
-    drafts = Schedule.query.filter_by(status="DRAFT").all()
     count = len(drafts)
     for d in drafts:
         d.status = "PUBLISHED"
@@ -812,7 +858,7 @@ def publish_all_schedules():
     audit = AuditLog(
         user_id=session.get("user_id"),
         action="ALL_SCHEDULES_PUBLISHED",
-        details=f"Batch-published {count} schedule(s). Timetable locked.",
+        details=f"Batch-published {count} schedule(s) for scope (program='{program}', section_id={section_id}). Timetable locked.",
     )
     db.session.add(audit)
     db.session.commit()
@@ -834,9 +880,22 @@ def publish_all_schedules():
 def unpublish_all_schedules():
     """
     POST /api/schedules/unpublish-all
-    Reverts all PUBLISHED schedules to DRAFT status for administrative modification.
+    Reverts PUBLISHED schedules to DRAFT status for administrative modification.
+    Supports optional scope filtering by 'program' and 'section_id'.
     """
-    published = Schedule.query.filter_by(status="PUBLISHED").all()
+    data = request.get_json(silent=True) or {}
+    program = str(data.get("program") or request.args.get("program") or "").strip()
+    section_id = data.get("section_id") or request.args.get("section_id", type=int)
+
+    pub_query = Schedule.query.filter_by(status="PUBLISHED")
+    if section_id:
+        pub_query = pub_query.filter(Schedule.section_id == int(section_id))
+    elif program and program.upper() != "ALL":
+        norm_p = normalize_prog_code(program)
+        pub_query = pub_query.join(Section, Schedule.section_id == Section.id).filter(
+            db.or_(Section.program == norm_p, Section.program == program)
+        )
+    published = pub_query.all()
     count = len(published)
     for p in published:
         p.status = "DRAFT"
@@ -844,7 +903,7 @@ def unpublish_all_schedules():
     audit = AuditLog(
         user_id=session.get("user_id"),
         action="ALL_SCHEDULES_UNPUBLISHED",
-        details=f"Batch-reverted {count} schedule(s) to DRAFT status.",
+        details=f"Batch-reverted {count} schedule(s) to DRAFT status for editing.",
     )
     db.session.add(audit)
     db.session.commit()
@@ -859,38 +918,5 @@ def unpublish_all_schedules():
         ),
         200,
     )
-
-
-@schedules_bp.route("/scheduler/generate", methods=["POST"])
-@require_roles("CHAIR", "ADMIN")
-def generate_smart_schedule():
-    """
-    POST /api/scheduler/generate
-    Execute multi-criteria AI heuristic placement for batch schedule generation.
-    Protected by role: CHAIR, ADMIN only.
-    Payload:
-    {
-      "program": "BSCpE",
-      "year_level": 2,
-      "section_ids": [1, 2],
-      "room_ids": [1, 2, 3, 4],
-      "faculty_ids": "all",
-      "preferences": {
-        "minimize_gaps": true,
-        "balance_workload": true,
-        "optimize_utilization": true
-      }
-    }
-    """
-    payload = request.get_json(silent=True) or {}
-    user_id = session.get("user_id")
-
-    result = run_smart_scheduler(payload, user_id=user_id)
-    if result.get("status") == "error":
-        msg = str(result.get("message", "")).lower()
-        status_code = 409 if ("conflict" in msg or "impossible" in msg) else 400
-        return jsonify(result), status_code
-
-    return jsonify(result), 200
 
 

@@ -39,7 +39,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     bindEvents() {
       if (this.filterTerm) {
-        this.filterTerm.addEventListener("change", () => this.applyFilters());
+        this.filterTerm.value = localStorage.getItem("coe_sync_active_term") || "1";
+        this.filterTerm.addEventListener("change", (e) => {
+          localStorage.setItem("coe_sync_active_term", e.target.value);
+          window.dispatchEvent(new CustomEvent("academicTermChanged", { detail: { term: e.target.value } }));
+          this.applyFilters();
+        });
       }
       if (this.filterSectionScope) {
         this.filterSectionScope.addEventListener("change", () => this.applyFilters());
@@ -147,7 +152,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!this.summaryData) return;
 
       if (this.kpiRoomUtil) {
-        this.kpiRoomUtil.textContent = `${this.summaryData.room_utilization || 0}%`;
+        const utilPct = this.summaryData.overall_room_utilization_pct !== undefined
+          ? this.summaryData.overall_room_utilization_pct
+          : (this.summaryData.room_utilization || 0);
+        this.kpiRoomUtil.textContent = `${Number(utilPct).toFixed(2)}%`;
       }
 
       const overloadedCount = this.facultyData.filter(f => f.is_overloaded).length;

@@ -41,6 +41,20 @@ def get_effective_role() -> str:
     return session.get("active_role") or session.get("role") or ""
 
 
+def get_effective_program() -> str:
+    """Return the currently active program scope (e.g., MEE, CE, CPE, or None for Admin)."""
+    if "active_program" in session:
+        return session.get("active_program")
+    if "program" in session:
+        return session.get("program")
+    user_id = session.get("user_id")
+    if user_id:
+        user = db.session.get(User, user_id)
+        if user and user.program:
+            return user.program
+    return None
+
+
 def get_effective_reference_id():
     """Return the currently active reference ID (Faculty.id or Section.id)."""
     if "active_reference_id" in session:
@@ -134,6 +148,8 @@ def login():
         session["username"] = user.username
         session["role"] = user.role
         session["active_role"] = user.role
+        session["program"] = user.program
+        session["active_program"] = user.program
         session["reference_id"] = user.reference_id
         session["active_reference_id"] = user.reference_id
         session["must_change_credentials"] = user.must_change_credentials
@@ -144,7 +160,7 @@ def login():
             audit = AuditLog(
                 user_id=user.id,
                 action="USER_LOGIN",
-                details=f"User #{user.id} ({user.username}, {user.role}) logged in.",
+                details=f"User #{user.id} ({user.username}, {user.role}, {user.program or 'ALL'}) logged in.",
             )
             db.session.add(audit)
             db.session.commit()
@@ -160,6 +176,10 @@ def login():
                     "redirect": "/schedules" if user.role == "STUDENT" else "/dashboard",
                     "role": user.role,
                     "user": user.to_dict(),
+                    "user_role": user.role,
+                    "user_program": user.program,
+                    "program": user.program,
+                    "active_program": user.program,
                     "must_change_credentials": user.must_change_credentials,
                     "active_role": user.role,
                     "active_reference_id": user.reference_id,
@@ -209,43 +229,56 @@ def get_demo_credentials():
     faculty = User.query.filter_by(role="FACULTY").first()
     student = User.query.filter_by(role="STUDENT").first()
 
+    all_users = User.query.filter(User.username.in_([
+        "admin", "chair_mee", "chair_ce", "chair_cpe", "chair_ee", "chair_ece",
+        "chair_ie", "chair_mfge", "chair_me", "tullao", "bugayong", "roque",
+        "student_mee1a", "student_ce1a"
+    ])).all()
+
+    accounts_list = [u.to_dict() for u in all_users]
+
     return (
         jsonify(
             {
                 "status": "success",
                 "show_demo_credentials": show_creds,
                 "chair": {
-                    "username": chair.username if chair else "chair_cpe",
+                    "username": chair.username if chair else "chair_mee",
                     "password": (
-                        chair.demo_password if chair and chair.demo_password else "chair123"
+                        chair.demo_password if chair and chair.demo_password else "nexus2026"
                     ),
                     "role": "Program Chair (CHAIR)",
+                    "program": chair.program if chair else "MEE",
                 },
                 "admin": {
                     "username": admin.username if admin else "admin",
                     "password": (
-                        admin.demo_password if admin and admin.demo_password else "admin123"
+                        admin.demo_password if admin and admin.demo_password else "nexus2026"
                     ),
                     "role": "Administrator (ADMIN)",
+                    "program": "ALL",
                 },
                 "faculty": {
-                    "username": faculty.username if faculty else "prof_santos",
+                    "username": faculty.username if faculty else "tullao",
                     "password": (
                         faculty.demo_password
                         if faculty and faculty.demo_password
-                        else "faculty123"
+                        else "nexus2026"
                     ),
                     "role": "Faculty (FACULTY)",
+                    "program": faculty.program if faculty else "MEE",
                 },
                 "student": {
-                    "username": student.username if student else "student_cpe2a",
+                    "username": student.username if student else "student_mee1a",
                     "password": (
                         student.demo_password
                         if student and student.demo_password
-                        else "student123"
+                        else "nexus2026"
                     ),
                     "role": "Student (STUDENT)",
+                    "program": student.program if student else "MEE",
                 },
+                "accounts": accounts_list,
             }
         ),
         200,
@@ -346,6 +379,7 @@ def impersonate():
 
     data = request.get_json(silent=True) or {}
     target_role = str(data.get("role", "")).strip().upper()
+    target_program = data.get("program")
     reference_id = data.get("reference_id")
 
     allowed_roles = {"ADMIN", "CHAIR", "FACULTY", "STUDENT"}
@@ -359,24 +393,43 @@ def impersonate():
             400,
         )
 
-    # Auto-resolve reference_id if not provided explicitly
-    if reference_id is None:
-        if target_role == "FACULTY":
-            # Default to Prof. Santos or first faculty
-            fac = Faculty.query.filter_by(name="Prof. Juan Santos").first()
-            if not fac:
+    # Scoping assignments for role impersonation
+    if target_role == "ADMIN":
+        target_program = None
+        reference_id = None
+    elif target_role == "CHAIR":
+        target_program = (target_program or "MEE").strip().upper()
+        reference_id = None
+    elif target_role == "FACULTY":
+        if reference_id is None:
+            tullao = Faculty.query.filter(Faculty.name.ilike("%TULLAO%")).first()
+            if tullao:
+                reference_id = tullao.id
+                target_program = tullao.program
+            else:
                 fac = Faculty.query.first()
-            reference_id = fac.id if fac else None
-        elif target_role == "STUDENT":
-            # Default to CpE 2A or first section
-            sec = Section.query.filter_by(name="CpE 2A").first()
-            if not sec:
-                sec = Section.query.first()
-            reference_id = sec.id if sec else None
+                reference_id = fac.id if fac else None
+                target_program = fac.program if fac else "MEE"
         else:
-            reference_id = None
-    else:
-        reference_id = int(reference_id)
+            reference_id = int(reference_id)
+            fac_rec = db.session.get(Faculty, reference_id)
+            if fac_rec:
+                target_program = fac_rec.program
+    elif target_role == "STUDENT":
+        if reference_id is None:
+            mee1a = Section.query.filter(Section.name.ilike("%MEE%1A%")).first()
+            if mee1a:
+                reference_id = mee1a.id
+                target_program = "MEE"
+            else:
+                sec = Section.query.first()
+                reference_id = sec.id if sec else None
+                target_program = sec.program if sec else "MEE"
+        else:
+            reference_id = int(reference_id)
+            sec_rec = db.session.get(Section, reference_id)
+            if sec_rec:
+                target_program = sec_rec.program
 
     # Ensure a valid session user exists when switching role in live presentation
     if "user_id" not in session:
@@ -391,6 +444,7 @@ def impersonate():
 
     session["active_role"] = target_role
     session["active_reference_id"] = reference_id
+    session["active_program"] = target_program
 
     return (
         jsonify(
@@ -398,7 +452,8 @@ def impersonate():
                 "status": "success",
                 "active_role": target_role,
                 "active_reference_id": reference_id,
-                "message": f"Session role successfully set to {target_role}.",
+                "active_program": target_program,
+                "message": f"Session role successfully set to {target_role} ({target_program or 'ALL'}).",
             }
         ),
         200,
@@ -422,6 +477,10 @@ def get_current_user():
                 "native_reference_id": session.get("reference_id"),
                 "active_role": get_effective_role(),
                 "active_reference_id": get_effective_reference_id(),
+                "user_role": get_effective_role(),
+                "user_program": get_effective_program(),
+                "active_program": get_effective_program(),
+                "program": session.get("program"),
                 "must_change_credentials": bool(user.must_change_credentials if user else session.get("must_change_credentials")),
                 "user": user.to_dict() if user else None,
             }

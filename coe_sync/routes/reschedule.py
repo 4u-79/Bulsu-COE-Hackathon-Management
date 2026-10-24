@@ -7,6 +7,7 @@ Endpoints:
 - POST /api/reschedule/<int:id>/chair-decision: Program Chair final decision & atomic update (CHAIR, ADMIN)
 """
 
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session
 from models import db, Schedule, Section, Faculty, RescheduleRequest, AuditLog
 from services.conflict_detector import validate_schedule_slot, parse_time, find_alternatives
@@ -15,8 +16,41 @@ from routes.auth import require_roles, get_effective_role, get_effective_referen
 reschedule_bp = Blueprint("reschedule", __name__)
 
 
+def purge_expired_reschedule_requests() -> int:
+    """
+    1-Week (7-Day) Auto-Deletion Rule for stale pending reschedule requests.
+    Automatically purges pending proposals older than 7 days from creation.
+    """
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        deleted = (
+            RescheduleRequest.query.filter(
+                RescheduleRequest.status.in_(["PENDING", "PENDING_FACULTY", "PENDING_CHAIR"]),
+                RescheduleRequest.created_at < cutoff,
+            ).delete(synchronize_session=False)
+        )
+        db.session.commit()
+        return deleted
+    except Exception as err:
+        db.session.rollback()
+        print(f"[RESCHEDULE PURGE WARNING] Error purging expired requests: {err}", flush=True)
+        return 0
+
+
+@reschedule_bp.route("/reschedule/purge", methods=["POST"])
+@require_roles("CHAIR", "ADMIN")
+def purge_requests_endpoint():
+    """Manual trigger to purge expired reschedule requests (> 7 days)."""
+    count = purge_expired_reschedule_requests()
+    return jsonify({
+        "status": "success",
+        "purged_count": count,
+        "message": f"Successfully purged {count} expired reschedule requests (> 7 days old)."
+    }), 200
+
+
 @reschedule_bp.route("/reschedule/request", methods=["POST"])
-@require_roles("STUDENT")
+@require_roles("STUDENT", "FACULTY", "CHAIR", "ADMIN")
 def submit_reschedule_request():
     """
     POST /api/reschedule/request
@@ -26,14 +60,18 @@ def submit_reschedule_request():
         "proposed_day": "MON".."SAT",
         "proposed_start_time": "HH:MM",
         "proposed_end_time": "HH:MM",
+        "proposed_room_id": int (optional),
         "reason": "..."
     }
     """
+    purge_expired_reschedule_requests()
+
     payload = request.get_json(silent=True) or {}
     schedule_id = payload.get("schedule_id")
     proposed_day = (payload.get("proposed_day") or "").strip().upper()
     proposed_start_str = (payload.get("proposed_start_time") or "").strip()
     proposed_end_str = (payload.get("proposed_end_time") or "").strip()
+    proposed_room_id = payload.get("proposed_room_id")
     reason = (payload.get("reason") or "").strip()
 
     if not all([schedule_id, proposed_day, proposed_start_str, proposed_end_str, reason]):
@@ -46,13 +84,26 @@ def submit_reschedule_request():
     if not schedule:
         return jsonify({"error": f"Schedule #{schedule_id} not found."}), 404
 
-    # Validate student section ownership (fails closed if unassigned or mismatched)
-    effective_sec_id = get_effective_reference_id()
-    if not effective_sec_id or schedule.section_id != effective_sec_id:
-        return (
-            jsonify({"error": "Unauthorized: You can only request reschedule for classes in your section."}),
-            403,
-        )
+    effective_role = get_effective_role()
+    effective_ref_id = get_effective_reference_id()
+
+    # Validate section/ownership based on role
+    if effective_role == "STUDENT":
+        if not effective_ref_id or schedule.section_id != effective_ref_id:
+            auth_role = session.get("role")
+            if auth_role not in ["CHAIR", "ADMIN"]:
+                return (
+                    jsonify({"error": "Unauthorized: You can only request reschedule for classes in your section."}),
+                    403,
+                )
+    elif effective_role == "FACULTY":
+        if not effective_ref_id or schedule.faculty_id != effective_ref_id:
+            auth_role = session.get("role")
+            if auth_role not in ["CHAIR", "ADMIN"]:
+                return (
+                    jsonify({"error": "Unauthorized: You can only request reschedule for your assigned classes."}),
+                    403,
+                )
 
     # Validate time formatting
     proposed_start = parse_time(proposed_start_str)
@@ -67,12 +118,20 @@ def submit_reschedule_request():
     if proposed_day not in valid_days:
         return jsonify({"error": f"Invalid proposed day. Must be one of: {sorted(valid_days)}."}), 400
 
+    # Parse room if given
+    parsed_room_id = schedule.room_id
+    if proposed_room_id:
+        try:
+            parsed_room_id = int(proposed_room_id)
+        except (ValueError, TypeError):
+            parsed_room_id = schedule.room_id
+
     # Pre-flight conflict check to warn if the proposed slot is already an impossible collision
     candidate_payload = {
         "subject_id": schedule.subject_id,
         "section_id": schedule.section_id,
         "faculty_id": schedule.faculty_id,
-        "room_id": schedule.room_id,
+        "room_id": parsed_room_id,
         "day_of_week": proposed_day,
         "start_time": proposed_start_str,
         "end_time": proposed_end_str,
@@ -98,8 +157,11 @@ def submit_reschedule_request():
         proposed_day=proposed_day,
         proposed_start_time=proposed_start,
         proposed_end_time=proposed_end,
+        proposed_room_id=parsed_room_id if proposed_room_id else None,
+        requested_by_role=effective_role,
+        requested_by_name=session.get("username"),
         reason=reason,
-        status="PENDING_FACULTY",
+        status="PENDING_FACULTY" if effective_role == "STUDENT" else "PENDING_CHAIR",
     )
     db.session.add(req)
 
@@ -107,7 +169,7 @@ def submit_reschedule_request():
         user_id=session.get("user_id"),
         action="RESCHEDULE_REQUESTED",
         details=(
-            f"Section #{schedule.section_id} requested reschedule for {schedule.subject.code} "
+            f"User {session.get('username')} ({effective_role}) requested reschedule for {schedule.subject.code} "
             f"to {proposed_day} {proposed_start_str}-{proposed_end_str}. Reason: {reason}"
         ),
     )
@@ -135,6 +197,8 @@ def get_reschedule_requests():
       - FACULTY: Requests on classes taught by this instructor
       - CHAIR / ADMIN: Requests awaiting final decision (PENDING_CHAIR) or all
     """
+    purge_expired_reschedule_requests()
+
     effective_role = get_effective_role()
     effective_ref_id = get_effective_reference_id()
 
@@ -178,11 +242,13 @@ def faculty_review_reschedule(request_id: int):
     Faculty reviews a student proposal.
     Payload: { "approved": true/false, "feedback": "..." }
     """
+    purge_expired_reschedule_requests()
+
     req_obj = db.session.get(RescheduleRequest, request_id)
     if not req_obj:
         return jsonify({"error": f"Reschedule request #{request_id} not found."}), 404
 
-    if req_obj.status != "PENDING_FACULTY":
+    if req_obj.status not in {"PENDING", "PENDING_FACULTY"}:
         return (
             jsonify({"error": f"Request #{request_id} is not awaiting faculty review (current status: {req_obj.status})."}),
             400,
@@ -196,7 +262,12 @@ def faculty_review_reschedule(request_id: int):
             return jsonify({"error": "Unauthorized: You are not the assigned instructor for this class."}), 403
 
     payload = request.get_json(silent=True) or {}
-    approved = bool(payload.get("approved"))
+    if request.path.endswith("/approve"):
+        approved = True
+    elif request.path.endswith("/reject"):
+        approved = False
+    else:
+        approved = bool(payload.get("approved"))
     feedback = (payload.get("feedback") or "").strip()
 
     req_obj.faculty_feedback = feedback
@@ -235,21 +306,28 @@ def chair_decision_reschedule(request_id: int):
     Program Chair / Admin makes the final authorization.
     If approved:
       1. Validates that zero hard conflicts exist at the moment of approval.
-      2. Atomically mutates the Schedule's day and start/end time.
+      2. Atomically mutates the Schedule's day, start/end time, and optional room.
       3. Sets status to APPROVED.
     """
+    purge_expired_reschedule_requests()
+
     req_obj = db.session.get(RescheduleRequest, request_id)
     if not req_obj:
         return jsonify({"error": f"Reschedule request #{request_id} not found."}), 404
 
-    if req_obj.status not in {"PENDING_CHAIR", "PENDING_FACULTY"}:
+    if req_obj.status not in {"PENDING", "PENDING_CHAIR", "PENDING_FACULTY"}:
         return (
             jsonify({"error": f"Request #{request_id} is already finalized (status: {req_obj.status})."}),
             400,
         )
 
     payload = request.get_json(silent=True) or {}
-    approved = bool(payload.get("approved"))
+    if request.path.endswith("/approve"):
+        approved = True
+    elif request.path.endswith("/reject"):
+        approved = False
+    else:
+        approved = bool(payload.get("approved"))
     feedback = (payload.get("feedback") or "").strip()
 
     req_obj.chair_feedback = feedback
@@ -279,11 +357,12 @@ def chair_decision_reschedule(request_id: int):
     if not sched:
         return jsonify({"error": "Associated schedule record no longer exists."}), 404
 
+    target_room_id = req_obj.proposed_room_id or sched.room_id
     candidate_payload = {
         "subject_id": sched.subject_id,
         "section_id": sched.section_id,
         "faculty_id": sched.faculty_id,
-        "room_id": sched.room_id,
+        "room_id": target_room_id,
         "day_of_week": req_obj.proposed_day,
         "start_time": req_obj.proposed_start_time.strftime("%H:%M"),
         "end_time": req_obj.proposed_end_time.strftime("%H:%M"),
@@ -307,6 +386,8 @@ def chair_decision_reschedule(request_id: int):
         sched.day_of_week = req_obj.proposed_day
         sched.start_time = req_obj.proposed_start_time
         sched.end_time = req_obj.proposed_end_time
+        if req_obj.proposed_room_id:
+            sched.room_id = req_obj.proposed_room_id
         req_obj.status = "APPROVED"
 
         audit = AuditLog(
@@ -341,3 +422,23 @@ def chair_decision_reschedule(request_id: int):
         ),
         200,
     )
+
+
+@reschedule_bp.route("/reschedule/<int:request_id>/approve", methods=["POST"])
+@require_roles("FACULTY", "CHAIR", "ADMIN")
+def approve_reschedule_alias(request_id: int):
+    """Direct approval endpoint router."""
+    effective_role = get_effective_role()
+    if effective_role == "FACULTY":
+        return faculty_review_reschedule(request_id)
+    return chair_decision_reschedule(request_id)
+
+
+@reschedule_bp.route("/reschedule/<int:request_id>/reject", methods=["POST"])
+@require_roles("FACULTY", "CHAIR", "ADMIN")
+def reject_reschedule_alias(request_id: int):
+    """Direct rejection endpoint router."""
+    effective_role = get_effective_role()
+    if effective_role == "FACULTY":
+        return faculty_review_reschedule(request_id)
+    return chair_decision_reschedule(request_id)

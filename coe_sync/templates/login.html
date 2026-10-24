@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login Gateway | COE SYNC 2026</title>
+  <title>Login Gateway | NEXUS • COE SYNC 2026</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
   <style>
@@ -334,9 +334,12 @@
 <body class="login-body">
   <div class="login-container">
     <div class="login-header">
-      <div class="login-brand-badge">⚡ COE SYNC 2026 • Security Gateway</div>
-      <h1 class="login-title">BulSU Engineering</h1>
-      <p class="login-subtitle">Academic Timetable & Schedule Conflict System</p>
+      <div class="login-brand-badge">⚡ <span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; background:linear-gradient(135deg, #F5C26B 0%, #D97706 100%); color:#2A0A10; font-size:10px; font-weight:900; border-radius:3px; margin-right:4px;">NX</span> NEXUS • COE SYNC 2026 • Security Gateway</div>
+      <h1 class="login-title" style="display:flex; align-items:center; justify-content:center; gap:8px;">
+        <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; background:linear-gradient(135deg, #F5C26B 0%, #D97706 100%); color:#2A0A10; font-size:13px; font-weight:900; border-radius:6px; letter-spacing:0.02em;">NX</span>
+        NEXUS
+      </h1>
+      <p class="login-subtitle">College of Engineering • BulSU Academic Timetable System</p>
     </div>
 
     <div class="login-body-content">
@@ -346,28 +349,33 @@
         <div class="credentials-callout-header" id="demo-callout-toggle" style="cursor: pointer;" title="Click to collapse or expand demo credentials">
           <span class="credentials-callout-title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Active Demo Credentials
+            Demo Login Credentials
           </span>
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="credentials-tag" id="demo-status-tag">Live Database</span>
+            <span class="credentials-tag" id="demo-status-tag">Default PW: nexus2026</span>
             <span id="demo-collapse-icon" style="font-size: 11px; color: #92400E; user-select: none;">▾</span>
           </div>
         </div>
         <div id="demo-callout-content">
           <ul class="credentials-list">
-            <li><span>Role:</span> <strong>Program Chair (CHAIR)</strong></li>
-            <li><span>Username:</span> <strong id="demo-chair-user">chair_cpe</strong></li>
-            <li><span>Password:</span> <strong id="demo-chair-pw">chair123</strong></li>
+            <li><span>Active Role:</span> <strong id="demo-active-role-label">Program Chair (MEE)</strong></li>
+            <li><span>Username:</span> <strong id="demo-chair-user">chair_mee</strong></li>
+            <li><span>Password:</span> <strong id="demo-chair-pw">nexus2026</strong></li>
           </ul>
-          <button type="button" id="btn-autofill-chair" class="btn-autofill">
-            ⚡ 1-Click Auto-Fill Chair Credentials
+          <button type="button" id="btn-autofill-chair" class="btn-autofill" style="margin-bottom: 8px;">
+            ⚡ 1-Click Auto-Fill Program Chair (MEE)
           </button>
 
-          <div style="margin-top: 10px; font-size: 11px; color: #92400E;">Other Demo Accounts:</div>
+          <div style="margin: 8px 0 4px 0; font-size: 11px; font-weight: 700; color: #92400E;">Quick-Fill Other Roles &amp; Programs:</div>
           <div class="role-pills-row" id="demo-role-pills">
-            <button type="button" class="btn-role-pill" data-role="admin" data-user="admin" data-pw="admin123">Admin</button>
-            <button type="button" class="btn-role-pill" data-role="faculty" data-user="prof_santos" data-pw="faculty123">Faculty</button>
-            <button type="button" class="btn-role-pill" data-role="student" data-user="student_cpe2a" data-pw="student123">Student</button>
+            <button type="button" class="btn-role-pill" data-role="admin" data-user="admin" data-pw="nexus2026">Admin</button>
+            <button type="button" class="btn-role-pill" data-role="chair" data-user="chair_mee" data-pw="nexus2026">Chair (MEE)</button>
+            <button type="button" class="btn-role-pill" data-role="chair" data-user="chair_ce" data-pw="nexus2026">Chair (CE)</button>
+            <button type="button" class="btn-role-pill" data-role="chair" data-user="chair_cpe" data-pw="nexus2026">Chair (CPE)</button>
+            <button type="button" class="btn-role-pill" data-role="faculty" data-user="tullao" data-pw="nexus2026">Faculty (Tullao)</button>
+            <button type="button" class="btn-role-pill" data-role="faculty" data-user="bugayong" data-pw="nexus2026">Faculty (Bugayong)</button>
+            <button type="button" class="btn-role-pill" data-role="student" data-user="student_mee1a" data-pw="nexus2026">Student (MEE-1A)</button>
+            <button type="button" class="btn-role-pill" data-role="student" data-user="student_ce1a" data-pw="nexus2026">Student (CE-1A)</button>
           </div>
         </div>
       </div>

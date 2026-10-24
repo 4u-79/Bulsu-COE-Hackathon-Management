@@ -157,6 +157,9 @@ async function executeRoleSwitch(chosenRole) {
   try {
     const result = await API.impersonate(chosenRole);
     window.CURRENT_ROLE = chosenRole;
+    if (result && result.active_reference_id) {
+      window.CURRENT_REF_ID = result.active_reference_id;
+    }
     updateProfilePillUI(chosenRole);
     applyRolePermissions(chosenRole);
 
@@ -169,7 +172,7 @@ async function executeRoleSwitch(chosenRole) {
     await updateReschedulesBadge();
     await updateGlobalAlertPill();
 
-    window.dispatchEvent(new CustomEvent("roleChanged", { detail: { role: chosenRole } }));
+    window.dispatchEvent(new CustomEvent("roleChanged", { detail: { role: chosenRole, reference_id: result?.active_reference_id } }));
   } catch (err) {
     showToast(err.message || "Failed to switch role", true);
   }
@@ -187,6 +190,9 @@ async function initViewAsSelector() {
       window.AUTHENTIC_USER_ROLE = sessionInfo.role;
       const effectiveRole = sessionInfo.active_role || sessionInfo.role;
       window.CURRENT_ROLE = effectiveRole;
+      if (sessionInfo.active_reference_id) {
+        window.CURRENT_REF_ID = sessionInfo.active_reference_id;
+      }
       updateProfilePillUI(effectiveRole);
 
       if (sessionInfo.role !== "CHAIR" && sessionInfo.role !== "ADMIN") {
@@ -497,21 +503,19 @@ function renderRescheduleCards(tab) {
 
   container.innerHTML = items.map((r) => {
     let statusPill = "";
-    if (r.status === "PENDING_FACULTY") {
-      statusPill = '<span class="step-pill pending">⏳ Step 1: Pending Faculty Review</span>';
+    if (r.status === "PENDING_FACULTY" || r.status === "PENDING") {
+      statusPill = '<span class="step-pill pending">⏳ Pending Review</span>';
     } else if (r.status === "PENDING_CHAIR") {
-      statusPill = '<span class="step-pill pending">⏳ Step 2: Pending Program Chair Approval</span>';
+      statusPill = '<span class="step-pill pending">⏳ Pending Program Chair Approval</span>';
     } else if (r.status === "APPROVED") {
       statusPill = '<span class="step-pill approved">✓ Approved &amp; Timetable Updated</span>';
     } else if (r.status === "REJECTED") {
       statusPill = '<span class="step-pill rejected">✕ Rejected</span>';
     }
 
-    const isPendingFaculty = r.status === "PENDING_FACULTY";
-    const isPendingChair = r.status === "PENDING_CHAIR";
-
-    const canFacultyReview = role === "FACULTY" && isPendingFaculty;
-    const canChairDecide = (role === "CHAIR" || role === "ADMIN") && (isPendingChair || isPendingFaculty);
+    const isPending = r.status === "PENDING" || r.status === "PENDING_FACULTY" || r.status === "PENDING_CHAIR";
+    const canReview = isPending && (role === "FACULTY" || role === "CHAIR" || role === "ADMIN");
+    const expDays = r.expires_in_days !== undefined ? r.expires_in_days : 7;
 
     return `
       <div class="reschedule-card" data-id="${r.id}">
@@ -527,45 +531,36 @@ function renderRescheduleCards(tab) {
           <div><strong>Current:</strong> ${r.current_day || "—"} ${r.current_start_time || ""}&ndash;${r.current_end_time || ""}</div>
           <div style="color: var(--sidebar-bg);">&rarr;</div>
           <div><strong>Proposed:</strong> <span style="color: #065F46; font-weight: 700;">${r.proposed_day} ${r.proposed_start_time ? r.proposed_start_time.slice(0, 5) : ""}&ndash;${r.proposed_end_time ? r.proposed_end_time.slice(0, 5) : ""}</span></div>
-          <div><strong>Room:</strong> ${escapeHtml(r.room_code || "—")}</div>
+          <div><strong>Room:</strong> ${escapeHtml(r.room_code || "Auto/Current")}</div>
         </div>
 
         <div style="font-size: 12px; background: var(--bg-page); padding: 8px 12px; border-radius: var(--radius-xs);">
           <strong>Reason:</strong> ${escapeHtml(r.reason)}
         </div>
 
+        <!-- 7-Day TTL Expiration & Conflict Radar Badges -->
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+          <span style="background: #FEF3C7; color: #92400E; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">
+            ⏳ Expires in ${expDays} day${expDays === 1 ? '' : 's'} (Auto-deletes after 1 week without response)
+          </span>
+          <span style="background: #DCFCE7; color: #166534; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">
+            ✓ Pre-Flight Conflict Free
+          </span>
+        </div>
+
         ${r.faculty_feedback ? `
-          <div style="font-size: 12px; color: #065F46; background: #D1FAE5; padding: 6px 10px; border-radius: var(--radius-xs);">
+          <div style="font-size: 12px; color: #065F46; background: #D1FAE5; padding: 6px 10px; border-radius: var(--radius-xs); margin-top: 4px;">
             <strong>Faculty Feedback:</strong> ${escapeHtml(r.faculty_feedback)}
           </div>
         ` : ""}
 
-        ${r.chair_feedback ? `
-          <div style="font-size: 12px; color: #1E40AF; background: #DBEAFE; padding: 6px 10px; border-radius: var(--radius-xs);">
-            <strong>Chair Feedback:</strong> ${escapeHtml(r.chair_feedback)}
-          </div>
-        ` : ""}
-
-        ${canFacultyReview ? `
-          <div class="reschedule-actions-row">
-            <input type="text" class="reschedule-feedback-input" id="fac-feedback-${r.id}" placeholder="Optional faculty review feedback...">
-            <button class="btn btn-sm btn-primary" onclick="handleFacultyReview(${r.id}, true)">
-              ✓ Endorse Proposal
+        ${canReview ? `
+          <div class="reschedule-actions-row" style="margin-top: 8px; display:flex; gap: 8px;">
+            <button class="btn btn-sm btn-primary" onclick="handleDirectApprove(${r.id})">
+              ✓ Approve &amp; Update Timetable
             </button>
-            <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleFacultyReview(${r.id}, false)">
-              ✕ Reject
-            </button>
-          </div>
-        ` : ""}
-
-        ${canChairDecide ? `
-          <div class="reschedule-actions-row">
-            <input type="text" class="reschedule-feedback-input" id="chair-feedback-${r.id}" placeholder="Chair authorization remarks...">
-            <button class="btn btn-sm btn-primary" onclick="handleChairDecision(${r.id}, true)">
-              ✓ 1-Click Approve &amp; Update Timetable
-            </button>
-            <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleChairDecision(${r.id}, false)">
-              ✕ Reject
+            <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleDirectReject(${r.id})">
+              ✕ Decline
             </button>
           </div>
         ` : ""}
@@ -574,50 +569,71 @@ function renderRescheduleCards(tab) {
   }).join("");
 }
 
-window.handleFacultyReview = async function (id, approved) {
-  const input = document.getElementById(`fac-feedback-${id}`);
-  const feedback = input ? input.value : "";
+window.handleDirectApprove = async function (id) {
   try {
-    const res = await API.reviewRescheduleByFaculty(id, approved, feedback);
-    showToast(res.message);
+    const res = await API.post(`/api/reschedule/${id}/approve`, {});
+    showToast(res.message || "Reschedule request approved & timetable updated!");
+    await updateReschedulesBadge();
+    renderRescheduleCards(_activeRescheduleTab);
+    if (window.fetchAndRender) window.fetchAndRender();
+  } catch (err) {
+    showToast(err.message || "Failed to approve request", true);
+  }
+};
+
+window.handleDirectReject = async function (id) {
+  const reason = prompt("Optional reason for declining request:") || "";
+  try {
+    const res = await API.post(`/api/reschedule/${id}/reject`, { reason });
+    showToast(res.message || "Reschedule request declined.");
     await updateReschedulesBadge();
     renderRescheduleCards(_activeRescheduleTab);
   } catch (err) {
-    showToast(err.message || "Failed to submit review", true);
+    showToast(err.message || "Failed to decline request", true);
+  }
+};
+
+window.handleFacultyReview = async function (id, approved) {
+  if (approved) {
+    await handleDirectApprove(id);
+  } else {
+    await handleDirectReject(id);
   }
 };
 
 window.handleChairDecision = async function (id, approved) {
-  const input = document.getElementById(`chair-feedback-${id}`);
-  const feedback = input ? input.value : "";
-  try {
-    const res = await API.decideRescheduleByChair(id, approved, feedback);
-    showToast(res.message);
-    await updateReschedulesBadge();
-    renderRescheduleCards(_activeRescheduleTab);
-
-    // Refresh timetable grid if on schedules view
-    if (window.fetchAndRender) {
-      window.fetchAndRender();
-    }
-  } catch (err) {
-    showToast(err.message || "Failed to finalize decision", true);
+  if (approved) {
+    await handleDirectApprove(id);
+  } else {
+    await handleDirectReject(id);
   }
 };
 
 async function populateRescheduleScheduleSelect(preselectedId = null) {
   const select = document.getElementById("resched-select-schedule");
+  const roomSelect = document.getElementById("resched-room");
   if (!select) return;
 
   select.innerHTML = '<option value="">Loading classes...</option>';
   try {
-    const res = await API.getSchedules();
-    if (res.status === "success" && Array.isArray(res.data)) {
+    const [resSched, resRooms] = await Promise.all([
+      API.getSchedules(),
+      API.getRooms().catch(() => ({ data: [] }))
+    ]);
+
+    if (resSched.status === "success" && Array.isArray(resSched.data)) {
       select.innerHTML = '<option value="">-- Choose scheduled class --</option>' +
-        res.data.map((s) => `
+        resSched.data.map((s) => `
           <option value="${s.id}" ${preselectedId && String(preselectedId) === String(s.id) ? "selected" : ""}>
             ${escapeHtml(s.subject_code)} &bull; ${escapeHtml(s.section_name)} (${s.day_of_week} ${s.start_time.slice(0, 5)}-${s.end_time.slice(0, 5)} in ${escapeHtml(s.room_code)})
           </option>
+        `).join("");
+    }
+
+    if (roomSelect && resRooms.data) {
+      roomSelect.innerHTML = '<option value="">-- Keep Current Room or Auto-Assign --</option>' +
+        resRooms.data.map((r) => `
+          <option value="${r.id}">${escapeHtml(r.room_code)} (${escapeHtml(r.building || 'COE')})</option>
         `).join("");
     }
   } catch (e) {
@@ -630,13 +646,14 @@ async function submitNewRescheduleForm() {
   const day = document.getElementById("resched-day")?.value;
   const start = document.getElementById("resched-start")?.value;
   const end = document.getElementById("resched-end")?.value;
+  const room = document.getElementById("resched-room")?.value;
   const reason = document.getElementById("resched-reason")?.value;
 
   const banner = document.getElementById("resched-feedback-banner");
   if (banner) banner.style.display = "none";
 
   if (!scheduleId || !day || !start || !end || !reason) {
-    showToast("Please fill all fields.", true);
+    showToast("Please fill all required fields.", true);
     return;
   }
 
@@ -646,6 +663,7 @@ async function submitNewRescheduleForm() {
       proposed_day: day,
       proposed_start_time: start,
       proposed_end_time: end,
+      proposed_room_id: room ? parseInt(room) : null,
       reason: reason.trim(),
     };
 
@@ -819,9 +837,40 @@ function initCredentialsManagement() {
   });
 }
 
+// -------------------------------------------------------------
+// Academic Term Synchronization (localStorage: coe_sync_active_term)
+// -------------------------------------------------------------
+function initAcademicTermSync() {
+  const storedTerm = localStorage.getItem("coe_sync_active_term") || "1";
+  const globalSelect = document.getElementById("global-term-select");
+  if (globalSelect) {
+    globalSelect.value = storedTerm;
+    globalSelect.addEventListener("change", (e) => {
+      const newTerm = e.target.value;
+      localStorage.setItem("coe_sync_active_term", newTerm);
+      window.dispatchEvent(new CustomEvent("academicTermChanged", { detail: { term: newTerm } }));
+    });
+  }
+
+  window.addEventListener("academicTermChanged", (e) => {
+    const term = e.detail?.term || "1";
+    if (globalSelect && globalSelect.value !== term) {
+      globalSelect.value = term;
+    }
+    const pageTermSelects = document.querySelectorAll("#filter-term, #sg-semester, #manual-semester");
+    pageTermSelects.forEach((sel) => {
+      if (sel && sel.value !== term) {
+        sel.value = term;
+        sel.dispatchEvent(new Event("change"));
+      }
+    });
+  });
+}
+
 // Initial bootstrap
 document.addEventListener("DOMContentLoaded", () => {
   initHealthCheck();
+  initAcademicTermSync();
   initViewAsSelector();
   initChairStatus();
   initReschedulePipeline();

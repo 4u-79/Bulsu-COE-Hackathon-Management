@@ -43,16 +43,20 @@
               <span class="badge-role">Step 1 of 3</span>
             </div>
 
-            <!-- Program & Year Level Filters -->
-            <div class="form-row-2">
+            <!-- Program, Year Level & Academic Term Filters -->
+            <div class="form-row-2" style="display: grid; grid-template-columns: 1.5fr 1fr 1.2fr; gap: 14px;">
               <div class="form-group">
                 <label class="form-label" for="sg-program">Degree Program *</label>
                 <select id="sg-program" class="form-select">
                   <option value="ALL">All Degree Programs</option>
                   <option value="CE">Civil Engineering (CE)</option>
+                  <option value="CPE">Computer Engineering (CPE)</option>
+                  <option value="EE">Electrical Engineering (EE)</option>
                   <option value="ECE">Electronics Engineering (ECE)</option>
-                  <option value="MEE">Mechanical Engineering (MEE)</option>
-                  <option value="MFE">Manufacturing Engineering (MFE)</option>
+                  <option value="IE">Industrial Engineering (IE)</option>
+                  <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+                  <option value="ME">Mechanical Engineering (ME)</option>
+                  <option value="MEE">Mechatronics Engineering (MEE)</option>
                 </select>
               </div>
               <div class="form-group">
@@ -63,6 +67,13 @@
                   <option value="2" selected>2nd Year</option>
                   <option value="3">3rd Year</option>
                   <option value="4">4th Year</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="sg-semester">Academic Term</label>
+                <select id="sg-semester" class="form-select">
+                  <option value="1" selected>1st Sem AY 2026–2027</option>
+                  <option value="2">2nd Sem AY 2026–2027</option>
                 </select>
               </div>
             </div>
@@ -334,16 +345,20 @@
       </div>
 
       <form id="form-manual-schedule">
-        <!-- Row 1: Program & Year Level -->
-        <div class="form-row-2">
+        <!-- Row 1: Program, Year Level & Academic Term -->
+        <div class="form-row-2" style="display: grid; grid-template-columns: 1.5fr 1fr 1.2fr; gap: 14px;">
           <div class="form-group">
             <label class="form-label" for="manual-program">Degree Program *</label>
             <select id="manual-program" class="form-select" required>
               <option value="">-- All Programs --</option>
               <option value="CE">Civil Engineering (CE)</option>
+              <option value="CPE">Computer Engineering (CPE)</option>
+              <option value="EE">Electrical Engineering (EE)</option>
               <option value="ECE">Electronics Engineering (ECE)</option>
-              <option value="MEE">Mechanical Engineering (MEE)</option>
-              <option value="MFE">Manufacturing Engineering (MFE)</option>
+              <option value="IE">Industrial Engineering (IE)</option>
+              <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+              <option value="ME">Mechanical Engineering (ME)</option>
+              <option value="MEE">Mechatronics Engineering (MEE)</option>
             </select>
           </div>
           <div class="form-group">
@@ -354,6 +369,13 @@
               <option value="2">2nd Year</option>
               <option value="3">3rd Year</option>
               <option value="4">4th Year</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="manual-semester">Academic Term</label>
+            <select id="manual-semester" class="form-select">
+              <option value="1" selected>1st Sem AY 2026–2027</option>
+              <option value="2">2nd Sem AY 2026–2027</option>
             </select>
           </div>
         </div>

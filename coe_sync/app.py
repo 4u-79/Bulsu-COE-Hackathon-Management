@@ -244,6 +244,11 @@ def create_app(config_name=None):
         program = request.args.get("program", "").strip()
         overloaded = request.args.get("overloaded")
 
+        effective_role = session.get("active_role") or session.get("role")
+        effective_prog = session.get("active_program") or session.get("program")
+        if not program and effective_role == "CHAIR" and effective_prog:
+            program = effective_prog
+
         if search:
             query = query.filter(
                 (Faculty.name.ilike(f"%{search}%")) | (Faculty.email.ilike(f"%{search}%"))
@@ -281,6 +286,11 @@ def create_app(config_name=None):
         program = request.args.get("program", "").strip()
         year_level = request.args.get("year_level", type=int)
 
+        effective_role = session.get("active_role") or session.get("role")
+        effective_prog = session.get("active_program") or session.get("program")
+        if not program and effective_role == "CHAIR" and effective_prog:
+            program = effective_prog
+
         if search:
             query = query.filter(Section.name.ilike(f"%{search}%"))
         if program and program.upper() != "ALL":
@@ -314,6 +324,11 @@ def create_app(config_name=None):
         semester = request.args.get("semester", type=int)
         subject_type = request.args.get("type", "").strip().upper()
         units = request.args.get("units", type=int)
+
+        effective_role = session.get("active_role") or session.get("role")
+        effective_prog = session.get("active_program") or session.get("program")
+        if not program and effective_role == "CHAIR" and effective_prog:
+            program = effective_prog
 
         if search:
             query = query.filter(

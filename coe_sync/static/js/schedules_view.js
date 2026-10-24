@@ -93,6 +93,14 @@ function formatTimeRange(start, end) {
 document.addEventListener("DOMContentLoaded", async () => {
   buildStaticGrid();
   await loadMasterData();
+
+  // Sync Academic Term with global state
+  const termSelect = document.getElementById("filter-term");
+  const storedTerm = localStorage.getItem("coe_sync_active_term") || "1";
+  if (termSelect) {
+    termSelect.value = storedTerm;
+  }
+
   populateFilterSelects();
   populateModalSelects();
   buildTimeSlotOptions();
@@ -117,6 +125,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   if (sec) {
     setSelectVal("filter-section", sec);
+  } else if (window.CURRENT_ROLE === "STUDENT" && window.CURRENT_REF_ID) {
+    setSelectVal("filter-section", window.CURRENT_REF_ID);
   } else if (!progParam && !rm && !fac && (window.CURRENT_ROLE === "CHAIR" || window.CURRENT_ROLE === "ADMIN")) {
     // Smart default scope guard: auto-select first section to prevent dumping 200 concurrent classes
     const secSel = document.getElementById("filter-section");
@@ -129,6 +139,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   if (fac) {
     setSelectVal("filter-faculty", fac);
+  } else if (window.CURRENT_ROLE === "FACULTY" && window.CURRENT_REF_ID) {
+    setSelectVal("filter-faculty", window.CURRENT_REF_ID);
   }
   if (statParam) {
     setSelectVal("filter-status", statParam);
@@ -139,13 +151,30 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateWeekLabel();
 });
 
-window.addEventListener("roleChanged", () => {
+window.addEventListener("roleChanged", (e) => {
   updateRoleAdaptiveFilters();
+  const refId = e.detail?.reference_id || window.CURRENT_REF_ID;
+  if (window.CURRENT_ROLE === "FACULTY" && refId) {
+    setSelectVal("filter-faculty", refId);
+  } else if (window.CURRENT_ROLE === "STUDENT" && refId) {
+    setSelectVal("filter-section", refId);
+  }
+  cascadeScheduleFilters();
   fetchAndRender();
   fetchLiveUtilization();
   if (document.getElementById("radar-drawer")?.classList.contains("radar-drawer--open")) {
     runRadarScan();
   }
+});
+
+window.addEventListener("academicTermChanged", (e) => {
+  const term = e.detail?.term || localStorage.getItem("coe_sync_active_term") || "1";
+  const termSelect = document.getElementById("filter-term");
+  if (termSelect && termSelect.value !== term) {
+    termSelect.value = term;
+  }
+  cascadeScheduleFilters();
+  fetchAndRender();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -315,6 +344,7 @@ function normalizeProgram(prog) {
 function cascadeScheduleFilters() {
   const progVal = document.getElementById("filter-program")?.value || "";
   const yearVal = document.getElementById("filter-year")?.value || "";
+  const termVal = document.getElementById("filter-term")?.value || localStorage.getItem("coe_sync_active_term") || "";
   const secSel  = document.getElementById("filter-section");
   const facSel  = document.getElementById("filter-faculty");
   const subjSel = document.getElementById("filter-subject");
@@ -328,7 +358,8 @@ function cascadeScheduleFilters() {
       if (yearVal && String(s.year_level) !== String(yearVal)) return false;
       return true;
     });
-    secSel.innerHTML = `<option value="">All Section ▾</option>` +
+    const defaultSecText = window.CURRENT_ROLE === "STUDENT" ? "Viewing Cohort: [Select Section ▾]" : "All Section ▾";
+    secSel.innerHTML = `<option value="">${defaultSecText}</option>` +
       filtered.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
     if (filtered.some(s => String(s.id) === String(prevVal))) {
       secSel.value = prevVal;
@@ -348,7 +379,8 @@ function cascadeScheduleFilters() {
       }
       return true;
     });
-    facSel.innerHTML = `<option value="">All Faculty ▾</option>` +
+    const defaultFacText = window.CURRENT_ROLE === "FACULTY" ? "Viewing Instructor: [Select Faculty ▾]" : "All Faculty ▾";
+    facSel.innerHTML = `<option value="">${defaultFacText}</option>` +
       filtered.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
     if (filtered.some(f => String(f.id) === String(prevVal))) {
       facSel.value = prevVal;
@@ -365,6 +397,7 @@ function cascadeScheduleFilters() {
         if (sp !== normProg && sp !== "GEN") return false;
       }
       if (yearVal && String(s.year_level) !== String(yearVal)) return false;
+      if (termVal && s.semester && String(s.semester) !== String(termVal)) return false;
       return true;
     });
     subjSel.innerHTML = `<option value="">All Subject ▾</option>` +
@@ -453,7 +486,7 @@ function updateRoleAdaptiveFilters() {
 
   if (role === "STUDENT") {
     if (wrapProg) wrapProg.style.display = "none";
-    if (wrapSec) wrapSec.style.display = "none";
+    if (wrapSec) wrapSec.style.display = "inline-flex";
     if (wrapFac) wrapFac.style.display = "none";
     if (wrapRoom) wrapRoom.style.display = "inline-flex";
     if (wrapSubj) wrapSubj.style.display = "inline-flex";
@@ -465,7 +498,7 @@ function updateRoleAdaptiveFilters() {
   } else if (role === "FACULTY") {
     if (wrapProg) wrapProg.style.display = "none";
     if (wrapSec) wrapSec.style.display = "inline-flex";
-    if (wrapFac) wrapFac.style.display = "none";
+    if (wrapFac) wrapFac.style.display = "inline-flex";
     if (wrapRoom) wrapRoom.style.display = "none";
     if (wrapSubj) wrapSubj.style.display = "inline-flex";
     if (wrapRoomType) wrapRoomType.style.display = "none";
@@ -493,7 +526,8 @@ async function fetchLiveUtilization() {
     const res = await API.getAnalyticsSummary();
     if (res?.status === "success") {
       const utilVal = document.getElementById("sched-room-util-val");
-      if (utilVal) utilVal.textContent = `${res.data.room_utilization || 0}%`;
+      const utilPct = res.data.overall_room_utilization_pct !== undefined ? res.data.overall_room_utilization_pct : (res.data.room_utilization || 0);
+      if (utilVal) utilVal.textContent = `${Number(utilPct).toFixed(2)}%`;
     }
   } catch (e) {}
 }
@@ -509,16 +543,42 @@ async function fetchAndRender() {
   const progVal  = document.getElementById("filter-program")?.value;
   const yearVal  = document.getElementById("filter-year")?.value;
   const statVal  = document.getElementById("filter-status")?.value;
+  const termVal  = document.getElementById("filter-term")?.value || localStorage.getItem("coe_sync_active_term") || "1";
 
   if (secVal)  params.section_id = secVal;
   if (facVal)  params.faculty_id = facVal;
   if (roomVal) params.room_id    = roomVal;
   if (progVal) params.program    = progVal;
   if (yearVal) params.year_level = yearVal;
+  if (termVal) params.semester   = parseInt(termVal, 10);
 
   try {
-    const res = await API.getSchedules(params);
+    let res = await API.getSchedules(params);
     _schedules = res?.data || [];
+
+    // Smart default fallback: if presenter is in Faculty or Student mode and has 0 classes,
+    // auto-select first faculty/section that actually has scheduled classes to prevent blank screen
+    if (_schedules.length === 0) {
+      if (window.CURRENT_ROLE === "FACULTY") {
+        const poolRes = await API.getSchedules({ semester: params.semester });
+        const targetClass = poolRes?.data?.find(s => s.faculty_id);
+        if (targetClass && String(targetClass.faculty_id) !== String(facVal)) {
+          setSelectVal("filter-faculty", targetClass.faculty_id);
+          params.faculty_id = targetClass.faculty_id;
+          res = await API.getSchedules(params);
+          _schedules = res?.data || [];
+        }
+      } else if (window.CURRENT_ROLE === "STUDENT") {
+        const poolRes = await API.getSchedules({ semester: params.semester });
+        const targetClass = poolRes?.data?.find(s => s.section_id);
+        if (targetClass && String(targetClass.section_id) !== String(secVal)) {
+          setSelectVal("filter-section", targetClass.section_id);
+          params.section_id = targetClass.section_id;
+          res = await API.getSchedules(params);
+          _schedules = res?.data || [];
+        }
+      }
+    }
 
     // Tag schedules involved in detected hard conflicts
     _allConflicts = detectConflictsLocally(_schedules);
@@ -543,14 +603,17 @@ async function fetchAndRender() {
       visible = visible.filter(s => s.status === "DRAFT");
     }
 
-    // Role-level safety: Students must never see DRAFT schedules
+    // Role-level safety: Genuine students must see only PUBLISHED schedules.
+    // Impersonating Chair/Admin demoing student portal may view drafts with notice.
     if (window.CURRENT_ROLE === "STUDENT") {
-      visible = visible.filter(s => s.status === "PUBLISHED");
+      if (window.AUTHENTIC_USER_ROLE !== "CHAIR" && window.AUTHENTIC_USER_ROLE !== "ADMIN") {
+        visible = visible.filter(s => s.status === "PUBLISHED");
+      }
     }
 
     renderEventCards(visible);
     updateRadarBadge(_schedules);
-    updateRoleSpecificPortals(visible);
+    updateRoleSpecificPortals(_schedules);
   } catch (err) {
     console.warn("Schedule fetch error:", err);
   }
@@ -811,12 +874,16 @@ function buildEventCard(s) {
     });
   }
 
-  // Click card
+  // Click card: Chair/Admin gets full Edit/Delete/Details modal; Students can propose reschedule
   card.addEventListener("click", () => {
-    if (s.has_conflict) {
-      openRadar();
-    } else if (isAdmin) {
+    if (isAdmin) {
       openModal(s.id);
+    } else if (isStudent) {
+      if (typeof window.openRescheduleModal === "function") {
+        window.openRescheduleModal("new", s.id);
+      }
+    } else if (s.has_conflict) {
+      openRadar();
     }
   });
 
@@ -868,10 +935,14 @@ function buildDayEventCard(s) {
   `;
 
   card.addEventListener("click", () => {
-    if (s.has_conflict) {
-      openRadar();
-    } else if (isAdmin) {
+    if (isAdmin) {
       openModal(s.id);
+    } else if (window.CURRENT_ROLE === "STUDENT") {
+      if (typeof window.openRescheduleModal === "function") {
+        window.openRescheduleModal("new", s.id);
+      }
+    } else if (s.has_conflict) {
+      openRadar();
     }
   });
 
@@ -929,38 +1000,55 @@ function updateRoleSpecificPortals(schedules) {
     const facMeterFill = document.getElementById("fac-load-meter-fill");
     const facBadge = document.getElementById("fac-load-badge");
 
-    if (facNameElem && schedules[0]?.faculty_name) {
-      facNameElem.textContent = schedules[0].faculty_name;
+    const currentFacId = document.getElementById("filter-faculty")?.value || window.CURRENT_REF_ID || schedules[0]?.faculty_id;
+    const currentFac = _masterData.faculty.find(f => String(f.id) === String(currentFacId));
+
+    if (facNameElem) {
+      facNameElem.textContent = currentFac?.name || schedules[0]?.faculty_name || "Faculty Member";
     }
 
-    // Fetch official workload metrics from API
-    API.getAnalyticsReports().then(res => {
-      if (res?.data?.faculty_workload?.faculty) {
-        const facItem = res.data.faculty_workload.faculty.find(f => schedules.some(s => s.faculty_id === f.id)) || res.data.faculty_workload.faculty[0];
-        if (facItem) {
-          if (facNameElem) facNameElem.textContent = facItem.name;
-          if (facNumbersElem) {
-            facNumbersElem.textContent = `${facItem.assigned_units} / ${facItem.max_units} Units (${facItem.teaching_hours} hrs/wk)`;
-          }
-          if (facMeterFill) {
-            facMeterFill.style.width = `${Math.min(100, facItem.utilization_rate)}%`;
-            facMeterFill.className = `faculty-meter-fill ${facItem.is_overloaded ? 'overload' : facItem.assigned_units >= 19 ? 'warning' : ''}`;
-          }
-          if (facBadge) {
-            if (facItem.is_overloaded) {
-              facBadge.className = "status-badge crimson";
-              facBadge.textContent = "OVERLOADED (>21u)";
-            } else if (facItem.assigned_units >= 19) {
-              facBadge.className = "status-badge amber";
-              facBadge.textContent = "NEAR CAPACITY";
-            } else {
-              facBadge.className = "status-badge mint";
-              facBadge.textContent = "NORMAL LOAD";
-            }
-          }
-        }
+    // Calculate actual units from schedules for this faculty
+    const facSchedules = schedules.filter(s => String(s.faculty_id) === String(currentFacId));
+    let assignedUnits = 0;
+    const countedSubjects = new Set();
+    facSchedules.forEach(s => {
+      if (!countedSubjects.has(s.subject_id)) {
+        countedSubjects.add(s.subject_id);
+        const subj = _masterData.subjects.find(sub => sub.id === s.subject_id);
+        assignedUnits += (subj?.units || 3);
       }
-    }).catch(() => {});
+    });
+
+    const maxUnits = currentFac?.max_units || 21;
+    const utilRate = maxUnits > 0 ? (assignedUnits / maxUnits) * 100 : 0;
+
+    if (facNumbersElem) {
+      facNumbersElem.textContent = `${assignedUnits} / ${maxUnits} Units`;
+    }
+    if (facMeterFill) {
+      facMeterFill.style.width = `${Math.min(100, utilRate)}%`;
+      facMeterFill.className = `faculty-meter-fill ${assignedUnits > maxUnits ? 'overload' : assignedUnits >= 19 ? 'warning' : ''}`;
+    }
+    if (facBadge) {
+      if (assignedUnits > maxUnits) {
+        facBadge.className = "status-badge crimson";
+        facBadge.textContent = "OVERLOAD (>21u)";
+      } else if (assignedUnits >= 19) {
+        facBadge.className = "status-badge amber";
+        facBadge.textContent = "NEAR MAX";
+      } else {
+        facBadge.className = "status-badge mint";
+        facBadge.textContent = "NORMAL";
+      }
+    }
+
+    // Wire Faculty Availability modal
+    const availBtn = document.getElementById("btn-faculty-avail");
+    if (availBtn) {
+      availBtn.onclick = () => {
+        openFacultyAvailabilityModal(currentFacId);
+      };
+    }
 
     // Hook review button
     const reviewBtn = document.getElementById("btn-faculty-review-reschedules");
@@ -977,8 +1065,21 @@ function updateRoleSpecificPortals(schedules) {
     if (studentBanner) studentBanner.style.display = "flex";
 
     const secLabel = document.getElementById("student-portal-section-label");
-    if (secLabel && schedules[0]?.section_name) {
-      secLabel.textContent = `Section ${schedules[0].section_name} (Official Published Schedule)`;
+    const curSecId = document.getElementById("filter-section")?.value || window.CURRENT_REF_ID || schedules[0]?.section_id;
+    const curSec = _masterData.sections.find(s => String(s.id) === String(curSecId));
+
+    if (secLabel) {
+      secLabel.textContent = curSec ? `Section ${curSec.name}` : (schedules[0]?.section_name ? `Section ${schedules[0].section_name}` : "Student Timetable");
+    }
+
+    // Check if any schedule is in DRAFT status
+    const draftNotice = document.getElementById("student-draft-notice");
+    if (draftNotice) {
+      const hasDrafts = schedules.some(s => (s.status || "").toUpperCase() === "DRAFT");
+      draftNotice.style.display = hasDrafts ? "inline-block" : "none";
+      if (hasDrafts) {
+        draftNotice.textContent = "DRAFT TIMETABLE — Under Review";
+      }
     }
 
     // Hook student request buttons
@@ -1002,6 +1103,101 @@ function updateRoleSpecificPortals(schedules) {
     // CHAIR or ADMIN
     if (facBanner) facBanner.style.display = "none";
     if (studentBanner) studentBanner.style.display = "none";
+  }
+}
+
+async function openFacultyAvailabilityModal(facultyId) {
+  const backdrop = document.getElementById("modal-faculty-avail-backdrop");
+  if (!backdrop) return;
+
+  const fac = _masterData.faculty.find(f => String(f.id) === String(facultyId));
+  const titleEl = document.getElementById("modal-fac-avail-title");
+  if (titleEl && fac) {
+    titleEl.textContent = `Blackout Windows — ${fac.name}`;
+  }
+
+  backdrop.style.display = "flex";
+  backdrop.classList.add("sched-modal-backdrop--open");
+
+  await renderFacultyAvailabilities(facultyId);
+
+  // Hook Add Button
+  const addBtn = document.getElementById("btn-save-new-avail");
+  if (addBtn) {
+    addBtn.onclick = async () => {
+      const day = document.getElementById("new-avail-day")?.value || "FRI";
+      const start = document.getElementById("new-avail-start")?.value || "08:00";
+      const end = document.getElementById("new-avail-end")?.value || "12:00";
+
+      addBtn.disabled = true;
+      addBtn.textContent = "Saving…";
+      try {
+        await API.createFacultyAvailability(facultyId, {
+          day_of_week: day,
+          start_time: start,
+          end_time: end,
+          is_preferred: false,
+        });
+        showToast("Blackout window successfully registered.", "success");
+        await renderFacultyAvailabilities(facultyId);
+      } catch (err) {
+        showToast(err.message || "Failed to add blackout window.", "error");
+      } finally {
+        addBtn.disabled = false;
+        addBtn.textContent = "Add Blackout Window";
+      }
+    };
+  }
+
+  const closeFn = () => {
+    backdrop.style.display = "none";
+    backdrop.classList.remove("sched-modal-backdrop--open");
+  };
+  document.getElementById("modal-fac-avail-close")?.addEventListener("click", closeFn, { once: true });
+  document.getElementById("modal-fac-avail-done")?.addEventListener("click", closeFn, { once: true });
+}
+
+async function renderFacultyAvailabilities(facultyId) {
+  const listEl = document.getElementById("fac-avail-list");
+  if (!listEl) return;
+  listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">Loading blackout windows…</div>`;
+
+  try {
+    const res = await API.getFacultyAvailability(facultyId);
+    const avails = res?.data || [];
+    if (avails.length === 0) {
+      listEl.innerHTML = `<div style="font-size: 12px; color: var(--text-muted); padding: 8px; font-style: italic;">No blackout windows registered. Faculty is available during normal scheduling hours.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = avails.map(a => `
+      <div style="display: flex; justify-content: space-between; align-items: center; background: #FFF5F5; border: 1px solid #FECACA; border-radius: 6px; padding: 8px 12px;">
+        <div>
+          <strong style="font-size: 13px; color: #991B1B;">${escapeHtml(a.day_of_week)}</strong>
+          <span style="font-size: 12px; color: #7F1D1D; margin-left: 8px;">${formatTimeTo12(a.start_time)} – ${formatTimeTo12(a.end_time)}</span>
+          <span class="status-badge crimson" style="font-size: 10px; margin-left: 8px;">BLACKOUT</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-ghost btn-del-avail" data-avail-id="${a.id}" style="color: #DC2626; cursor: pointer;" title="Remove this blackout window">
+          ✕ Remove
+        </button>
+      </div>
+    `).join("");
+
+    listEl.querySelectorAll(".btn-del-avail").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.availId;
+        if (!confirm("Remove this blackout window?")) return;
+        try {
+          await API.deleteFacultyAvailability(id);
+          showToast("Blackout window removed.", "success");
+          await renderFacultyAvailabilities(facultyId);
+        } catch (e) {
+          showToast(e.message || "Failed to remove blackout window.", "error");
+        }
+      });
+    });
+  } catch (err) {
+    listEl.innerHTML = `<div style="font-size: 12px; color: #DC2626; padding: 8px;">Failed to load blackout windows: ${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -1247,6 +1443,8 @@ function openModal(editId = null, prefill = {}) {
   const form      = document.getElementById("sched-modal-form");
   const preflightBanner  = document.getElementById("preflight-banner");
   const suggestionsPanel = document.getElementById("suggestions-panel");
+  const deleteBtn = document.getElementById("sched-modal-delete");
+  const conflictBanner = document.getElementById("modal-conflict-banner");
 
   // Reset form
   form.reset();
@@ -1268,10 +1466,33 @@ function openModal(editId = null, prefill = {}) {
       setSelectVal("m-status",  sched.status);
       setSelectVal("m-start",   sched.start_time?.slice(0, 5));
       setSelectVal("m-end",     sched.end_time?.slice(0, 5));
+
+      if (sched.has_conflict && conflictBanner) {
+        conflictBanner.style.display = "block";
+        const btnRadar = document.getElementById("btn-modal-open-radar");
+        if (btnRadar) {
+          btnRadar.onclick = () => {
+            closeModal();
+            openRadar();
+          };
+        }
+      } else if (conflictBanner) {
+        conflictBanner.style.display = "none";
+      }
+
+      if (deleteBtn) {
+        deleteBtn.style.display = "inline-flex";
+        deleteBtn.onclick = async () => {
+          closeModal();
+          await deleteSchedule(sched.id, sched.subject_code, sched.section_name);
+        };
+      }
     }
   } else {
     titleEl.textContent = "Add New Schedule";
     saveBtn.textContent = "Save Schedule";
+    if (conflictBanner) conflictBanner.style.display = "none";
+    if (deleteBtn) deleteBtn.style.display = "none";
     // Apply prefill values from click-on-grid
     if (prefill.day_of_week) setSelectVal("m-day", prefill.day_of_week);
     if (prefill.start_time)  setSelectVal("m-start", prefill.start_time);
@@ -1526,16 +1747,25 @@ function bindEvents() {
 
   // Batch Publish All button (Chair / Admin)
   document.getElementById("btn-publish-all")?.addEventListener("click", async () => {
-    if (!confirm("Validate and publish all conflict-free draft schedules? This will lock the official timetable.")) return;
+    const progVal = document.getElementById("filter-program")?.value;
+    const secVal = document.getElementById("filter-section")?.value;
+    const scopeLabel = secVal ? `Section` : progVal ? `Program ${progVal}` : "all";
+    if (!confirm(`Validate and publish ${scopeLabel} conflict-free draft schedules? This will lock the official timetable.`)) return;
     const btn = document.getElementById("btn-publish-all");
     btn.disabled = true;
     btn.textContent = "Publishing…";
+
+    const payload = {};
+    if (progVal) payload.program = progVal;
+    if (secVal) payload.section_id = parseInt(secVal, 10);
+
     try {
-      const res = await API.publishAllSchedules();
-      showToast(res.message || "All schedules successfully published!", "success");
+      const res = await API.publishAllSchedules(payload);
+      showToast(res.message || "Schedules successfully published!", "success");
       await fetchAndRender();
     } catch (err) {
-      showToast(err.message || "Cannot publish: Conflicts exist.", "error");
+      const msg = err.data?.message || err.message || "Cannot publish: Unresolved hard conflicts exist. Please resolve them in the Conflict Radar.";
+      showToast(msg, "error");
       openRadar();
     } finally {
       btn.disabled = false;
@@ -1545,13 +1775,21 @@ function bindEvents() {
 
   // Batch Unpublish All button (Chair / Admin)
   document.getElementById("btn-unpublish-all")?.addEventListener("click", async () => {
-    if (!confirm("Revert all published schedules back to DRAFT mode? This will make schedules editable again.")) return;
+    const progVal = document.getElementById("filter-program")?.value;
+    const secVal = document.getElementById("filter-section")?.value;
+    const scopeLabel = secVal ? `Section` : progVal ? `Program ${progVal}` : "all";
+    if (!confirm(`Revert ${scopeLabel} published schedules back to DRAFT mode? This will make schedules editable again.`)) return;
     const btn = document.getElementById("btn-unpublish-all");
     btn.disabled = true;
     btn.textContent = "Unpublishing…";
+
+    const payload = {};
+    if (progVal) payload.program = progVal;
+    if (secVal) payload.section_id = parseInt(secVal, 10);
+
     try {
-      const res = await API.unpublishAllSchedules();
-      showToast(res.message || "All schedules reverted to draft mode.", "info");
+      const res = await API.unpublishAllSchedules(payload);
+      showToast(res.message || "Schedules reverted to draft mode.", "info");
       await fetchAndRender();
     } catch (err) {
       showToast(err.message || "Unpublish failed.", "error");
@@ -1559,6 +1797,24 @@ function bindEvents() {
       btn.disabled = false;
       btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M12 3v18"/></svg> Unpublish`;
     }
+  });
+
+  // Term synchronization
+  document.getElementById("filter-term")?.addEventListener("change", (e) => {
+    localStorage.setItem("coe_sync_active_term", e.target.value);
+    window.dispatchEvent(new CustomEvent("academicTermChanged", { detail: { term: e.target.value } }));
+    cascadeScheduleFilters();
+    fetchAndRender();
+  });
+
+  // Immediate preflight conflict checks on modal fields
+  ["m-room", "m-day", "m-start", "m-end", "m-faculty"].forEach(id => {
+    document.getElementById(id)?.addEventListener("change", () => {
+      const get = elId => document.getElementById(elId)?.value?.trim();
+      if (get("m-room") && get("m-day") && get("m-start") && get("m-end")) {
+        runPreflight();
+      }
+    });
   });
 
   // Week & Day navigation

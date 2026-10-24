@@ -40,8 +40,8 @@ async function loadDashboardMetrics() {
 
       if (schedElem) schedElem.textContent = d.total_classes;
       if (confElem) confElem.textContent = d.unresolved_conflicts;
-      if (qScore) qScore.textContent = `${d.schedule_quality_score} / 100`;
-      if (rUtil) rUtil.textContent = `${d.room_utilization}%`;
+      const utilPct = d.overall_room_utilization_pct !== undefined ? d.overall_room_utilization_pct : (d.room_utilization || 0);
+      if (rUtil) rUtil.textContent = `${Number(utilPct).toFixed(2)}%`;
 
       if (d.unresolved_conflicts > 0) {
         if (confCard) confCard.classList.add("kpi-card-conflict");
@@ -265,6 +265,7 @@ function renderDashboardGrid(filtered) {
             `).join('')}
           </div>
         </div>
+      `).join('')}
     </div>
   `;
 }

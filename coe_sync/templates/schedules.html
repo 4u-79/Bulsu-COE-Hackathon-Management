@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Schedules | COE Scheduler{% endblock %}
+{% block title %}Schedules | NEXUS • COE SYNC{% endblock %}
 {% block breadcrumb %}Schedules{% endblock %}
 {% block page_title %}Schedules{% endblock %}
 
@@ -67,6 +67,7 @@
       <span>🎓 Student Timetable Portal</span>
       <span style="font-weight: normal; color: #3B82F6;">&bull;</span>
       <span id="student-portal-section-label" style="font-weight: 700;">Official Published Schedule</span>
+      <span id="student-draft-notice" class="status-badge amber" style="display:none; margin-left: 8px;">DRAFT TIMETABLE</span>
     </div>
     <div style="display: flex; gap: 8px;">
       <button id="btn-student-submit-resched" class="btn btn-sm btn-primary">
@@ -82,6 +83,14 @@
   <div class="sched-filter-bar">
     <div class="sched-filter-left">
       <span class="sched-filter-prefix">Filter by:</span>
+
+      <!-- Academic Term Filter Pill -->
+      <div id="filter-wrap-term" class="filter-wrap">
+        <select class="filter-pill-select" id="filter-term" title="Select Academic Term">
+          <option value="1" selected>1st Sem AY 2026–2027 ▾</option>
+          <option value="2">2nd Sem AY 2026–2027 ▾</option>
+        </select>
+      </div>
 
       <!-- Chair / Program Filters -->
       <div id="filter-wrap-program" class="filter-wrap">
@@ -304,6 +313,16 @@
       <!-- Pre-flight conflict status banner -->
       <div id="preflight-banner" class="preflight-banner" style="display:none;"></div>
 
+      <!-- Slot Conflict Radar Action Banner -->
+      <div id="modal-conflict-banner" class="preflight-banner preflight-conflict" style="display:none; margin: 0 20px 14px 20px; align-items: center; justify-content: space-between;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>⚠️ <strong>Active Conflict Detected</strong> on this class slot.</span>
+        </div>
+        <button type="button" id="btn-modal-open-radar" class="btn btn-sm btn-outline" style="background:#fff; font-size:11.5px; border-color:#DC2626; color:#DC2626;">
+          Radar / Fix ▾
+        </button>
+      </div>
+
       <div class="sched-modal-body">
         <div class="form-row">
           <div class="form-group">
@@ -384,6 +403,9 @@
       </div>
 
       <div class="sched-modal-footer">
+        <button type="button" class="btn btn-danger" id="sched-modal-delete" style="margin-right: auto; display:none; background:#DC2626; color:#fff; border:none; padding:8px 14px; border-radius:8px; font-weight:600; cursor:pointer;">
+          Delete Class
+        </button>
         <button type="button" class="btn btn-secondary" id="sched-modal-cancel">Cancel</button>
         <button type="button" class="btn btn-outline" id="btn-preflight">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c0-4.97-4.03-9-9-9S3 7.03 3 12s4.03 9 9 9 9-4.03 9-9z"/></svg>
@@ -410,6 +432,69 @@
   </div>
 </div>
 {% endif %}
+
+<!-- Faculty Availability & Blackout Windows Modal -->
+<div class="sched-modal-backdrop" id="modal-faculty-avail-backdrop" style="display:none; z-index: 1000;">
+  <div class="sched-modal" style="max-width: 520px;">
+    <div class="sched-modal-header">
+      <h3 id="modal-fac-avail-title">Faculty Availability &amp; Blackout Windows</h3>
+      <button class="sched-modal-close" id="modal-fac-avail-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="sched-modal-body">
+      <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+        Define blackout time windows when you are unavailable for classroom instruction.
+      </p>
+      <div id="fac-avail-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 200px; overflow-y: auto;">
+        <!-- Injected dynamically -->
+      </div>
+      <div style="background: var(--bg-hover, #F9FAFB); border: 1px solid var(--border-light); border-radius: 8px; padding: 12px;">
+        <h4 style="font-size: 13px; margin: 0 0 8px 0; color: var(--bulsu-maroon);">+ Add Blackout Window</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+          <div>
+            <label style="font-size: 11px; font-weight: 600;">Day</label>
+            <select id="new-avail-day" class="form-select" style="font-size: 12px; width: 100%;">
+              <option value="MON">Monday</option>
+              <option value="TUE">Tuesday</option>
+              <option value="WED">Wednesday</option>
+              <option value="THU">Thursday</option>
+              <option value="FRI">Friday</option>
+              <option value="SAT">Saturday</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 600;">Start</label>
+            <select id="new-avail-start" class="form-select" style="font-size: 12px; width: 100%;">
+              <option value="08:00">08:00 AM</option>
+              <option value="09:00">09:00 AM</option>
+              <option value="10:00">10:00 AM</option>
+              <option value="11:00">11:00 AM</option>
+              <option value="13:00">01:00 PM</option>
+              <option value="14:00">02:00 PM</option>
+              <option value="15:00">03:00 PM</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 600;">End</label>
+            <select id="new-avail-end" class="form-select" style="font-size: 12px; width: 100%;">
+              <option value="12:00">12:00 PM</option>
+              <option value="13:00">01:00 PM</option>
+              <option value="14:00">02:00 PM</option>
+              <option value="16:00">04:00 PM</option>
+              <option value="17:00">05:00 PM</option>
+              <option value="18:00">06:00 PM</option>
+            </select>
+          </div>
+        </div>
+        <button type="button" id="btn-save-new-avail" class="btn btn-sm btn-primary" style="margin-top: 10px; width: 100%;">
+          Add Blackout Window
+        </button>
+      </div>
+    </div>
+    <div class="sched-modal-footer">
+      <button type="button" class="btn btn-secondary" id="modal-fac-avail-done">Done</button>
+    </div>
+  </div>
+</div>
 
 {% endblock %}
 

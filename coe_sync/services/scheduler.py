@@ -58,6 +58,16 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
     """
     program = config.get("program")
     year_level = config.get("year_level")
+    semester = config.get("semester")
+    sem_int = None
+    if semester is not None and str(semester).strip().upper() not in ("ALL", ""):
+        try:
+            sem_int = int(semester)
+        except (ValueError, TypeError):
+            sem_int = 1
+    elif semester is None:
+        sem_int = 1
+
     section_ids = config.get("section_ids") or []
     room_ids = config.get("room_ids") or []
     faculty_ids = config.get("faculty_ids", "all")
@@ -208,6 +218,11 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                 or not sec.year_level
                 or sub.year_level == sec.year_level
             )
+            and (
+                not sem_int
+                or not sub.semester
+                or sub.semester == sem_int
+            )
         ]
 
         for sub in sec_subjects:
@@ -233,13 +248,20 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                 valid_rooms.sort(key=lambda r: r.room_code)
 
             # Candidate faculty matching program & workload
-            dept_faculty = [
-                f for f in faculty_list
-                if not f.program
-                or not sec.program
-                or normalize_prog_code(f.program) == sec_p
-                or normalize_prog_code(f.program) in ("GEN", "ALL", "COMMON", "COE")
-            ]
+            sub_p = normalize_prog_code(sub.program)
+            if sub_p in ("GEN", "ALL", "COMMON", "COE"):
+                dept_faculty = [
+                    f for f in faculty_list
+                    if not f.program
+                    or not sec.program
+                    or normalize_prog_code(f.program) in (sec_p, "GEN", "ALL", "COMMON", "COE")
+                ]
+            else:
+                dept_faculty = [
+                    f for f in faculty_list
+                    if not f.program
+                    or normalize_prog_code(f.program) == sec_p
+                ]
             valid_faculty = dept_faculty if dept_faculty else [f for f in faculty_list]
             if balance_workload:
                 valid_faculty.sort(

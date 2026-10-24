@@ -172,6 +172,15 @@ document.addEventListener("DOMContentLoaded", () => {
     renderSmartRoomCheckboxes();
     populateSmartFacultyDropdown();
 
+    const sgSemesterSelect = document.getElementById("sg-semester");
+    if (sgSemesterSelect) {
+      sgSemesterSelect.value = localStorage.getItem("coe_sync_active_term") || "1";
+      sgSemesterSelect.addEventListener("change", (e) => {
+        localStorage.setItem("coe_sync_active_term", e.target.value);
+        window.dispatchEvent(new CustomEvent("academicTermChanged", { detail: { term: e.target.value } }));
+      });
+    }
+
     sgProgramSelect?.addEventListener("change", () => {
       renderSmartSectionPills();
       populateSmartFacultyDropdown();
@@ -422,17 +431,34 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function cascadeManualFilters() {
+    const manualSemester = document.getElementById("manual-semester");
+    if (manualSemester && !manualSemester._hasTermSync) {
+      manualSemester._hasTermSync = true;
+      manualSemester.value = localStorage.getItem("coe_sync_active_term") || "1";
+      manualSemester.addEventListener("change", (e) => {
+        localStorage.setItem("coe_sync_active_term", e.target.value);
+        window.dispatchEvent(new CustomEvent("academicTermChanged", { detail: { term: e.target.value } }));
+        cascadeManualFilters();
+      });
+    }
+
     const selectedProgram = manualProgram ? manualProgram.value : "";
     const selectedYear = manualYearLevel ? manualYearLevel.value : "";
+    const selectedSemester = manualSemester ? manualSemester.value : "";
 
-    // 1. Filter Subjects
+    // 1. Filter Subjects (allow GEN subjects for all engineering programs)
     if (manualSubject) {
       const prevSubVal = manualSubject.value;
       const filteredSubjects = masterState.allSubjects.filter((sub) => {
-        if (selectedProgram && normalizeProgram(sub.program) !== normalizeProgram(selectedProgram)) {
+        const subProg = normalizeProgram(sub.program);
+        const selProg = normalizeProgram(selectedProgram);
+        if (selectedProgram && subProg !== selProg && subProg !== "GEN") {
           return false;
         }
         if (selectedYear && String(sub.year_level) !== String(selectedYear)) {
+          return false;
+        }
+        if (selectedSemester && String(sub.semester) !== String(selectedSemester)) {
           return false;
         }
         return true;
@@ -484,12 +510,16 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // 3. Filter Faculty
+    // 3. Filter Faculty (allow department faculty and GEN faculty)
     if (manualFaculty) {
       const prevFacVal = manualFaculty.value;
       let filteredFaculty = masterState.allFaculty;
       if (selectedProgram) {
-        filteredFaculty = filteredFaculty.filter((f) => normalizeProgram(f.program) === normalizeProgram(selectedProgram));
+        filteredFaculty = filteredFaculty.filter((f) => {
+          const facProg = normalizeProgram(f.program);
+          const selProg = normalizeProgram(selectedProgram);
+          return facProg === selProg || facProg === "GEN";
+        });
       }
 
       manualFaculty.innerHTML = `<option value="">-- Choose Faculty Member (${filteredFaculty.length} Available) --</option>`;
@@ -839,9 +869,13 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const sgSemesterSelect = document.getElementById("sg-semester");
+    const activeSemester = parseInt(sgSemesterSelect?.value || localStorage.getItem("coe_sync_active_term") || "1", 10);
+
     const payload = {
       program: sgProgramSelect.value,
       year_level: sgYearSelect.value === "ALL" ? "all" : parseInt(sgYearSelect.value, 10),
+      semester: activeSemester,
       section_ids: sectionIds,
       room_ids: roomIds,
       faculty_ids: sgFacultySelect.value === "all" ? "all" : [parseInt(sgFacultySelect.value, 10)],

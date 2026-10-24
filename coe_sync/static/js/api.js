@@ -138,12 +138,12 @@ const API = {
     return this.post("/api/schedules/generate-draft");
   },
 
-  async publishAllSchedules() {
-    return this.post("/api/schedules/publish-all");
+  async publishAllSchedules(payload = {}) {
+    return this.post("/api/schedules/publish-all", payload);
   },
 
-  async unpublishAllSchedules() {
-    return this.post("/api/schedules/unpublish-all");
+  async unpublishAllSchedules(payload = {}) {
+    return this.post("/api/schedules/unpublish-all", payload);
   },
 
   async getFacultyAvailability(facultyId) {

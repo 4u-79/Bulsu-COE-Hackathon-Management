@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Master Data Management | COE SYNC 2026{% endblock %}
+{% block title %}Master Data Management | NEXUS • COE SYNC 2026{% endblock %}
 
 {% block content %}
 <!-- Legacy header preserved in DOM with display:none to preserve backward compatibility without visual clutter -->
@@ -109,7 +109,8 @@
       <!-- Card 4 (col-span-5): Filter Rooms: -->
       <div class="glass-card room-kpi-card" style="grid-column: span 5; padding: 16px 20px; background: rgba(255,255,255,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.65); border-radius: var(--radius-md); box-shadow: 0 4px 14px rgba(90,16,16,0.06); display:flex; flex-direction:column; justify-content:space-between;">
         <div style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 6px;">Filter Rooms:</div>
-        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+        <!-- Default Filters (Chair / Admin / Faculty) -->
+        <div id="filter-controls-default" style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
           <div>
             <label style="display:block; font-size:10px; font-weight:700; color:var(--text-muted); margin-bottom:3px; text-transform:uppercase;">Building</label>
             <select id="room-avail-filter-building" class="form-select" style="width:100%; font-size:11.5px; padding:6px 6px; border-radius:6px; border:1px solid #D1D5DB; background:#fff;">
@@ -140,13 +141,32 @@
             </select>
           </div>
         </div>
+        <!-- Student Specific Filters (Room Group & Section - Screenshot 2026-10-24 191953.png) -->
+        <div id="filter-controls-student" style="display:none; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <label style="display:block; font-size:10px; font-weight:700; color:var(--text-muted); margin-bottom:3px; text-transform:uppercase;">Room Group</label>
+            <select id="student-filter-room-group" class="form-select" style="width:100%; font-size:11.5px; padding:6px; border-radius:6px; border:1px solid #D1D5DB; background:#fff;">
+              <option value="">COE 100-108 ▾</option>
+              <option value="ALL">All Rooms</option>
+              <option value="COE 1">COE 1 (101-107)</option>
+              <option value="COE 2">COE 2 (101-306)</option>
+              <option value="LAB">Laboratories</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block; font-size:10px; font-weight:700; color:var(--text-muted); margin-bottom:3px; text-transform:uppercase;">Section</label>
+            <select id="student-filter-section" class="form-select" style="width:100%; font-size:11.5px; padding:6px; border-radius:6px; border:1px solid #D1D5DB; background:#fff;">
+              <option value="">All Section ▾</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Main 2-Column Split Board (Occupied Room vs Available at <Time>) -->
-    <div class="room-split-board" style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+    <div class="room-split-board" id="room-split-board" style="display:grid; grid-template-columns: 1fr 1fr; gap: 24px;">
       <!-- Left Column: Occupied Room -->
-      <div class="room-split-col" style="background: rgba(255,255,255,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.6); border-radius: var(--radius-md); padding: 18px 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+      <div class="room-split-col" id="col-occupied-rooms" style="background: rgba(255,255,255,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.6); border-radius: var(--radius-md); padding: 18px 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
           <h3 style="font-size: 16px; font-weight: 700; color: var(--text-dark); margin:0;">Occupied Room</h3>
           <span id="badge-occupied-count" style="background:#EF4444; color:#FFFFFF; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px;">0 Preoccupied</span>
@@ -157,7 +177,7 @@
       </div>
 
       <!-- Right Column: Available at <Time> -->
-      <div class="room-split-col" style="background: rgba(255,255,255,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.6); border-radius: var(--radius-md); padding: 18px 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+      <div class="room-split-col" id="col-available-rooms" style="background: rgba(255,255,255,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.6); border-radius: var(--radius-md); padding: 18px 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px;">
           <h3 id="heading-available-title" style="font-size: 16px; font-weight: 700; color: var(--text-dark); margin:0;">Available at 10:00 AM</h3>
           <span id="badge-available-count" style="background:#22C55E; color:#FFFFFF; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px;">0 Open</span>
@@ -237,60 +257,176 @@
 
 <!-- Tab 2: Faculty Table Panel -->
 <div id="tab-panel-faculty" class="tab-panel manage-panel hidden" data-tab-content="faculty">
-  <!-- Section View Header Bar -->
-  <div class="rooms-view-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
-    <div class="rooms-view-title-group">
-      <h2 style="font-size: 18px; font-weight: 700; color: var(--text-dark); margin:0;">Faculty Teaching Workloads &amp; Availability</h2>
-      <p style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">Manage 126 college instructors, contact emails, unit assignments, and weekly availability constraints.</p>
-    </div>
-    <div class="admin-only">
-      <button type="button" class="btn btn-primary" onclick="openAddModal('faculty')">+ Add Faculty</button>
-    </div>
-  </div>
-  <div class="table-card">
-    <div class="manage-filter-bar">
-      <div class="manage-search-wrap">
-        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="search-faculty" class="manage-search-input" placeholder="Search faculty name or email...">
+  
+  <!-- Sub-View 1: Faculty Status Directory (Screenshot 2026-10-24 192007.png) -->
+  <div id="faculty-directory-container">
+    <div class="rooms-view-header-bar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
+      <div class="rooms-view-title-group">
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--text-dark); margin:0;">Faculty Status</h2>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 2px 0 0 0;">College instructional roster, departmental assignments, and teaching status.</p>
       </div>
-      <div class="manage-filter-group">
-        <select id="filter-faculty-prog" class="manage-filter-select">
-          <option value="">All Programs</option>
-          <option value="CE">Civil Engineering (CE)</option>
-          <option value="CPE">Computer Engineering (CPE)</option>
-          <option value="EE">Electrical Engineering (EE)</option>
-          <option value="ECE">Electronics Engineering (ECE)</option>
-          <option value="IE">Industrial Engineering (IE)</option>
-          <option value="MFGE">Manufacturing Engineering (MFGE)</option>
-          <option value="ME">Mechanical Engineering (ME)</option>
-          <option value="MEE">Mechatronics Engineering (MEE)</option>
-          <option value="GEN">General Engineering (GEN)</option>
-        </select>
-        <select id="filter-faculty-status" class="manage-filter-select">
-          <option value="">All Workloads</option>
-          <option value="normal">Normal Load (≤ 21 units)</option>
-          <option value="overloaded">Overloaded (> 21 units)</option>
-        </select>
+      <div class="admin-only">
+        <button type="button" class="btn btn-primary" onclick="openAddModal('faculty')">+ Add Faculty</button>
       </div>
     </div>
-    <div class="table-responsive">
-      <table class="master-table">
-        <thead>
-          <tr>
-            <th>Faculty Name</th>
-            <th>Official Email</th>
-            <th>Max Units</th>
-            <th>Current Load</th>
-            <th>Availability</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="table-faculty-body">
-          <tr><td colspan="6" style="text-align:center; padding: 24px;">Loading faculty records...</td></tr>
-        </tbody>
-      </table>
+    
+    <div class="table-card">
+      <div class="manage-filter-bar">
+        <div class="manage-search-wrap">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-faculty" class="manage-search-input" placeholder="Search faculty name or email...">
+        </div>
+        <div class="manage-filter-group">
+          <select id="filter-faculty-prog" class="manage-filter-select">
+            <option value="">All Programs</option>
+            <option value="CE">Civil Engineering (CE)</option>
+            <option value="CPE">Computer Engineering (CPE)</option>
+            <option value="EE">Electrical Engineering (EE)</option>
+            <option value="ECE">Electronics Engineering (ECE)</option>
+            <option value="IE">Industrial Engineering (IE)</option>
+            <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+            <option value="ME">Mechanical Engineering (ME)</option>
+            <option value="MEE">Mechatronics Engineering (MEE)</option>
+            <option value="GEN">General Engineering (GEN)</option>
+          </select>
+          <select id="filter-faculty-status" class="manage-filter-select">
+            <option value="">All Workloads</option>
+            <option value="normal">Normal Load (≤ 21 units)</option>
+            <option value="overloaded">Overloaded (> 21 units)</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="master-table">
+          <thead>
+            <tr>
+              <th style="width: 40%;">Name</th>
+              <th style="width: 20%;">Department</th>
+              <th style="width: 15%;">Status</th>
+              <th style="width: 25%; text-align: right;">More Information</th>
+            </tr>
+          </thead>
+          <tbody id="table-faculty-body">
+            <tr><td colspan="4" style="text-align:center; padding: 24px;">Loading faculty records...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
+
+  <!-- Sub-View 2: Faculty Detailed Profile View (Screenshot 2026-10-24 192019.png) -->
+  <div id="faculty-detailed-container" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; align-items:center; gap: 12px;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-back-to-faculty-list" onclick="closeFacultyDetailed()" style="display:inline-flex; align-items:center; gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Back to Faculty List
+        </button>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--text-dark); margin:0;">Faculty Detailed</h2>
+      </div>
+      <div id="detailed-edit-btn-wrap">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-open-edit-detailed-profile" onclick="openFacultyDetailedEditModal()">
+          Edit Profile &amp; Availability
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Glassmorphic Profile Card -->
+    <div class="glass-card" style="padding: 32px 36px; background: rgba(226, 232, 240, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
+      <!-- Card Header: Avatar + Name + Dept + Email -->
+      <div style="display:flex; align-items:center; gap: 20px; margin-bottom: 36px;">
+        <div style="width: 72px; height: 72px; border-radius: 50%; background: #DBEAFE; border: 2px solid #93C5FD; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <div>
+          <h2 id="detailed-faculty-name" style="font-size: 20px; font-weight: 800; color: #1E293B; margin: 0 0 4px 0; letter-spacing: -0.01em;">ENGR. ARVIN JULIUS S. TULLAO</h2>
+          <div style="font-size: 13px; font-weight: 700; color: #64748B; margin-bottom: 2px;" id="detailed-faculty-dept">MEE</div>
+          <div style="font-size: 12px; color: #64748B;" id="detailed-faculty-email">atullao@bulsu.edu.ph</div>
+        </div>
+      </div>
+
+      <!-- 3-Column Body (Subjects | Availability | Preferred/Current Load) -->
+      <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 36px;">
+        <!-- Column 1: Subjects -->
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700; color: #1E293B; margin: 0 0 16px 0;">Subjects</h3>
+          <div id="detailed-subjects-list" style="display:flex; flex-direction:column; gap: 10px;">
+            <div style="color: #64748B; font-size: 13px;">Loading assigned subjects...</div>
+          </div>
+        </div>
+
+        <!-- Column 2: Availability -->
+        <div>
+          <h3 style="font-size: 16px; font-weight: 700; color: #1E293B; margin: 0 0 16px 0;">Availability</h3>
+          <div id="detailed-availability-list" style="display:flex; flex-direction:column; gap: 12px;">
+            <!-- Mon-Sat rendered with badges -->
+          </div>
+        </div>
+
+        <!-- Column 3: Preferred Load & Current Load -->
+        <div>
+          <!-- Preferred Load -->
+          <div style="margin-bottom: 28px;">
+            <div style="font-size: 14px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Preferred Load</div>
+            <div style="font-size: 26px; font-weight: 800; color: #1E293B; margin-bottom: 8px;">
+              <span id="detailed-preferred-units">18</span> <span style="font-size: 14px; font-weight: 600; color: #64748B;">Units</span>
+            </div>
+            <div style="width: 100%; height: 16px; background: #E2E8F0; border-radius: 9999px; overflow:hidden;">
+              <div id="detailed-preferred-bar" style="width: 85%; height: 100%; background: #A78BFA; border-radius: 9999px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+
+          <!-- Current Load -->
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: #1E293B; margin-bottom: 6px;">Current Load</div>
+            <div style="font-size: 26px; font-weight: 800; color: #1E293B; margin-bottom: 8px;">
+              <span id="detailed-current-units">15</span> <span style="font-size: 14px; font-weight: 600; color: #64748B;">Units</span>
+            </div>
+            <div style="width: 100%; height: 16px; background: #E2E8F0; border-radius: 9999px; overflow:hidden; position:relative;">
+              <div id="detailed-current-bar" style="width: 71%; height: 100%; background: linear-gradient(90deg, #8B5CF6 0%, #3B82F6 100%); border-radius: 9999px; transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Editing Faculty Detailed Profile & Availability -->
+  <div id="modal-edit-faculty-detailed" class="modal-backdrop" style="display:none; z-index: 1100;">
+    <div class="modal-dialog" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-edit-fac-title">Edit Profile &amp; Availability</h3>
+        <button type="button" class="modal-close-btn" onclick="closeFacultyDetailedEditModal()">&times;</button>
+      </div>
+      <form id="form-edit-faculty-detailed" onsubmit="submitFacultyDetailedEdit(event)">
+        <div class="modal-body" style="display:flex; flex-direction:column; gap: 14px; padding: 18px 22px;">
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Faculty Name</label>
+            <input type="text" id="edit-fac-name" class="form-input" style="width:100%;" required>
+          </div>
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Official Email</label>
+            <input type="email" id="edit-fac-email" class="form-input" style="width:100%;" required>
+          </div>
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Preferred Max Load (Units)</label>
+            <input type="number" id="edit-fac-max-units" class="form-input" min="3" max="30" value="21" style="width:100%;" required>
+          </div>
+          <div>
+            <label style="font-size: 12px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px; display:block;">Weekly Availability Windows</label>
+            <div id="edit-fac-days-list" style="display:flex; flex-direction:column; gap: 8px;">
+              <!-- Mon-Sat rows with Available / Unavailable toggle -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeFacultyDetailedEditModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-faculty-detailed">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
 </div>
 
 <!-- Tab 3: Sections Table Panel -->

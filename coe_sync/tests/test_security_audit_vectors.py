@@ -187,10 +187,13 @@ class TestSecurityAuditVectors(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         html = res.get_data(as_text=True)
 
+        # Under NEXUS RBAC, Students CAN see Dashboard, Schedules, and Rooms, but MUST NOT see admin tools
+        self.assertIn('id="nav-dashboard"', html)
+        self.assertIn('id="nav-rooms"', html)
+        self.assertIn('id="nav-schedules"', html)
+
         # Verify completely omitted from HTML text
-        self.assertNotIn('id="nav-dashboard"', html)
         self.assertNotIn('id="nav-create-schedule"', html)
-        self.assertNotIn('id="nav-rooms"', html)
         self.assertNotIn('id="nav-faculty"', html)
         self.assertNotIn('id="nav-sections"', html)
         self.assertNotIn('id="nav-subjects"', html)

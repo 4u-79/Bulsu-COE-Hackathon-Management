@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}Settings & Governance | NEXUS • COE SYNC 2026{% endblock %}
+{% block breadcrumb %}Settings{% endblock %}
+{% block page_title %}Settings & Governance{% endblock %}
+
+{% block content %}
+<div class="settings-page" style="display:flex; flex-direction:column; gap: 24px; max-width: 1100px; margin: 0 auto; padding-bottom: 40px;">
+  
+  <!-- Header Intro Banner -->
+  <div class="glass-card" style="padding: 24px 28px; background: rgba(255,255,255,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; box-shadow: 0 4px 16px rgba(90,16,16,0.06);">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+      <div>
+        <h2 style="font-size: 22px; font-weight: 800; color: var(--text-dark); margin:0 0 4px 0;">System Settings & Governance Workspace</h2>
+        <p style="font-size: 13.5px; color: var(--text-secondary); margin:0;">
+          Configure institutional scheduling rules, role policies, personal credentials, and demo impersonation.
+        </p>
+      </div>
+      <span style="background: rgba(90,16,16,0.08); color: var(--bulsu-maroon); border: 1px solid rgba(90,16,16,0.2); font-size: 11.5px; font-weight: 700; padding: 6px 14px; border-radius: 9999px;">
+        NEXUS Engine v2.6.4
+      </span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px;">
+
+    <!-- Card 1 (col-span-6): Profile & Account Card -->
+    <div class="glass-card" style="grid-column: span 6; padding: 24px 26px; background: rgba(255,255,255,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); display:flex; flex-direction:column; justify-content:space-between;">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 18px;">
+          <div>
+            <h3 style="font-size: 17px; font-weight: 800; color: var(--text-dark); margin:0 0 4px 0;">Profile & Account</h3>
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin:0;">Logged-in user identity & credentials.</p>
+          </div>
+          <span style="background: var(--bulsu-maroon); color: #FFFFFF; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; text-transform: uppercase;">
+            {{ active_role }}
+          </span>
+        </div>
+
+        <!-- Identity Details -->
+        <div style="background: rgba(248,250,252,0.8); border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px;">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 12.5px;">
+            <div>
+              <div style="color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 10.5px;">Username</div>
+              <div style="font-weight: 700; color: var(--text-dark); margin-top: 2px;">{{ current_username }}</div>
+            </div>
+            <div>
+              <div style="color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 10.5px;">Role</div>
+              <div style="font-weight: 700; color: var(--bulsu-maroon); margin-top: 2px;">{{ active_role }}</div>
+            </div>
+            <div>
+              <div style="color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 10.5px;">Assigned Program</div>
+              <div style="font-weight: 700; color: var(--text-dark); margin-top: 2px;">
+                {% if active_role == 'ADMIN' %}ALL (Global Administrator){% else %}{{ effective_program or 'MEE' }}{% endif %}
+              </div>
+            </div>
+            <div>
+              <div style="color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 10.5px;">Session Status</div>
+              <div style="font-weight: 700; color: #16A34A; margin-top: 2px;">Active &amp; Authenticated</div>
+            </div>
+          </div>
+        </div>
+
+        {% if active_role == 'FACULTY' or session.get('role') == 'FACULTY' %}
+        <!-- Direct button for Faculty to edit their profile -->
+        <div style="margin-bottom: 20px; background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 10px; padding: 14px 16px;">
+          <div style="font-size: 13px; font-weight: 700; color: #3730A3; margin-bottom: 4px;">Faculty Profile & Availability</div>
+          <p style="font-size: 12px; color: #4338CA; margin: 0 0 10px 0;">
+            Update your teaching subject assignments, max teaching units, and weekly availability constraints.
+          </p>
+          <a href="/manage?tab=faculty&view=detailed&id={{ session.get('active_reference_id') or session.get('reference_id') or 109 }}" class="btn btn-primary btn-sm" style="display:inline-flex; align-items:center; gap: 6px; text-decoration:none;">
+            → Open Faculty Detailed Profile
+          </a>
+        </div>
+        {% endif %}
+
+        <!-- Change Password / Credentials Form -->
+        <h4 style="font-size: 13.5px; font-weight: 700; color: var(--text-dark); margin: 0 0 10px 0;">Change Password</h4>
+        <form id="form-settings-password" onsubmit="handleSettingsPasswordChange(event)" style="display:flex; flex-direction:column; gap: 10px;">
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display:block; margin-bottom:3px;">Current Password</label>
+            <input type="password" id="settings-old-pass" class="form-input" placeholder="Enter current password..." style="font-size:12px; padding: 8px 12px; width: 100%;" required>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display:block; margin-bottom:3px;">New Password</label>
+              <input type="password" id="settings-new-pass" class="form-input" placeholder="New password..." style="font-size:12px; padding: 8px 12px; width: 100%;" required minlength="6">
+            </div>
+            <div>
+              <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display:block; margin-bottom:3px;">Confirm New Password</label>
+              <input type="password" id="settings-confirm-pass" class="form-input" placeholder="Confirm password..." style="font-size:12px; padding: 8px 12px; width: 100%;" required minlength="6">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-secondary btn-sm" style="align-self: flex-start; margin-top: 4px;">
+            Update Password
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Card 2 (col-span-6): Academic & Governance Policy Card -->
+    <div class="glass-card" style="grid-column: span 6; padding: 24px 26px; background: rgba(255,255,255,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.04); display:flex; flex-direction:column; justify-content:space-between;">
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 18px;">
+          <div>
+            <h3 style="font-size: 17px; font-weight: 800; color: var(--text-dark); margin:0 0 4px 0;">Academic & Governance Policy</h3>
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin:0;">Active college terms, TTL policies, and workload limits.</p>
+          </div>
+          <span style="background: #E0E7FF; color: #3730A3; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">
+            COE Policy
+          </span>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap: 16px;">
+          <!-- 1. Active Academic Year & Semester -->
+          <div style="background: rgba(248,250,252,0.8); border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px;">
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display:block; margin-bottom:6px;">Active Academic Year & Semester</label>
+            <div style="display:flex; gap: 10px; align-items:center;">
+              <select id="settings-term-select" class="form-select" style="font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 8px; border: 1px solid #D1D5DB; width: 100%;">
+                <option value="1" selected>AY 2026–2027 • 1st Semester (Active Term)</option>
+                <option value="2">AY 2026–2027 • 2nd Semester</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="showToast('Academic term setting saved.')">
+                Apply
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Reschedule Request Auto-Expiration Policy -->
+          <div style="background: #FEF3C7; border: 1px solid #FCD34D; border-radius: 10px; padding: 14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+              <span style="font-size: 13px; font-weight: 700; color: #92400E;">Reschedule Auto-Expiration (TTL)</span>
+              <span style="background: #F59E0B; color: #FFFFFF; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">7 DAYS (1 WEEK) ACTIVE</span>
+            </div>
+            <p style="font-size: 12px; color: #B45309; margin: 0 0 10px 0;">
+              Pending class reschedule requests automatically expire and are purged after 7 days without chair/faculty resolution.
+            </p>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="triggerPurgeExpiredRequests()" style="background:#FFF; border: 1px solid #F59E0B; color:#92400E; font-weight:700;">
+              ⚡ Purge Expired Requests Now
+            </button>
+          </div>
+
+          <!-- 3. Faculty Maximum Regular Load Policy -->
+          <div style="background: rgba(248,250,252,0.8); border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+              <span style="font-size: 13px; font-weight: 700; color: var(--text-dark);">Faculty Maximum Regular Load</span>
+              <span style="font-size: 15px; font-weight: 800; color: var(--bulsu-maroon);">21 Units</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin:0;">
+              Instructors exceeding 21 units are flagged with an Overload warning badge on Schedules and Reports.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3 (col-span-12): Quick Role Impersonator & Demo Controls Card -->
+    <div class="glass-card" style="grid-column: span 12; padding: 24px 28px; background: rgba(255,255,255,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 16px; flex-wrap:wrap; gap:12px;">
+        <div>
+          <h3 style="font-size: 17px; font-weight: 800; color: var(--text-dark); margin:0 0 4px 0;">Quick Role Impersonator &amp; Demo Controls</h3>
+          <p style="font-size: 12.5px; color: var(--text-secondary); margin:0;">1-Click switch between administrative, departmental, instructional, and student perspectives.</p>
+        </div>
+        <span style="background: rgba(34,197,94,0.1); color: #15803D; border: 1px solid rgba(34,197,94,0.3); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">
+          DEMO MODE READY
+        </span>
+      </div>
+
+      <!-- Quick Switch Buttons Grid -->
+      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px;">
+        <!-- 1. Global Admin -->
+        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Global Admin</div>
+            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 10px;">Full access across all 8 programs</div>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" onclick="switchDemoUser('ADMIN', null)" style="width:100%;">
+            Switch to Admin
+          </button>
+        </div>
+
+        <!-- 2. Program Chair with dropdown -->
+        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Program Chair</div>
+            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 6px;">Scoped to assigned program only</div>
+            <select id="quick-chair-program-select" class="form-select" style="font-size: 11.5px; padding: 4px 8px; margin-bottom: 8px; width: 100%;">
+              <option value="MEE" selected>MEE (Mechatronics)</option>
+              <option value="CE">CE (Civil)</option>
+              <option value="CPE">CPE (Computer)</option>
+              <option value="EE">EE (Electrical)</option>
+              <option value="ECE">ECE (Electronics)</option>
+              <option value="IE">IE (Industrial)</option>
+              <option value="MFGE">MFGE (Manufacturing)</option>
+              <option value="ME">ME (Mechanical)</option>
+            </select>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="switchDemoChair()" style="width:100%;">
+            Switch to Chair
+          </button>
+        </div>
+
+        <!-- 3. Faculty -->
+        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Faculty Member</div>
+            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 10px;">Engr. Arvin Julius S. Tullao (MEE)</div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="switchDemoUser('FACULTY', 109)" style="width:100%;">
+            Switch to Faculty
+          </button>
+        </div>
+
+        <!-- 4. Student -->
+        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
+          <div>
+            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Student Cohort</div>
+            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 10px;">MEE - 1A Cohort View</div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="switchDemoUser('STUDENT', 81)" style="width:100%;">
+            Switch to Student
+          </button>
+        </div>
+      </div>
+
+      <!-- Database Maintenance Section (Admin & Chair) -->
+      <div style="border-top: 1px solid var(--border-light); padding-top: 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div>
+          <div style="font-size: 13.5px; font-weight: 700; color: var(--text-dark);">Database Maintenance & Backup</div>
+          <div style="font-size: 12px; color: var(--text-secondary);">Reset system tables or export clean master schedules.</div>
+        </div>
+        <div style="display:flex; gap: 10px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="exportScheduleCSV()" style="display:inline-flex; align-items:center; gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Full Schedule Backup (CSV)
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="triggerResetDatabase()" style="background:#DC2626; color:#FFF; border:none;">
+            Reset Schedules to Clean State
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function handleSettingsPasswordChange(e) {
+  e.preventDefault();
+  const oldPass = document.getElementById("settings-old-pass")?.value;
+  const newPass = document.getElementById("settings-new-pass")?.value;
+  const confirmPass = document.getElementById("settings-confirm-pass")?.value;
+
+  if (newPass !== confirmPass) {
+    showToast("New passwords do not match", true);
+    return;
+  }
+
+  try {
+    const res = await API.post("/api/auth/change-password", {
+      old_password: oldPass,
+      new_password: newPass,
+    });
+    showToast(res.message || "Password updated successfully!");
+    document.getElementById("form-settings-password").reset();
+  } catch (err) {
+    showToast(err.message || "Failed to update password", true);
+  }
+}
+
+async function triggerPurgeExpiredRequests() {
+  try {
+    const res = await API.post("/api/reschedule/purge", {});
+    showToast(res.message || "Expired requests purged successfully!");
+  } catch (err) {
+    showToast(err.message || "Failed to purge expired requests", true);
+  }
+}
+
+async function switchDemoUser(role, refId) {
+  try {
+    const res = await API.post("/api/auth/impersonate", { role, reference_id: refId });
+    showToast(res.message || `Switched view to ${role}`);
+    setTimeout(() => window.location.reload(), 600);
+  } catch (err) {
+    showToast(err.message || "Failed to switch role", true);
+  }
+}
+
+async function switchDemoChair() {
+  const prog = document.getElementById("quick-chair-program-select")?.value || "MEE";
+  try {
+    const res = await API.post("/api/auth/impersonate", { role: "CHAIR", program: prog });
+    showToast(res.message || `Switched to Program Chair (${prog})`);
+    setTimeout(() => window.location.reload(), 600);
+  } catch (err) {
+    showToast(err.message || "Failed to switch program chair", true);
+  }
+}
+
+async function triggerResetDatabase() {
+  if (!confirm("Are you sure you want to reset all schedules to the baseline clean state?")) return;
+  try {
+    const res = await API.seedDatabase();
+    showToast(res.message || "Database reset to clean baseline!");
+    setTimeout(() => window.location.reload(), 800);
+  } catch (err) {
+    showToast(err.message || "Failed to reset database", true);
+  }
+}
+
+async function exportScheduleCSV() {
+  try {
+    const res = await API.getSchedules();
+    if (!res || !res.data || res.data.length === 0) {
+      showToast("No schedules available to export.", true);
+      return;
+    }
+
+    const headers = ["ID", "Subject Code", "Subject Title", "Section", "Program", "Faculty", "Room", "Day", "Start Time", "End Time", "Status"];
+    const rows = res.data.map(s => [
+      s.id,
+      `"${(s.subject_code || '').replace(/"/g, '""')}"`,
+      `"${(s.subject_title || '').replace(/"/g, '""')}"`,
+      `"${(s.section_name || '').replace(/"/g, '""')}"`,
+      `"${(s.program || '').replace(/"/g, '""')}"`,
+      `"${(s.faculty_name || '').replace(/"/g, '""')}"`,
+      `"${(s.room_code || '').replace(/"/g, '""')}"`,
+      s.day_of_week,
+      s.start_time,
+      s.end_time,
+      s.status || 'PUBLISHED'
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `NEXUS_Schedules_Backup_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Schedule CSV exported successfully!");
+  } catch (e) {
+    showToast("Failed to export schedules CSV: " + e.message, true);
+  }
+}
+</script>
+{% endblock %}
