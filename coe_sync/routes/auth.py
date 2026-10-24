@@ -187,7 +187,7 @@ def login():
                 {
                     "status": "success",
                     "message": "Login successful",
-                    "redirect": "/schedules" if user.role == "STUDENT" else "/dashboard",
+                    "redirect": "/schedules" if normalize_role(user.role) in ["STUDENT", "FACULTY"] else "/dashboard",
                     "role": user.role,
                     "user": user.to_dict(),
                     "user_role": user.role,

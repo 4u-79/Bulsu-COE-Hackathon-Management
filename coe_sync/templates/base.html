@@ -28,10 +28,13 @@
       <div class="sidebar-section-label">WORKSPACE</div>
 
       <nav class="sidebar-nav">
+        <!-- Dashboard link: Visible to Dean, Chair, Admin, and Student (strictly hidden for Faculty) -->
+        {% if session.get('role') not in ['FACULTY', 'FCLTY_DEPT'] and active_role not in ['FACULTY', 'FCLTY_DEPT'] %}
         <a href="/" class="sidebar-link {% if active_page == 'dashboard' %}active{% endif %}" id="nav-dashboard">
           <svg class="sidebar-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
           <span>Dashboard</span>
         </a>
+        {% endif %}
         <a href="/schedules" class="sidebar-link {% if active_page == 'schedules' %}active{% endif %}" id="nav-schedules">
           <svg class="sidebar-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span>Schedules</span>
@@ -165,75 +168,32 @@
             <span id="requests-inbox-text">🔔 0 Requests</span>
           </button>
 
-          <!-- Interactive Role Switcher Profile Pill -->
-          <div class="role-profile-pill" id="user-profile-pill" title="Click to Switch Role Context">
+          <!-- User Profile Pill (Authenticated MySQL Session) -->
+          <div class="role-profile-pill" id="user-profile-pill" title="User Profile">
             <div class="role-profile-info">
               <div class="role-profile-name" id="profile-display-name">
-                {% if active_role == 'DEAN' %}Dr. College Dean{% elif active_role == 'ADMIN' %}Administrator{% elif active_role == 'FACULTY' %}Engr. Tullao{% elif active_role == 'STUDENT' %}MEE - 1A{% else %}Engr. Arceta ({{ session.get('active_program') or session.get('program') or 'MEE' }}){% endif %}
+                {{ session.get('username') or 'User' }}
               </div>
               <div class="role-profile-subtitle" id="profile-display-role">
-                {% if active_role == 'DEAN' %}College Dean{% elif active_role == 'ADMIN' %}Global Admin{% elif active_role == 'FACULTY' %}Faculty Member{% elif active_role == 'STUDENT' %}Student{% else %}Program Chair{% endif %}
+                {% if active_role == 'DEAN' %}College Dean{% elif active_role == 'ADMIN' %}Administrator{% elif active_role in ['FACULTY', 'FCLTY_DEPT'] %}Faculty Member{% elif active_role in ['STUDENT', 'STDN_MYR'] %}Student ({{ session.get('program') or 'MEE' }}){% else %}Program Chair ({{ session.get('active_program') or session.get('program') or 'MEE' }}){% endif %}
               </div>
             </div>
-            <div class="role-profile-avatar {% if active_role == 'DEAN' %}avatar-dean{% elif active_role == 'ADMIN' %}avatar-admin{% elif active_role == 'FACULTY' %}avatar-faculty{% elif active_role == 'STUDENT' %}avatar-student{% else %}avatar-chair{% endif %}" id="profile-avatar-circle">
-              {% if active_role == 'DEAN' %}DN{% elif active_role == 'ADMIN' %}AD{% elif active_role == 'FACULTY' %}AT{% elif active_role == 'STUDENT' %}1A{% else %}EA{% endif %}
+            <div class="role-profile-avatar {% if active_role == 'DEAN' %}avatar-dean{% elif active_role == 'ADMIN' %}avatar-admin{% elif active_role in ['FACULTY', 'FCLTY_DEPT'] %}avatar-faculty{% elif active_role in ['STUDENT', 'STDN_MYR'] %}avatar-student{% else %}avatar-chair{% endif %}" id="profile-avatar-circle">
+              {% if active_role == 'DEAN' %}DN{% elif active_role == 'ADMIN' %}AD{% elif active_role in ['FACULTY', 'FCLTY_DEPT'] %}FC{% elif active_role in ['STUDENT', 'STDN_MYR'] %}ST{% else %}CH{% endif %}
             </div>
 
-            <!-- Role Impersonator Dropdown Menu -->
+            <!-- User Account Menu -->
             <div class="role-dropdown-menu" id="role-dropdown-menu">
-              <div class="role-dropdown-header">Switch Role &amp; Program:</div>
-              <div class="role-dropdown-item {% if active_role == 'DEAN' %}active{% endif %}" data-role="DEAN" data-program="ALL">
-                <span>🏛️ College Dean (COE All)</span>
-                <span class="badge-count" style="background:#701A75; color:#fff;">DEAN</span>
+              <div class="role-dropdown-header">Active Account:</div>
+              <div style="padding: 10px 14px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border-light);">
+                <div style="font-weight: 700; color: var(--text-dark); font-size: 13px;">{{ session.get('username') }}</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                  Role: <strong>{{ session.get('role') }}</strong>
+                  {% if session.get('program') %}&bull; Dept: <strong>{{ session.get('program') }}</strong>{% endif %}
+                </div>
               </div>
-              <div class="role-dropdown-item {% if active_role == 'ADMIN' %}active{% endif %}" data-role="ADMIN" data-program="ALL">
-                <span>🛡️ Global Admin (All Programs)</span>
-                <span class="badge-count" style="background:#4B5563; color:#fff;">ALL</span>
-              </div>
-              <div class="role-dropdown-item {% if active_role == 'CHAIR' and (session.get('active_program') == 'MEE' or not session.get('active_program')) %}active{% endif %}" data-role="CHAIR" data-program="MEE">
-                <span>🎓 Program Chair (MEE)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">MEE</span>
-              </div>
-              <div class="role-dropdown-item" data-role="CHAIR" data-program="CE">
-                <span>🎓 Program Chair (CE)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">CE</span>
-              </div>
-              <div class="role-dropdown-item" data-role="CHAIR" data-program="CPE">
-                <span>🎓 Program Chair (CPE)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">CPE</span>
-              </div>
-              <div class="role-dropdown-item" data-role="CHAIR" data-program="EE">
-                <span>🎓 Program Chair (EE)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">EE</span>
-              </div>
-              <div class="role-dropdown-item" data-role="CHAIR" data-program="ECE">
-                <span>🎓 Program Chair (ECE)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">ECE</span>
-              </div>
-              <div class="role-dropdown-item" data-role="CHAIR" data-program="IE">
-                <span>🎓 Program Chair (IE)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">IE</span>
-              </div>
-              <div class="role-dropdown-item" data-role="CHAIR" data-program="MFGE">
-                <span>🎓 Program Chair (MFGE)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">MFGE</span>
-              </div>
-              <div class="role-dropdown-item" data-role="CHAIR" data-program="ME">
-                <span>🎓 Program Chair (ME)</span>
-                <span class="badge-count" style="background:#6E1717; color:#fff;">ME</span>
-              </div>
-              <div class="role-dropdown-divider"></div>
-              <div class="role-dropdown-item {% if active_role == 'FACULTY' %}active{% endif %}" data-role="FACULTY" data-program="MEE" data-reference-id="109">
-                <span>👨‍🏫 Faculty (Engr. Tullao)</span>
-                <span class="badge-count" style="background:#1E56C5; color:#fff;">MEE</span>
-              </div>
-              <div class="role-dropdown-item {% if active_role == 'STUDENT' %}active{% endif %}" data-role="STUDENT" data-program="MEE" data-reference-id="81">
-                <span>🎒 Student (MEE - 1A)</span>
-                <span class="badge-count" style="background:#D97706; color:#fff;">1A</span>
-              </div>
-              <div class="role-dropdown-divider"></div>
               <a href="/settings" class="role-dropdown-item" style="color: var(--bulsu-maroon); text-decoration: none;">
-                <span>⚙️ System Settings</span>
+                <span>⚙️ Account Settings</span>
               </a>
               <a href="/logout" class="role-dropdown-item" style="color: #DC2626; text-decoration: none;">
                 <span>🚪 Sign Out</span>

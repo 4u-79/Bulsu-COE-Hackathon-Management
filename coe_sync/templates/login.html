@@ -343,46 +343,9 @@
     </div>
 
     <div class="login-body-content">
-      <!-- Default Credentials Notice Banner (Controlled by Feature Flag SHOW_DEMO_CREDENTIALS) -->
+      <!-- Credentials Container (Feature Flag Compatible) -->
       {% if show_demo_credentials %}
-      <div id="demo-credentials-badge" class="credentials-callout">
-        <div class="credentials-callout-header" id="demo-callout-toggle" style="cursor: pointer;" title="Click to collapse or expand demo credentials">
-          <span class="credentials-callout-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            Demo Login Credentials
-          </span>
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="credentials-tag" id="demo-status-tag">Default PW: nexus2026</span>
-            <span id="demo-collapse-icon" style="font-size: 11px; color: #92400E; user-select: none;">▾</span>
-          </div>
-        </div>
-        <div id="demo-callout-content">
-          <ul class="credentials-list">
-            <li><span>Primary Chair:</span> <strong id="demo-active-role-label">Engr. Tullao (MEE)</strong></li>
-            <li><span>Username:</span> <strong id="demo-chair-user">CHAIR-ATullao</strong></li>
-            <li><span>Password:</span> <strong id="demo-chair-pw">nexus2026</strong></li>
-          </ul>
-          <button type="button" id="btn-autofill-chair" class="btn-autofill" style="margin-bottom: 8px;">
-            ⚡ 1-Click Auto-Fill Program Chair (CHAIR-ATullao)
-          </button>
-
-          <div style="margin: 8px 0 4px 0; font-size: 11px; font-weight: 700; color: #92400E;">Quick-Fill Authoritative NEXUS 2.0 Accounts:</div>
-          <div class="role-pills-row" id="demo-role-pills">
-            <button type="button" class="btn-role-pill" data-role="dean" data-user="DEAN-AAlba" data-pw="nexus2026" style="font-weight:700;">Dean (DEAN-AAlba)</button>
-            <button type="button" class="btn-role-pill" data-role="admin" data-user="admin" data-pw="nexus2026" style="font-weight:700;">Admin (admin)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-ATullao" data-pw="nexus2026" style="font-weight:700;">Chair (CHAIR-ATullao - MEE)</button>
-            <button type="button" class="btn-role-pill" data-role="faculty" data-user="FAC-KBUGAYONG" data-pw="nexus2026" style="font-weight:700;">Faculty (FAC-KBUGAYONG)</button>
-            <button type="button" class="btn-role-pill" data-role="student" data-user="SMIDeJesus" data-pw="nexus2026" style="font-weight:700;">Student (SMIDeJesus - MEE 1A)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-RGabrillo" data-pw="nexus2026">Chair (CE)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-MVillena" data-pw="nexus2026">Chair (CPE)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-RCastro" data-pw="nexus2026">Chair (EE)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-ALacara" data-pw="nexus2026">Chair (ECE)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-JBañez" data-pw="nexus2026">Chair (IE)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-JRobles" data-pw="nexus2026">Chair (MFGE)</button>
-            <button type="button" class="btn-role-pill" data-role="chair" data-user="CHAIR-ABernardo" data-pw="nexus2026">Chair (ME)</button>
-          </div>
-        </div>
-      </div>
+      <div id="demo-credentials-badge" style="display:none;"></div>
       {% endif %}
 
       <!-- Feedback Alert -->
@@ -393,7 +356,7 @@
         <div class="form-group">
           <label class="form-label" for="inp-username">Username or ID</label>
           <div class="input-wrap">
-            <input type="text" id="inp-username" class="login-input" placeholder="e.g. chair_cpe" required autocomplete="username">
+            <input type="text" id="inp-username" class="login-input" placeholder="Enter username (e.g. DEAN-AAlba, CHAIR-ATullao)" required autocomplete="username">
           </div>
         </div>
 
@@ -522,24 +485,6 @@
           btnTogglePw.textContent = isPw ? "Hide" : "Show";
         });
       }
-
-      // Autofill Program Chair with live DB credentials
-      if (btnAutofill) {
-        btnAutofill.addEventListener("click", () => {
-          inpUser.value = activeDemoAccounts.chair.username;
-          inpPw.value = activeDemoAccounts.chair.password;
-          inpPw.type = "password";
-          if (btnTogglePw) btnTogglePw.textContent = "Show";
-        });
-      }
-
-      // Quick-fill other demo accounts with live DB credentials
-      document.querySelectorAll(".btn-role-pill").forEach(btn => {
-        btn.addEventListener("click", () => {
-          inpUser.value = btn.dataset.user;
-          inpPw.value = btn.dataset.pw;
-        });
-      });
 
       // Submit Login
       formLogin.addEventListener("submit", async (e) => {

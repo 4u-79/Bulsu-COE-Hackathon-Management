@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, session
 from models import db, Schedule, Section, Faculty, Room, RescheduleRequest, InterDepartmentRequest, AuditLog
 from services.conflict_detector import validate_schedule_slot, parse_time, find_alternatives
-from routes.auth import require_roles, get_effective_role, get_effective_reference_id, get_effective_program, login_required
+from routes.auth import require_roles, get_effective_role, get_effective_reference_id, get_effective_program, login_required, normalize_role
 
 reschedule_bp = Blueprint("reschedule", __name__)
 
@@ -84,13 +84,13 @@ def submit_reschedule_request():
     if not schedule:
         return jsonify({"error": f"Schedule #{schedule_id} not found."}), 404
 
-    effective_role = get_effective_role()
+    effective_role = normalize_role(get_effective_role())
     effective_ref_id = get_effective_reference_id()
 
     # Validate section/ownership based on role
     if effective_role == "STUDENT":
         if not effective_ref_id or schedule.section_id != effective_ref_id:
-            auth_role = session.get("role")
+            auth_role = normalize_role(session.get("role"))
             if auth_role not in ["CHAIR", "ADMIN"]:
                 return (
                     jsonify({"error": "Unauthorized: You can only request reschedule for classes in your section."}),
@@ -98,7 +98,7 @@ def submit_reschedule_request():
                 )
     elif effective_role == "FACULTY":
         if not effective_ref_id or schedule.faculty_id != effective_ref_id:
-            auth_role = session.get("role")
+            auth_role = normalize_role(session.get("role"))
             if auth_role not in ["CHAIR", "ADMIN"]:
                 return (
                     jsonify({"error": "Unauthorized: You can only request reschedule for your assigned classes."}),
@@ -199,7 +199,7 @@ def get_reschedule_requests():
     """
     purge_expired_reschedule_requests()
 
-    effective_role = get_effective_role()
+    effective_role = normalize_role(get_effective_role())
     effective_ref_id = get_effective_reference_id()
 
     query = RescheduleRequest.query
@@ -216,7 +216,7 @@ def get_reschedule_requests():
         query = query.join(Schedule, RescheduleRequest.schedule_id == Schedule.id)
         if effective_ref_id:
             query = query.filter(Schedule.faculty_id == effective_ref_id)
-    elif effective_role in {"CHAIR", "ADMIN"}:
+    elif effective_role in {"CHAIR", "ADMIN", "DEAN"}:
         # Allowed to view all or filtered by status
         pass
 
@@ -255,7 +255,7 @@ def faculty_review_reschedule(request_id: int):
         )
 
     # Enforce faculty assignment verification (fails closed if unassigned or mismatched)
-    effective_role = get_effective_role()
+    effective_role = normalize_role(get_effective_role())
     effective_ref_id = get_effective_reference_id()
     if effective_role == "FACULTY":
         if not effective_ref_id or not req_obj.schedule or req_obj.schedule.faculty_id != effective_ref_id:
@@ -642,17 +642,18 @@ def get_pending_requests_summary():
     Returns counts of pending inter-department and reschedule requests for notification bell.
     """
     purge_expired_reschedule_requests()
-    effective_role = get_effective_role()
+    effective_role = normalize_role(get_effective_role())
     effective_prog = get_effective_program()
+    ref_id = session.get("active_reference_id") or session.get("reference_id")
 
     reschedule_q = RescheduleRequest.query.filter(
         RescheduleRequest.status.in_(["PENDING", "PENDING_FACULTY", "PENDING_CHAIR"])
     )
-    if effective_role == "STUDENT" and session.get("reference_id"):
-        reschedule_q = reschedule_q.filter(RescheduleRequest.student_section_id == session.get("reference_id"))
-    elif effective_role == "FACULTY" and session.get("reference_id"):
+    if effective_role == "STUDENT" and ref_id:
+        reschedule_q = reschedule_q.filter(RescheduleRequest.student_section_id == ref_id)
+    elif effective_role == "FACULTY" and ref_id:
         reschedule_q = reschedule_q.join(Schedule, RescheduleRequest.schedule_id == Schedule.id).filter(
-            Schedule.faculty_id == session.get("reference_id")
+            Schedule.faculty_id == ref_id
         )
 
     reschedule_count = reschedule_q.count()

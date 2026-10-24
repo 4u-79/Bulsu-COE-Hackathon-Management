@@ -36,9 +36,10 @@ def logout():
 @views_bp.route("/dashboard")
 @login_required
 def dashboard():
-    """Render Executive Dashboard. Students are strictly redirected to Schedules view."""
+    """Render Executive Dashboard. Students and Faculty are strictly redirected to Schedules view."""
     from routes.auth import normalize_role
-    if normalize_role(get_effective_role()) == "STUDENT":
+    norm_role = normalize_role(get_effective_role())
+    if norm_role in ["STUDENT", "FACULTY"]:
         return redirect(url_for("views.schedules"))
 
     return render_template(
