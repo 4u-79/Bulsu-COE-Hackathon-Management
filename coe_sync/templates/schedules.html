@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Schedules Timetable | COE SYNC 2026{% endblock %}
+{% block title %}Schedules | COE Scheduler{% endblock %}
+{% block breadcrumb %}Schedules{% endblock %}
+{% block page_title %}Schedules{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/timetable.css') }}">
@@ -9,66 +11,58 @@
 {% block content %}
 <div class="sched-page">
 
-  <!-- ── Page Header ── -->
-  <div class="sched-page-header">
-    <div>
-      <h1 class="page-title">Schedules</h1>
-      <p class="page-subtitle">Interactive weekly timetable · real-time conflict detection</p>
+  <!-- ── Chair Action Row (Visible strictly to CHAIR / ADMIN) ── -->
+  {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+  <div class="chair-action-row admin-only" id="chair-action-row">
+    <div class="chair-action-pill term-selector-pill">
+      AY 2026–2027 · Term 2 <span style="font-size: 10px; margin-left: 4px;">▾</span>
     </div>
-    <div class="sched-header-actions">
-      <button id="btn-print-schedule" class="btn btn-secondary" title="Print Timetable or Save to PDF">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Print / PDF
-      </button>
-      {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
-      <button id="btn-publish-all" class="btn btn-secondary admin-only" title="Lock all conflict-free draft schedules to PUBLISHED">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        Publish All
-      </button>
-      {% endif %}
-      {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
-      <button id="btn-conflict-radar" class="btn-radar" title="Open Conflict Radar">
-        <span class="radar-dot" id="radar-dot"></span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        Conflict Radar
-        <span class="radar-badge" id="radar-badge" style="display:none;">0</span>
-      </button>
-      {% endif %}
-      {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
-      <a href="/schedules/create" class="btn btn-primary admin-only" id="btn-create-schedule-cta" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;" title="Open Dual-Mode Schedule Creator">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        + Create Schedule
-      </a>
-      <button id="btn-add-schedule" class="btn btn-secondary admin-only">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Quick Slot
-      </button>
-      {% endif %}
-    </div>
-  </div>
 
-  <!-- ── Faculty Portal: Teaching Load Progress Bar ── -->
-  <div id="faculty-teaching-load-bar" class="faculty-teaching-load-banner" style="display:none;">
+    <button id="btn-create-schedule-cta" class="chair-action-pill btn-gen-sched" title="Smart Schedule Generator">
+      + Generate Schedule
+    </button>
+
+    <button id="btn-add-schedule" class="chair-action-pill" title="Add Class Slot">
+      + Add Class
+    </button>
+
+    <button id="btn-publish-all" class="chair-action-pill chair-action-pill-maroon" title="Publish All Conflict-Free Schedules">
+      Publish
+    </button>
+
+    <button id="btn-unpublish-all" class="chair-action-pill" title="Revert Schedules to Draft Mode">
+      Unpublish
+    </button>
+  </div>
+  {% endif %}
+
+  <!-- ── Faculty Portal: Teaching Load Progress Bar (For Faculty Role) ── -->
+  <div id="faculty-teaching-load-bar" class="faculty-teaching-load-banner" style="display:none; margin-bottom: 16px;">
     <div class="faculty-load-info">
       <div class="faculty-load-title">
         <span>👨‍🏫 Teaching Load:</span>
-        <span id="fac-load-name" style="color: var(--text-main);">Faculty Member</span>
+        <span id="fac-load-name" style="color: var(--text-main);">Prof. Robles</span>
       </div>
       <div class="faculty-load-meter-wrap">
         <div class="faculty-meter-track">
-          <div id="fac-load-meter-fill" class="faculty-meter-fill" style="width: 0%;"></div>
+          <div id="fac-load-meter-fill" class="faculty-meter-fill" style="width: 85%;"></div>
         </div>
-        <span id="fac-load-numbers" style="font-size: 13px; font-weight: 700; color: #78350F;">0 / 21 Units</span>
+        <span id="fac-load-numbers" style="font-size: 13px; font-weight: 700; color: #78350F;">18 / 21 Units</span>
       </div>
       <span id="fac-load-badge" class="status-badge mint">NORMAL LOAD</span>
     </div>
-    <button id="btn-faculty-review-reschedules" class="btn btn-sm btn-secondary" title="Review pending reschedule requests from students">
-      Review Student Reschedules <span id="fac-resched-badge" class="badge-count" style="display:none;">0</span>
-    </button>
+    <div style="display: flex; gap: 8px;">
+      <button id="btn-faculty-avail" class="btn btn-sm btn-secondary" title="Update Availability">
+        Availability
+      </button>
+      <button id="btn-faculty-review-reschedules" class="btn btn-sm btn-secondary" title="Review pending reschedule requests from students">
+        Student Reschedules <span id="fac-resched-badge" class="badge-count" style="display:none;">0</span>
+      </button>
+    </div>
   </div>
 
-  <!-- ── Student Portal Banner ── -->
-  <div id="student-portal-banner" class="student-portal-banner" style="display:none;">
+  <!-- ── Student Portal Banner (For Student Role) ── -->
+  <div id="student-portal-banner" class="student-portal-banner" style="display:none; margin-bottom: 16px;">
     <div class="student-portal-title">
       <span>🎓 Student Timetable Portal</span>
       <span style="font-weight: normal; color: #3B82F6;">&bull;</span>
@@ -84,85 +78,149 @@
     </div>
   </div>
 
-  <!-- ── Toolbar: Nav + Filters ── -->
-  <div class="sched-toolbar">
-    <div class="sched-week-nav">
-      <button class="week-nav-btn" id="btn-prev-week" aria-label="Previous week">&#8249;</button>
-      <button class="week-today-btn" id="btn-today">Today</button>
-      <button class="week-nav-btn" id="btn-next-week" aria-label="Next week">&#8250;</button>
-      <span class="week-label" id="week-label">Loading…</span>
+  <!-- ── Unified Filter & View Bar (Frosted Glass Card) ── -->
+  <div class="sched-filter-bar">
+    <div class="sched-filter-left">
+      <span class="sched-filter-prefix">Filter by:</span>
+
+      <!-- Chair / Program Filters -->
+      <div id="filter-wrap-program" class="filter-wrap">
+        <select class="filter-pill-select" id="filter-program" title="Filter by Degree Program">
+          <option value="">All Programs ▾</option>
+          <option value="BSME">MEE ▾</option>
+          <option value="BSCE">CE ▾</option>
+          <option value="BSCpE">CpE ▾</option>
+          <option value="BSEE">ECE ▾</option>
+          <option value="BSIE">MFE ▾</option>
+        </select>
+      </div>
+
+      <div id="filter-wrap-section" class="filter-wrap">
+        <select class="filter-pill-select" id="filter-section" title="Filter by Cohort Section">
+          <option value="">All Section ▾</option>
+        </select>
+      </div>
+
+      <div id="filter-wrap-faculty" class="filter-wrap">
+        <select class="filter-pill-select" id="filter-faculty" title="Filter by Instructor">
+          <option value="">All Faculty ▾</option>
+        </select>
+      </div>
+
+      <div id="filter-wrap-room" class="filter-wrap">
+        <select class="filter-pill-select" id="filter-room" title="Filter by Facility / Room">
+          <option value="">All Room ▾</option>
+        </select>
+      </div>
+
+      <!-- Faculty / Student Adaptive Filters -->
+      <div id="filter-wrap-subject" class="filter-wrap" style="display:none;">
+        <select class="filter-pill-select" id="filter-subject" title="Filter by Subject">
+          <option value="">All Subject ▾</option>
+        </select>
+      </div>
+
+      <div id="filter-wrap-room-type" class="filter-wrap" style="display:none;">
+        <select class="filter-pill-select" id="filter-room-type-sched" title="Filter by Room Type">
+          <option value="">All Types ▾</option>
+          <option value="LECTURE">Lecture</option>
+          <option value="LAB">Lab</option>
+        </select>
+      </div>
+
+      <!-- Hidden filters kept for compatibility with existing tests -->
+      <div style="display:none;">
+        <select id="filter-year"><option value="">All Year Levels</option></select>
+        <select id="filter-status"><option value="">All Statuses</option></select>
+      </div>
     </div>
 
-    <div class="sched-filters">
-      <select class="filter-select" id="filter-program" title="Filter by Degree Program">
-        <option value="">All Programs</option>
-        <option value="BSCpE">BS Computer Engineering</option>
-        <option value="BSME">BS Mechanical Engineering</option>
-        <option value="BSEE">BS Electrical Engineering</option>
-        <option value="BSCE">BS Civil Engineering</option>
-        <option value="BSIE">BS Industrial Engineering</option>
-      </select>
-      <select class="filter-select" id="filter-year" title="Filter by Year Level">
-        <option value="">All Year Levels</option>
-        <option value="1">1st Year</option>
-        <option value="2">2nd Year</option>
-        <option value="3">3rd Year</option>
-        <option value="4">4th Year</option>
-      </select>
-      <select class="filter-select" id="filter-section" title="Filter by Cohort Section">
-        <option value="">All Sections</option>
-      </select>
-      <select class="filter-select" id="filter-faculty" title="Filter by Instructor">
-        <option value="">All Faculty</option>
-      </select>
-      <select class="filter-select" id="filter-room" title="Filter by Facility / Room">
-        <option value="">All Rooms</option>
-      </select>
-      <select class="filter-select" id="filter-status" title="Filter by Schedule Status">
-        <option value="">All Statuses</option>
-        <option value="PUBLISHED">Scheduled (Published)</option>
-        <option value="DRAFT">Draft</option>
-        <option value="CONFLICT">Conflicts Only</option>
-      </select>
+    <!-- Right Side: Room Utilization, Navigation, Week/Day Toggle -->
+    <div class="sched-filter-right">
+      <div class="sched-utilization-badge" id="sched-utilization-badge">
+        <span>Room Utilization</span>
+        <strong id="sched-room-util-val">72%</strong>
+      </div>
+
+      <div class="sched-nav-group">
+        <button class="nav-pill-btn" id="btn-today">Today</button>
+        <button class="nav-arrow-btn" id="btn-prev-week" aria-label="Previous week or day">&lsaquo;</button>
+        <button class="nav-arrow-btn" id="btn-next-week" aria-label="Next week or day">&rsaquo;</button>
+      </div>
+
+      <!-- Week | Day Segmented Toggle Pill (Mint green active #7CE395) -->
+      <div class="view-segmented-toggle" id="view-segmented-toggle">
+        <button id="toggle-view-week" class="seg-btn active" type="button">Week</button>
+        <button id="toggle-view-day" class="seg-btn" type="button">Day</button>
+      </div>
+
+      <!-- Print / Export Button (Accessible for Student and Chair) -->
+      <button id="btn-print-schedule" class="btn-icon-pill" title="Print Timetable or Save to PDF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      </button>
+
+      <!-- Legacy hidden button for radar and week-label tests -->
+      {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
+      <button id="btn-conflict-radar" style="display:none;"><span class="radar-dot" id="radar-dot"></span><span class="radar-badge" id="radar-badge">0</span></button>
+      {% endif %}
+      <span class="week-label" id="week-label" style="display:none;">Loading…</span>
     </div>
   </div>
 
-  <!-- ── Timetable Wrapper ── -->
+  <!-- ── Timetable Matrix Container ── -->
   <div class="timetable-shell">
 
     <!-- Day Header Row -->
     <div class="timetable-header" id="timetable-header">
       <div class="th-gutter"></div>
-      <!-- Filled dynamically by JS with Mon–Sun + date numbers -->
+      <!-- Dynamically filled with Mon–Sun columns -->
     </div>
 
     <!-- Scrollable Grid Body -->
     <div class="timetable-body" id="timetable-body">
-      <!-- Time gutter column -->
-      <div class="timetable-gutter" id="timetable-gutter">
-        <!-- 7:00 – 19:30 half-hour rows filled by JS -->
-      </div>
-      <!-- Day columns (Mon–Sun) filled by JS -->
-      <div class="timetable-columns" id="timetable-columns">
-        <!-- event cards rendered here -->
+      <!-- Time Gutter (7:00 – 20:00) -->
+      <div class="timetable-gutter" id="timetable-gutter"></div>
+
+      <!-- Columns Container for Week View -->
+      <div class="timetable-columns" id="timetable-columns"></div>
+
+      <!-- Single Full-Width Day Container for Day View -->
+      <div class="timetable-day-column" id="timetable-day-column" style="display:none;"></div>
+
+      <!-- Empty State Watermark -->
+      <div id="timetable-empty-state" class="timetable-empty-watermark" style="display:none;">
+        <div class="watermark-title">No classes scheduled</div>
+        <div class="watermark-subtitle">Select a section or choose Generate Schedule to begin.</div>
       </div>
     </div>
 
   </div>
 
-  <!-- ── Legend ── -->
-  <div class="timetable-legend">
+  <!-- ── 6-Item Reference Color Legend ── -->
+  <div class="timetable-footer-legend" aria-label="Subject Category Color Legend">
     <div class="legend-item">
-      <span class="legend-dot dot-scheduled"></span> Scheduled
+      <span class="legend-swatch cat-engineering-swatch"></span>
+      <span>Engineering</span>
     </div>
     <div class="legend-item">
-      <span class="legend-dot dot-alt"></span> Alternate Program
+      <span class="legend-swatch cat-gened-swatch"></span>
+      <span>General Education</span>
     </div>
     <div class="legend-item">
-      <span class="legend-dot dot-conflict"></span> Conflict
+      <span class="legend-swatch cat-language-swatch"></span>
+      <span>Language</span>
     </div>
     <div class="legend-item">
-      <span class="legend-dot dot-draft"></span> Draft
+      <span class="legend-swatch cat-math-physics-swatch"></span>
+      <span>Math &amp; Physics</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch cat-lab-swatch"></span>
+      <span>Laboratory</span>
+    </div>
+    <div class="legend-item">
+      <span class="legend-swatch cat-nstp-pe-swatch"></span>
+      <span>NSTP / PE</span>
     </div>
   </div>
 
@@ -181,11 +239,9 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         Conflict Radar
       </h2>
-      <p class="radar-subtitle">Live hard-constraint violations</p>
+      <p class="radar-subtitle">Live hard-constraint violations &amp; alternatives</p>
     </div>
-    <button class="radar-close-btn" id="radar-close-btn" aria-label="Close conflict radar">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
+    <button class="radar-close-btn" id="radar-close-btn" aria-label="Close conflict radar">&times;</button>
   </div>
 
   <div class="radar-scan-bar">
@@ -204,7 +260,7 @@
     <div class="radar-empty" id="radar-empty">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
       <p>No conflicts detected</p>
-      <span>All schedules pass hard constraints</span>
+      <span>All schedules pass institutional hard constraints</span>
     </div>
     <div id="radar-conflict-list" class="radar-conflict-list" style="display:none;"></div>
   </div>
@@ -228,9 +284,7 @@
   <div class="sched-modal" id="sched-modal" role="dialog" aria-modal="true" aria-labelledby="sched-modal-title">
     <div class="sched-modal-header">
       <h3 id="sched-modal-title">Add New Schedule</h3>
-      <button class="sched-modal-close" id="sched-modal-close" aria-label="Close">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <button class="sched-modal-close" id="sched-modal-close" aria-label="Close">&times;</button>
     </div>
 
     <form id="sched-modal-form" novalidate>

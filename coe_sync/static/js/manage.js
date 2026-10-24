@@ -150,9 +150,15 @@ function renderRoomsTable(rooms) {
         </span>
       </td>
       <td>
-        <div class="table-actions admin-only">
-          <button class="btn btn-secondary btn-sm" onclick="openEditModal('rooms', ${r.id})">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteEntity('rooms', ${r.id})">Delete</button>
+        <div class="table-actions">
+          <a href="/schedules?room=${r.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Room Timetable">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Schedule
+          </a>
+          <span class="admin-only" style="display:inline-flex; gap: 4px;">
+            <button class="btn btn-secondary btn-sm" onclick="openEditModal('rooms', ${r.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteEntity('rooms', ${r.id})">Delete</button>
+          </span>
         </div>
       </td>
     </tr>
@@ -206,9 +212,15 @@ function renderFacultyTable(faculty) {
           </button>
         </td>
         <td>
-          <div class="table-actions admin-only">
-            <button class="btn btn-secondary btn-sm" onclick="openEditModal('faculty', ${f.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteEntity('faculty', ${f.id})">Delete</button>
+          <div class="table-actions">
+            <a href="/schedules?faculty=${f.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Faculty Timetable">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Schedule
+            </a>
+            <span class="admin-only" style="display:inline-flex; gap: 4px;">
+              <button class="btn btn-secondary btn-sm" onclick="openEditModal('faculty', ${f.id})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteEntity('faculty', ${f.id})">Delete</button>
+            </span>
           </div>
         </td>
       </tr>
@@ -249,9 +261,15 @@ function renderSectionsTable(sections) {
       <td>Year ${s.year_level}</td>
       <td>${s.student_count} Students</td>
       <td>
-        <div class="table-actions admin-only">
-          <button class="btn btn-secondary btn-sm" onclick="openEditModal('sections', ${s.id})">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteEntity('sections', ${s.id})">Delete</button>
+        <div class="table-actions">
+          <a href="/schedules?section=${s.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Section Timetable">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Schedule
+          </a>
+          <span class="admin-only" style="display:inline-flex; gap: 4px;">
+            <button class="btn btn-secondary btn-sm" onclick="openEditModal('sections', ${s.id})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteEntity('sections', ${s.id})">Delete</button>
+          </span>
         </div>
       </td>
     </tr>

@@ -8,6 +8,9 @@ window.CURRENT_ROLE = "CHAIR";
 document.addEventListener("DOMContentLoaded", () => {
   initHealthCheck();
   initViewAsSelector();
+  initProfileSwitcher();
+  initConflictAlertPill();
+  updateGlobalAlertPill();
   initSeedButton();
 });
 
@@ -58,51 +61,155 @@ async function initHealthCheck() {
 }
 
 // -------------------------------------------------------------
-// Sticky "View As" Role Impersonator Selector
+// Conflict Alert Pill (#conflict-alert-pill)
+// -------------------------------------------------------------
+function initConflictAlertPill() {
+  const pill = document.getElementById("conflict-alert-pill");
+  if (!pill) return;
+
+  pill.addEventListener("click", () => {
+    if (typeof openRadar === "function") {
+      openRadar();
+    } else {
+      window.location.href = "/schedules?radar=open";
+    }
+  });
+}
+
+window.updateGlobalAlertPill = async function () {
+  const pillText = document.getElementById("conflict-alert-text");
+  if (!pillText) return;
+
+  try {
+    const res = await API.getAnalyticsSummary();
+    if (res && res.status === "success") {
+      const count = res.data?.unresolved_conflicts || 0;
+      pillText.textContent = `${count} Alert${count === 1 ? "" : "s"}`;
+    }
+  } catch (e) {
+    // Soft ignore
+  }
+};
+
+// -------------------------------------------------------------
+// Interactive Role Switcher Profile Pill & Dropdown
+// -------------------------------------------------------------
+function initProfileSwitcher() {
+  const pill = document.getElementById("user-profile-pill");
+  const menu = document.getElementById("role-dropdown-menu");
+  if (!pill || !menu) return;
+
+  pill.addEventListener("click", (e) => {
+    if (e.target.closest(".role-dropdown-menu")) return;
+    menu.classList.toggle("show");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!pill.contains(e.target)) {
+      menu.classList.remove("show");
+    }
+  });
+
+  menu.querySelectorAll(".role-dropdown-item[data-role]").forEach((item) => {
+    item.addEventListener("click", async () => {
+      const chosenRole = item.dataset.role;
+      menu.classList.remove("show");
+      await executeRoleSwitch(chosenRole);
+    });
+  });
+}
+
+function updateProfilePillUI(role) {
+  const nameEl = document.getElementById("profile-display-name");
+  const roleEl = document.getElementById("profile-display-role");
+  const avatarEl = document.getElementById("profile-avatar-circle");
+  if (!nameEl || !roleEl || !avatarEl) return;
+
+  avatarEl.classList.remove("avatar-chair", "avatar-faculty", "avatar-student");
+
+  if (role === "FACULTY") {
+    nameEl.textContent = "Prof. Robles";
+    roleEl.textContent = "Faculty Member";
+    avatarEl.textContent = "PR";
+    avatarEl.classList.add("avatar-faculty");
+  } else if (role === "STUDENT") {
+    nameEl.textContent = "BSMEE-1A";
+    roleEl.textContent = "Student";
+    avatarEl.textContent = "1A";
+    avatarEl.classList.add("avatar-student");
+  } else {
+    nameEl.textContent = "Engr. Arceta";
+    roleEl.textContent = "Program Chair";
+    avatarEl.textContent = "EA";
+    avatarEl.classList.add("avatar-chair");
+  }
+
+  // Update active state in dropdown
+  const menu = document.getElementById("role-dropdown-menu");
+  if (menu) {
+    menu.querySelectorAll(".role-dropdown-item[data-role]").forEach((it) => {
+      it.classList.toggle("active", it.dataset.role === role);
+    });
+  }
+}
+
+async function executeRoleSwitch(chosenRole) {
+  try {
+    const result = await API.impersonate(chosenRole);
+    window.CURRENT_ROLE = chosenRole;
+    updateProfilePillUI(chosenRole);
+    applyRolePermissions(chosenRole);
+
+    const selector = document.getElementById("view-as-select");
+    if (selector) selector.value = chosenRole;
+
+    showToast(result.message || `Switched view to ${chosenRole}`);
+
+    await updateChairStatusUI();
+    await updateReschedulesBadge();
+    await updateGlobalAlertPill();
+
+    window.dispatchEvent(new CustomEvent("roleChanged", { detail: { role: chosenRole } }));
+  } catch (err) {
+    showToast(err.message || "Failed to switch role", true);
+  }
+}
+
+// -------------------------------------------------------------
+// Sticky "View As" Role Impersonator Selector (Backwards Compatibility)
 // -------------------------------------------------------------
 async function initViewAsSelector() {
   const selector = document.getElementById("view-as-select");
-  if (!selector) return;
 
-  // Retrieve existing session role
   try {
     const sessionInfo = await API.getCurrentSession();
     if (sessionInfo) {
       window.AUTHENTIC_USER_ROLE = sessionInfo.role;
+      const effectiveRole = sessionInfo.active_role || sessionInfo.role;
+      window.CURRENT_ROLE = effectiveRole;
+      updateProfilePillUI(effectiveRole);
+
       if (sessionInfo.role !== "CHAIR" && sessionInfo.role !== "ADMIN") {
         const container = document.getElementById("view-as-container");
         if (container) container.remove();
-        applyRolePermissions(sessionInfo.active_role || sessionInfo.role);
+        applyRolePermissions(effectiveRole);
         return;
       }
-      if (sessionInfo.active_role) {
-        window.CURRENT_ROLE = sessionInfo.active_role;
-        selector.value = sessionInfo.active_role;
-        applyRolePermissions(sessionInfo.active_role);
+
+      if (selector) {
+        selector.value = effectiveRole;
       }
+      applyRolePermissions(effectiveRole);
     }
   } catch (e) {
     console.warn("Could not fetch session info:", e);
   }
 
-  selector.addEventListener("change", async (e) => {
-    const chosenRole = e.target.value;
-    try {
-      const result = await API.impersonate(chosenRole);
-      window.CURRENT_ROLE = chosenRole;
-      applyRolePermissions(chosenRole);
-      showToast(result.message || `Switched view to ${chosenRole}`);
-
-      // Update Chair status visibility and reschedules for new role
-      await updateChairStatusUI();
-      await updateReschedulesBadge();
-
-      // Dispatch event so individual page views (manage, dashboard, schedules) can refresh
-      window.dispatchEvent(new CustomEvent("roleChanged", { detail: { role: chosenRole } }));
-    } catch (err) {
-      showToast(err.message || "Failed to switch role", true);
-    }
-  });
+  if (selector) {
+    selector.addEventListener("change", async (e) => {
+      await executeRoleSwitch(e.target.value);
+    });
+  }
 }
 
 /**
@@ -112,6 +219,8 @@ window.applyRolePermissions = function (role) {
   const isAdminOrChair = role === "CHAIR" || role === "ADMIN";
   const isStudent = role === "STUDENT";
   const isFaculty = role === "FACULTY";
+
+  updateProfilePillUI(role);
 
   // Admin/Chair only mutation controls
   const adminElements = document.querySelectorAll(".admin-only");
@@ -125,8 +234,6 @@ window.applyRolePermissions = function (role) {
   });
 
   // Strict Student View Simplification:
-  // For STUDENT users, hide Dashboard, Rooms, Faculty, Sections, Subjects, Conflict Radar, and Reports.
-  // The student sidebar must strictly display: Brand, Schedules, Settings, Logout.
   const nonStudentElements = document.querySelectorAll(
     ".non-student, #nav-dashboard, #nav-reports, #nav-conflict-radar, #btn-conflict-radar, #nav-rooms, #nav-faculty, #nav-sections, #nav-subjects, a[href^='/manage']"
   );

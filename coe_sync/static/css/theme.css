@@ -1,99 +1,116 @@
 /**
  * COE SYNC 2026 - Centralized Design Tokens (theme.css)
- * Easily customized & swappable variables for layout, typography, and palette.
+ * BulSU COE Maroon & Rose-Glassmorphism Design System
  */
 
 :root {
   /* ==========================================================
      Sidebar Palette (BulSU College of Engineering Maroon)
      ========================================================== */
-  --sidebar-bg: #4A1521;
-  --sidebar-bg-dark: #3B111A;
-  --sidebar-hover: rgba(255, 255, 255, 0.06);
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-text: #E5E7EB;
-  --sidebar-text-muted: #D1D5DB;
-  --sidebar-width: 250px;
+  --sidebar-bg: #6E1717;
+  --sidebar-bg-mid: #4A0D0D;
+  --sidebar-bg-dark: #350707;
+  --sidebar-gradient: linear-gradient(180deg, #6E1717 0%, #4A0D0D 60%, #350707 100%);
+  --sidebar-hover: rgba(255, 255, 255, 0.12);
+  --sidebar-border: rgba(255, 255, 255, 0.14);
+  --sidebar-text: #FFFFFF;
+  --sidebar-text-muted: rgba(255, 255, 255, 0.72);
+  --sidebar-width: 260px;
 
-  /* Active Navigation Pill (Warm Gold / Amber) */
-  --nav-pill-bg: #F5C26B;
-  --nav-pill-bg-hover: #E8A948;
-  --nav-pill-text: #260A10;
+  /* Active Navigation Pill (Crisp Solid White with Deep Maroon text) */
+  --nav-pill-bg: #FFFFFF;
+  --nav-pill-bg-hover: #FFFFFF;
+  --nav-pill-text: #5A1010;
 
   /* ==========================================================
-     Main Application Surface (Warm Light Gray & Crisp White)
+     Main Application Canvas & Glassmorphic Surfaces
      ========================================================== */
-  --bg-page: #F9F9F8;
-  --bg-surface: #FFFFFF;
-  --bg-surface-alt: #F3F4F6;
-  --bg-hover: #F8FAFC;
+  --canvas-gradient: linear-gradient(135deg, #F7D6D8 0%, #F1D8DC 50%, #E5D4D8 100%);
+  --bg-page: #F3D7DA;
+  --bg-surface: rgba(255, 255, 255, 0.82);
+  --bg-surface-glass: rgba(255, 255, 255, 0.78);
+  --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-surface-alt: rgba(255, 255, 255, 0.65);
+  --bg-hover: rgba(255, 255, 255, 0.92);
+
+  /* Glassmorphism Tokens */
+  --glass-blur: 14px;
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --glass-shadow: 0 8px 24px rgba(90, 16, 16, 0.08);
+  --glass-card-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
 
   /* Text & Typography */
-  --text-main: #111827;
+  --text-main: #1F2937;
+  --text-dark: #111827;
   --text-secondary: #4B5563;
   --text-muted: #6B7280;
   --text-light: #9CA3AF;
+  --text-maroon: #6E1717;
 
   /* Borders & Dividers */
-  --border-light: #E5E7EB;
-  --border-subtle: #F3F4F6;
-  --border-focus: #F5C26B;
+  --border-light: rgba(255, 255, 255, 0.55);
+  --border-subtle: rgba(229, 231, 235, 0.8);
+  --border-focus: #6E1717;
 
   /* ==========================================================
-     Hero Banner & Vibrant Accents
+     6 Subject Category Colors (Reference Specification)
      ========================================================== */
-  --hero-gradient: linear-gradient(135deg, #8A2518 0%, #B84725 45%, #D96E2E 80%, #E89848 100%);
+  --cat-engineering: #1E56C5;      /* Royal Blue */
+  --cat-gened: #178352;            /* Forest Green */
+  --cat-language: #B31E43;         /* Crimson / Berry */
+  --cat-math-physics: #6D28D9;     /* Vivid Purple */
+  --cat-lab: #0F766E;              /* Deep Teal */
+  --cat-nstp-pe: #F59E0B;          /* Amber Gold (dark text) */
+
+  /* Active Segmented Toggle Mint Green */
+  --mint-active: #7CE395;
+  --mint-active-text: #1F2937;
+
+  /* Hero & Dark Accents */
+  --hero-gradient: linear-gradient(180deg, rgba(25, 10, 10, 0.55) 0%, rgba(25, 10, 10, 0.25) 50%, rgba(25, 10, 10, 0.65) 100%);
   --hero-text: #FFFFFF;
 
-  /* ==========================================================
-     Status & Event Card Colors (Wireframe 2 Color Codes)
-     ========================================================== */
-  /* Scheduled Event (Mint / Soft Teal) */
-  --event-scheduled-bg: #D1FAE5;
-  --event-scheduled-text: #065F46;
-  --event-scheduled-border: #A7F3D0;
-  --event-scheduled-indicator: #059669;
+  /* Status Colors */
+  --status-published: #059669;
+  --status-draft: #D97706;
+  --status-conflict: #B91C1C;
 
-  /* Alternate Program (Soft Rose / Pink) */
-  --event-alt-bg: #FFE4E6;
-  --event-alt-text: #9F1239;
-  --event-alt-border: #FECDD3;
-  --event-alt-indicator: #E11D48;
+  /* KPI Card Conflict Highlight */
+  --kpi-conflict-color: #B91C1C;
+  --kpi-conflict-bg: rgba(254, 242, 242, 0.9);
+  --kpi-conflict-border: rgba(248, 113, 113, 0.6);
 
-  /* Conflict State (Warm Amber with Strong Orange Border) */
+  /* Legacy Wireframe Compatibility */
+  --event-scheduled-bg: var(--cat-engineering);
+  --event-scheduled-text: #FFFFFF;
+  --event-scheduled-border: rgba(255, 255, 255, 0.3);
+  --event-scheduled-indicator: var(--cat-engineering);
+
+  --event-alt-bg: var(--cat-gened);
+  --event-alt-text: #FFFFFF;
+  --event-alt-border: rgba(255, 255, 255, 0.3);
+  --event-alt-indicator: var(--cat-gened);
+
   --event-conflict-bg: #FEF3C7;
   --event-conflict-text: #92400E;
   --event-conflict-border: #D97706;
   --event-conflict-indicator: #D97706;
 
-  /* KPI Card Conflict Highlight */
-  --kpi-conflict-bg: #FEF3C7;
-  --kpi-conflict-border: #F5C26B;
-  --kpi-conflict-text: #92400E;
-
-  /* Badges */
-  --badge-lecture-bg: #E0E7FF;
-  --badge-lecture-text: #3730A3;
-  --badge-lab-bg: #FCE7F3;
-  --badge-lab-text: #9D174D;
-
-  /* ==========================================================
-     Dimensions, Radii & Elevations
-     ========================================================== */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  /* Dimensions, Radii & Elevations */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
   --radius-pill: 9999px;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-  --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(90, 16, 16, 0.08);
+  --shadow-lg: 0 10px 25px rgba(90, 16, 16, 0.12);
+  --shadow-modal: 0 20px 40px rgba(0, 0, 0, 0.2);
 
-  /* Fonts */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -101,4 +118,3 @@
 .hidden {
   display: none !important;
 }
-

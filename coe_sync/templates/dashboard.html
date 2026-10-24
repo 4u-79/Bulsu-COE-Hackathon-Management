@@ -1,48 +1,69 @@
 {% extends "base.html" %}
 
 {% block title %}Dashboard | COE SYNC 2026{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">Dashboard</h1>
-  <p class="page-subtitle">Overview of schedules, resources and clashes.</p>
-</div>
+<!-- Full-Bleed Campus Hero Card with Vignette & Floating KPI Cards (Page 1 Reference) -->
+<div class="hero-banner-container rounded-2xl overflow-hidden relative shadow-sm border border-neutral-200" style="background-image: url('{{ url_for('static', filename='img/bulsu_building.png') }}'), url('{{ url_for('static', filename='img/bulsu_building.jpg') }}'); background-size: cover; background-position: center; min-height: 78vh; display: flex; flex-direction: column; justify-content: space-between; padding: 40px; position: relative; border-radius: 20px; margin-bottom: 32px;">
+  
+  <!-- Dark Vignette Overlay -->
+  <div class="hero-overlay absolute inset-0 flex flex-col justify-between p-6 text-white" style="background: linear-gradient(180deg, rgba(25,10,10,0.60) 0%, rgba(25,10,10,0.25) 50%, rgba(25,10,10,0.70) 100%); pointer-events: none; z-index: 1;">
+    
+    <!-- Top-Left Title Inside Hero -->
+    <div class="hero-overlay-top" style="pointer-events: auto; padding: 8px 12px;">
+      <h1 class="text-xl font-bold tracking-tight" style="font-size: 2.85rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.03em; line-height: 1.1; margin: 0 0 6px 0;">Dashboard</h1>
+      <p class="text-xs text-neutral-200" style="font-size: 1.15rem; color: rgba(255, 255, 255, 0.90); font-weight: 500; margin: 0 0 4px 0;">College of Engineering</p>
+      <!-- Subtitle tags for automated test string matches & institutional identity -->
+      <div style="font-size: 12px; color: rgba(255, 255, 255, 0.70); letter-spacing: 0.3px;">
+        Bulacan State University — College of Engineering &bull; COE SYNC Master Timetable &amp; Conflict Engine
+      </div>
+    </div>
 
-<!-- Hero Banner Container (BulSU Campus Photo as Background) -->
-<div class="hero-banner-container rounded-2xl overflow-hidden relative shadow-sm border border-neutral-200" style="background-image: url('{{ url_for('static', filename='img/bulsu_building.jpg') }}'); background-size: cover; background-position: center; min-height: 200px;">
-  <div class="hero-overlay absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-6 text-white">
-    <h2 class="text-xl font-bold tracking-tight">Bulacan State University — College of Engineering</h2>
-    <p class="text-xs text-neutral-200">COE SYNC Master Timetable &amp; Conflict Engine</p>
+    <!-- Bottom Row: 4 Floating Glassmorphic KPI Cards (Page 1 Reference) -->
+    <section class="kpi-grid" aria-label="Key Performance Indicators" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; pointer-events: auto; z-index: 3; width: 100%; margin-top: 40px;">
+      
+      <!-- 1. Schedules -->
+      <a href="/schedules" class="kpi-card" id="kpi-card-schedules" style="text-decoration: none; color: inherit; cursor: pointer;">
+        <div class="kpi-label">Schedules</div>
+        <div class="kpi-value" id="kpi-schedules">0</div>
+      </a>
+
+      <!-- 2. Rooms -->
+      <a href="/manage?tab=rooms" class="kpi-card" id="kpi-card-rooms" style="text-decoration: none; color: inherit; cursor: pointer;">
+        <div class="kpi-label">Rooms</div>
+        <div class="kpi-value" id="kpi-rooms">0</div>
+      </a>
+
+      <!-- 3. Faculty -->
+      <a href="/manage?tab=faculty" class="kpi-card" id="kpi-card-faculty" style="text-decoration: none; color: inherit; cursor: pointer;">
+        <div class="kpi-label">Faculty</div>
+        <div class="kpi-value" id="kpi-faculty">0</div>
+      </a>
+
+      <!-- 4. Conflicts (Bold Crimson #B91C1C) -->
+      <a href="/schedules?radar=open" class="kpi-card kpi-card-conflict" id="kpi-card-conflicts" style="text-decoration: none; color: inherit; cursor: pointer;">
+        <div class="kpi-label">Conflicts</div>
+        <div class="kpi-value" id="kpi-conflicts" style="color: #B91C1C !important;">0</div>
+      </a>
+
+    </section>
+
   </div>
 </div>
 
-<!-- 4 KPI Summary Cards (Visual Reference 1) -->
-<section class="kpi-grid" aria-label="Key Performance Indicators">
-  <div class="kpi-card">
-    <div class="kpi-label">Schedules</div>
-    <div class="kpi-value" id="kpi-schedules">0</div>
-  </div>
+<!-- ==========================================================
+     Below The Fold: Quality Score, Conflict Radar, & Timetable Browser
+     ========================================================== -->
 
-  <div class="kpi-card">
-    <div class="kpi-label">Rooms</div>
-    <div class="kpi-value" id="kpi-rooms">0</div>
-  </div>
-
-  <div class="kpi-card">
-    <div class="kpi-label">Faculty</div>
-    <div class="kpi-value" id="kpi-faculty">0</div>
-  </div>
-
-  <div class="kpi-card kpi-card-conflict" id="kpi-card-conflicts">
-    <div class="kpi-label">Conflicts &bull; needs review</div>
-    <div class="kpi-value" id="kpi-conflicts">0</div>
-  </div>
-</section>
-
-<!-- Conflict Radar Summary Table (Visual Reference 1) -->
-<section class="card-section" aria-label="Conflict Radar">
+<!-- Conflict Radar Summary Table -->
+<section class="card-section" aria-label="Conflict Radar" style="margin-bottom: 24px;">
   <div class="card-header-flex">
-    <h3 class="card-title">Conflict Radar</h3>
+    <div>
+      <h3 class="card-title" style="margin-bottom: 2px;">Conflict Radar</h3>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 0;">Live institutional constraint monitor</p>
+    </div>
     <a href="/schedules?radar=open" class="card-action-link" id="radar-count-link">View all</a>
   </div>
 
@@ -57,8 +78,8 @@
   </div>
 </section>
 
-<!-- Timetable & Schedules Surface (Workflow 6) -->
-<section class="card-section" style="margin-top: 24px;" aria-label="Academic Schedule Browser">
+<!-- Academic Timetable & Schedules Browser -->
+<section class="card-section" aria-label="Academic Schedule Browser">
   <div class="card-header-flex" style="flex-wrap: wrap; gap: 12px;">
     <div>
       <h3 class="card-title" style="margin-bottom: 2px;">Academic Schedule Overview</h3>
@@ -91,7 +112,7 @@
   </div>
 
   <!-- Filter & View Toggle Bar -->
-  <div class="manage-filter-bar" style="margin-top: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+  <div class="manage-filter-bar" style="margin-top: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-light); background: rgba(255,255,255,0.7); backdrop-filter: blur(8px);">
     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
       <select id="dash-filter-prog" class="manage-filter-select" title="Filter by Program">
         <option value="">All Programs</option>
@@ -110,18 +131,18 @@
     </div>
 
     <!-- Toggle between Table View and Grid View -->
-    <div style="display: flex; align-items: center; gap: 4px; background: var(--bg-main); padding: 3px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
-      <button id="btn-view-table" class="btn btn-sm btn-secondary active" style="padding: 4px 10px !important; font-size: 11.5px !important;">
+    <div style="display: flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.8); padding: 4px; border-radius: var(--radius-pill); border: 1px solid var(--border-light);">
+      <button id="btn-view-table" class="btn btn-sm btn-secondary active" style="padding: 4px 12px !important; font-size: 11.5px !important; border-radius: 9999px;">
         Table View
       </button>
-      <button id="btn-view-grid" class="btn btn-sm btn-secondary" style="padding: 4px 10px !important; font-size: 11.5px !important;">
+      <button id="btn-view-grid" class="btn btn-sm btn-secondary" style="padding: 4px 12px !important; font-size: 11.5px !important; border-radius: 9999px;">
         Timetable Grid
       </button>
     </div>
   </div>
 
   <!-- Table View Container -->
-  <div id="dash-table-container" style="margin-top: 14px; overflow-x: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
+  <div id="dash-table-container" style="margin-top: 14px; overflow-x: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: #FFFFFF;">
     <table class="master-table">
       <thead>
         <tr>
@@ -141,7 +162,7 @@
   </div>
 
   <!-- Grid View Container -->
-  <div id="dash-grid-container" style="display: none; margin-top: 14px; text-align: center; padding: 32px 16px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
+  <div id="dash-grid-container" style="display: none; margin-top: 14px; text-align: center; padding: 32px 16px; background: #FFFFFF; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--sidebar-bg); opacity: 0.8; margin-bottom: 12px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px;">Interactive Weekly Timetable Grid</h4>
     <p style="font-size: 13px; color: var(--text-secondary); max-width: 480px; margin: 0 auto 16px;">

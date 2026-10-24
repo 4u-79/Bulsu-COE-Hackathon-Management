@@ -13,45 +13,61 @@
 <body class="{% if session.get('role') == 'STUDENT' or active_role == 'STUDENT' %}student-portal non-student-omitted{% endif %}">
 
   <div class="app-shell">
-    <!-- Persistent Sidebar (Deep Maroon Palette from Wireframes 1 & 2) -->
+    <!-- Persistent Sidebar (BulSU COE Maroon Gradient) -->
     <aside class="sidebar" aria-label="Main Navigation">
       <div class="sidebar-brand">
-        <div class="sidebar-title">[COE SYNC 2026]</div>
-        <div class="sidebar-subtitle">BulSU College of Engineering</div>
+        <div class="brand-badge-box">
+          <span>COE</span>
+        </div>
+        <div class="brand-titles">
+          <div class="sidebar-title">COE Scheduler</div>
+          <div class="sidebar-subtitle">College of Engineering</div>
+        </div>
       </div>
+
+      <div class="sidebar-section-label">WORKSPACE</div>
 
       <nav class="sidebar-nav">
         {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
         <a href="/" class="sidebar-link non-student {% if active_page == 'dashboard' %}active{% endif %}" id="nav-dashboard">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
           <span>Dashboard</span>
         </a>
         {% endif %}
         <a href="/schedules" class="sidebar-link {% if active_page == 'schedules' %}active{% endif %}" id="nav-schedules">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           <span>Schedules</span>
         </a>
         {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
         <a href="/schedules/create" class="sidebar-link admin-only {% if active_page == 'create_schedule' %}active{% endif %}" id="nav-create-schedule">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           <span>+ Create Schedule</span>
         </a>
         {% endif %}
         {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
         <a href="/manage?tab=rooms" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'rooms' %}active{% endif %}" id="nav-rooms">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/><path d="M9 9h1M9 13h1M9 17h1M14 9h1M14 13h1M14 17h1"/></svg>
           <span>Rooms</span>
         </a>
         <a href="/manage?tab=faculty" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'faculty' %}active{% endif %}" id="nav-faculty">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span>Faculty</span>
         </a>
         <a href="/manage?tab=sections" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'sections' %}active{% endif %}" id="nav-sections">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           <span>Sections</span>
         </a>
         <a href="/manage?tab=subjects" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'subjects' %}active{% endif %}" id="nav-subjects">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           <span>Subjects</span>
         </a>
-        <a href="/reports" class="sidebar-link non-student {% if active_page == 'reports' %}active{% endif %}" id="nav-reports">
-          <span>Reports</span>
-        </a>
         <a href="/schedules?radar=open" class="sidebar-link non-student" id="nav-conflict-radar">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/><line x1="12" y1="12" x2="19" y2="5"/></svg>
           <span>Conflict Radar</span>
+        </a>
+        <a href="/reports" class="sidebar-link non-student {% if active_page == 'reports' %}active{% endif %}" id="nav-reports">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Analytics / Reports</span>
         </a>
         {% endif %}
       </nav>
@@ -60,9 +76,11 @@
 
       <div class="sidebar-footer">
         <a href="#" class="sidebar-link" id="btn-sidebar-settings" onclick="openCredentialsModal(); return false;">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
           <span>Settings</span>
         </a>
         <a href="/logout" class="sidebar-link" id="btn-sidebar-logout">
+          <svg class="sidebar-icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span>Logout</span>
         </a>
       </div>
@@ -70,25 +88,28 @@
 
     <!-- Main Content Area -->
     <div class="main-wrapper">
-      <!-- Sticky Top Bar with "View As" Role Impersonator -->
+      <!-- Top Bar with Breadcrumbs, Alert Pill, and Profile Role Impersonator -->
       <header class="top-bar">
         <div class="top-bar-left">
+          <div class="workspace-header-text">
+            <div class="workspace-breadcrumb">Workspace / <span id="breadcrumb-page-name">{% block breadcrumb %}{{ active_page|title }}{% endblock %}</span></div>
+            <h1 class="workspace-title" id="page-main-title">{% block page_title %}{{ active_page|title }}{% endblock %}</h1>
+          </div>
+
           <div id="health-badge" class="health-badge" style="display: none;">
             <span class="health-pulse"></span>
             <span id="health-text">Connecting...</span>
           </div>
 
           {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
-          <!-- Program Chair Active Status Widget (Visible only to Chair/Admin and Faculty; hidden from Students) -->
+          <!-- Program Chair Active Status Widget -->
           <div id="chair-status-widget" class="chair-status-container" style="display:none;">
-            <!-- Chair/Admin Toggle Switcher -->
             {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
             <button id="chair-status-toggle-btn" class="chair-status-toggle admin-only" title="Toggle Program Chair active availability status">
               <span class="status-dot active" id="chair-status-dot"></span>
               <span id="chair-status-label">Chair: Active</span>
             </button>
             {% endif %}
-            <!-- Faculty View-Only Badge -->
             <div id="faculty-chair-badge" class="chair-status-pill" style="display:none;" title="Current Program Chair Availability Status">
               <span class="status-dot active" id="fac-status-dot"></span>
               <span>Chair Status: <strong id="fac-status-val">Active</strong></span>
@@ -98,35 +119,76 @@
         </div>
 
         <div class="top-bar-right">
-          <!-- 2-Tier Reschedule Pipeline Button & Counter Badge -->
-          <button id="btn-header-reschedules" class="btn btn-secondary btn-sm" title="Student Reschedule Requests Pipeline">
-            <span>📋 Reschedules</span>
-            <span id="reschedule-count-badge" class="badge-count" style="display:none;">0</span>
+          <!-- Alert Pill (#conflict-alert-pill) -->
+          <button id="conflict-alert-pill" class="alert-pill" title="Active Conflicts & Alerts">
+            <span class="alert-dot"></span>
+            <span id="conflict-alert-text">1 Alert</span>
           </button>
 
-          <!-- Sticky "View As" Role Impersonator Dropdown (Strictly CHAIR or ADMIN only) -->
-          {% if session.get('role') in ['CHAIR', 'ADMIN'] %}
-          <div class="view-as-container" id="view-as-container" title="Presentation Pitch Bar: Instantly swap view context and UI permissions">
+          <!-- Interactive Role Switcher Profile Pill -->
+          <div class="role-profile-pill" id="user-profile-pill" title="Click to Switch Role Context">
+            <div class="role-profile-info">
+              <div class="role-profile-name" id="profile-display-name">
+                {% if active_role == 'FACULTY' %}Prof. Robles{% elif active_role == 'STUDENT' %}BSMEE-1A{% else %}Engr. Arceta{% endif %}
+              </div>
+              <div class="role-profile-subtitle" id="profile-display-role">
+                {% if active_role == 'FACULTY' %}Faculty Member{% elif active_role == 'STUDENT' %}Student{% else %}Program Chair{% endif %}
+              </div>
+            </div>
+            <div class="role-profile-avatar {% if active_role == 'FACULTY' %}avatar-faculty{% elif active_role == 'STUDENT' %}avatar-student{% else %}avatar-chair{% endif %}" id="profile-avatar-circle">
+              {% if active_role == 'FACULTY' %}PR{% elif active_role == 'STUDENT' %}1A{% else %}EA{% endif %}
+            </div>
+
+            <!-- Role Impersonator Dropdown Menu -->
+            <div class="role-dropdown-menu" id="role-dropdown-menu">
+              <div class="role-dropdown-header">View As:</div>
+              <div class="role-dropdown-item {% if active_role in ['CHAIR', 'ADMIN'] %}active{% endif %}" data-role="CHAIR">
+                <span>Program Chair</span>
+                <span class="badge-count" style="background:#6E1717; color:#fff;">EA</span>
+              </div>
+              <div class="role-dropdown-item {% if active_role == 'FACULTY' %}active{% endif %}" data-role="FACULTY">
+                <span>Faculty (Prof. Robles)</span>
+                <span class="badge-count" style="background:#1E56C5; color:#fff;">PR</span>
+              </div>
+              <div class="role-dropdown-item {% if active_role == 'STUDENT' %}active{% endif %}" data-role="STUDENT">
+                <span>Student (BSMEE-1A)</span>
+                <span class="badge-count" style="background:#D97706; color:#fff;">1A</span>
+              </div>
+              <div class="role-dropdown-divider"></div>
+              <a href="/logout" class="role-dropdown-item" style="color: #DC2626; text-decoration: none;">
+                <span>Sign Out</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              </a>
+            </div>
+          </div>
+
+          <!-- Hidden elements for existing tests and functions -->
+          {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+          <div class="view-as-container" id="view-as-container" style="display:none;" title="Legacy Impersonator">
             <span class="view-as-label">View As:</span>
             <select id="view-as-select" class="view-as-select">
               <option value="CHAIR" {% if active_role == 'CHAIR' %}selected{% endif %}>Program Chair</option>
-              <option value="FACULTY" {% if active_role == 'FACULTY' %}selected{% endif %}>Faculty (Prof. Santos)</option>
-              <option value="STUDENT" {% if active_role == 'STUDENT' %}selected{% endif %}>Student (CpE 2A)</option>
+              <option value="FACULTY" {% if active_role == 'FACULTY' %}selected{% endif %}>Faculty (Prof. Robles)</option>
+              <option value="STUDENT" {% if active_role == 'STUDENT' %}selected{% endif %}>Student (BSMEE-1A)</option>
             </select>
           </div>
           {% endif %}
 
+          <button id="btn-header-reschedules" class="btn btn-secondary btn-sm" title="Student Reschedule Requests Pipeline" style="display:none;">
+            <span>📋 Reschedules</span>
+            <span id="reschedule-count-badge" class="badge-count" style="display:none;">0</span>
+          </button>
+
           {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
-          <button id="global-seed-btn" class="btn btn-secondary btn-sm admin-only" title="Wipe & Reset baseline mock data">
+          <button id="global-seed-btn" class="btn btn-secondary btn-sm admin-only" title="Wipe & Reset baseline mock data" style="display:none;">
             Reset DB
           </button>
           {% endif %}
 
-          <!-- User Credentials & Logout Controls -->
-          <button id="btn-user-credentials" class="btn btn-secondary btn-sm" title="Credentials & Security Management">
+          <button id="btn-user-credentials" class="btn btn-secondary btn-sm" style="display:none;">
             <span>🔑 Credentials</span>
           </button>
-          <a href="/logout" id="btn-header-logout" class="btn btn-secondary btn-sm" title="Sign Out of COE SYNC">
+          <a href="/logout" id="btn-header-logout" class="btn btn-secondary btn-sm" style="display:none;">
             <span>Sign Out</span>
           </a>
         </div>

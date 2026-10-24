@@ -23,12 +23,68 @@ const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 // ─────────────────────────────────────────────────────────────────────────────
 // State
 // ─────────────────────────────────────────────────────────────────────────────
-let _weekOffset    = 0;       // 0 = current week, ±N weeks
-let _schedules     = [];      // raw API data
-let _editingId     = null;    // null = create, number = update
-let _masterData    = { sections:[], faculty:[], rooms:[], subjects:[] };
-let _radarCategory = "ALL";   // "ALL" | "ROOM" | "FACULTY" | "SECTION" | "CAPACITY"
-let _allConflicts  = [];      // current detected conflicts
+let _weekOffset      = 0;       // 0 = current week, ±N weeks
+let _activeViewMode  = "WEEK";  // "WEEK" | "DAY"
+let _activeDayIndex  = 3;       // Default Thursday (index 3) to match reference preview
+let _schedules       = [];      // raw API data
+let _editingId       = null;    // null = create, number = update
+let _masterData      = { sections:[], faculty:[], rooms:[], subjects:[] };
+let _radarCategory   = "ALL";   // "ALL" | "ROOM" | "FACULTY" | "SECTION" | "CAPACITY"
+let _allConflicts    = [];      // current detected conflicts
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subject Category Mapping (6-Category System)
+// ─────────────────────────────────────────────────────────────────────────────
+function getSubjectCategoryClass(subject) {
+  if (!subject) return "cat-engineering";
+  const code = String(subject.subject_code || subject.code || "").toUpperCase();
+  const title = String(subject.subject_title || subject.subject_name || subject.title || "").toUpperCase();
+  const type = String(subject.subject_type || subject.type || "").toUpperCase();
+
+  // 1. Laboratory: subject_type === 'LAB' or code ends with L/D/F or title contains 'Laboratory'
+  if (type === "LAB" || code.endsWith("L") || code.endsWith("D") || code.endsWith("F") || title.includes("LABORATORY") || title.includes("LAB")) {
+    return "cat-lab";
+  }
+  // 2. NSTP / PE: code starts with 'PE' or 'NSTP' or title contains 'PATHFIT'
+  if (code.startsWith("PE") || code.startsWith("NSTP") || title.includes("PATHFIT") || title.includes("PHYSICAL EDUCATION") || title.includes("ROTC") || title.includes("CWTS")) {
+    return "cat-nstp-pe";
+  }
+  // 3. Math & Physics: title/code contains Calculus, Physics, Differential, Mathematics, MMW, Statics, Dynamics
+  if (title.includes("CALCULUS") || title.includes("PHYSICS") || title.includes("DIFFERENTIAL") || title.includes("MATHEMATICS") || title.includes("MMW") || title.includes("STATICS") || title.includes("DYNAMICS") || code.includes("MATH") || code.includes("PHYS")) {
+    return "cat-math-physics";
+  }
+  // 4. Language: code/title contains PCM, PAL, AE 101, English, Panitikan, Communication
+  if (code.includes("PCM") || code.includes("PAL") || code.includes("AE 101") || title.includes("ENGLISH") || title.includes("PANITIKAN") || title.includes("COMMUNICATION") || title.includes("PURPOSIVE")) {
+    return "cat-language";
+  }
+  // 5. General Education: code/title contains UTS, RPH, TCW, AAP, ETH, STS, RLW, SSP
+  if (code.includes("UTS") || code.includes("RPH") || code.includes("TCW") || code.includes("AAP") || code.includes("ETH") || code.includes("STS") || code.includes("RLW") || code.includes("SSP") || title.includes("UNDERSTANDING THE SELF") || title.includes("READINGS IN PHILIPPINE HISTORY") || title.includes("CONTEMPORARY WORLD") || title.includes("ART APPRECIATION") || title.includes("ETHICS") || title.includes("SCIENCE, TECHNOLOGY")) {
+    return "cat-gened";
+  }
+  // 6. Engineering: default for all core COE, CIV, ECE, MEE, MFE
+  return "cat-engineering";
+}
+
+function formatTimeDisplay(timeStr) {
+  if (!timeStr) return "0:00";
+  const s = String(timeStr).trim();
+  if (s.includes(".5")) {
+    const parts = s.split(":");
+    const h = Math.floor(parseFloat(parts[0]));
+    return `${h}:30`;
+  }
+  const parts = s.split(":");
+  if (parts.length >= 2) {
+    const h = parseInt(parts[0], 10);
+    const m = parts[1].slice(0, 2);
+    return `${h}:${m}`;
+  }
+  return s;
+}
+
+function formatTimeRange(start, end) {
+  return `${formatTimeDisplay(start)} – ${formatTimeDisplay(end)}`;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Boot
@@ -40,26 +96,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   populateModalSelects();
   buildTimeSlotOptions();
   bindEvents();
+  updateRoleAdaptiveFilters();
   await fetchAndRender();
+  await fetchLiveUtilization();
   updateWeekLabel();
 
   // Check URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get("radar") === "open") {
+  const conflict = urlParams.get("conflict");
+  if (conflict === "true" || urlParams.get("radar") === "open") {
     setTimeout(openRadar, 300);
   }
-  if (urlParams.get("section_id")) {
-    setSelectVal("filter-section", urlParams.get("section_id"));
+  const sec = urlParams.get("section_id") || urlParams.get("section");
+  if (sec) {
+    setSelectVal("filter-section", sec);
     fetchAndRender();
   }
   if (urlParams.get("program")) {
     setSelectVal("filter-program", urlParams.get("program"));
     fetchAndRender();
   }
+  const rm = urlParams.get("room_id") || urlParams.get("room");
+  if (rm) {
+    setSelectVal("filter-room", rm);
+    fetchAndRender();
+  }
+  const fac = urlParams.get("faculty_id") || urlParams.get("faculty");
+  if (fac) {
+    setSelectVal("filter-faculty", fac);
+    fetchAndRender();
+  }
 });
 
 window.addEventListener("roleChanged", () => {
+  updateRoleAdaptiveFilters();
   fetchAndRender();
+  fetchLiveUtilization();
   if (document.getElementById("radar-drawer")?.classList.contains("radar-drawer--open")) {
     runRadarScan();
   }
@@ -77,24 +149,41 @@ function buildStaticGrid() {
 function buildDayHeaders() {
   const header = document.getElementById("timetable-header");
   if (!header) return;
+  header.innerHTML = '<div class="th-gutter"></div>';
 
   const today = new Date();
   const monday = getWeekMonday(today, _weekOffset);
 
-  DAYS.forEach((_, i) => {
+  if (_activeViewMode === "DAY") {
+    header.style.gridTemplateColumns = "64px 1fr";
     const date = new Date(monday);
-    date.setDate(monday.getDate() + i);
+    date.setDate(monday.getDate() + _activeDayIndex);
     const isToday = date.toDateString() === today.toDateString();
 
     const cell = document.createElement("div");
-    cell.className = "th-day" + (isToday ? " th-day--today" : "");
-    cell.dataset.dayIndex = i;
+    cell.className = "th-day th-day--single" + (isToday ? " th-day--today" : "");
     cell.innerHTML = `
-      <span class="th-day-label">${DAY_LABELS[i]}</span>
-      <span class="th-day-num ${isToday ? "th-day-num--today" : ""}">${date.getDate()}</span>
+      <span class="th-day-label" style="font-size: 13px; font-weight: 800; letter-spacing: 1px;">${DAYS[_activeDayIndex]}</span>
+      <span class="th-day-num ${isToday ? "th-day-num--today" : ""}" style="font-size: 15px;">${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
     `;
     header.appendChild(cell);
-  });
+  } else {
+    header.style.gridTemplateColumns = "64px repeat(7, 1fr)";
+    DAYS.forEach((_, i) => {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + i);
+      const isToday = date.toDateString() === today.toDateString();
+
+      const cell = document.createElement("div");
+      cell.className = "th-day" + (isToday ? " th-day--today" : "");
+      cell.dataset.dayIndex = i;
+      cell.innerHTML = `
+        <span class="th-day-label">${DAYS[i]}</span>
+        <span class="th-day-num ${isToday ? "th-day-num--today" : ""}">${date.getDate()}</span>
+      `;
+      header.appendChild(cell);
+    });
+  }
 }
 
 function buildTimeGutter() {
@@ -108,7 +197,7 @@ function buildTimeGutter() {
   while (hour < GRID_END_HOUR || (hour === GRID_END_HOUR && min === 0)) {
     const label = document.createElement("div");
     label.className = "gutter-slot" + (min === 30 ? " gutter-slot--half" : "");
-    label.textContent = min === 0 ? formatTimeLabel(hour, 0) : "";
+    label.textContent = min === 0 ? `${hour}:00` : "";
     gutter.appendChild(label);
     min += 30;
     if (min >= 60) { min = 0; hour++; }
@@ -151,6 +240,29 @@ function buildDayColumns() {
 
     container.appendChild(col);
   });
+
+  // Single Day View column container setup
+  const dayCol = document.getElementById("timetable-day-column");
+  if (dayCol) {
+    dayCol.innerHTML = "";
+    for (let s = 0; s < totalSlots; s++) {
+      const bg = document.createElement("div");
+      bg.className = "bg-slot" + (s % 2 === 0 ? "" : " bg-slot--half");
+      dayCol.appendChild(bg);
+    }
+    dayCol.addEventListener("click", (e) => {
+      if (e.target.closest(".event-card-day")) return;
+      if (window.CURRENT_ROLE !== "CHAIR" && window.CURRENT_ROLE !== "ADMIN") return;
+      const rect = dayCol.getBoundingClientRect();
+      const relY = e.clientY - rect.top + dayCol.scrollTop;
+      const slotIndex = Math.floor(relY / ROW_PX);
+      const totalMin  = GRID_START_HOUR * 60 + slotIndex * SLOT_MINUTES;
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      if (h > GRID_END_HOUR) return;
+      openModal(null, { day_of_week: DAYS[_activeDayIndex], start_time: `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}` });
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,18 +292,23 @@ function populateFilterSelects() {
   const secSel  = document.getElementById("filter-section");
   const facSel  = document.getElementById("filter-faculty");
   const roomSel = document.getElementById("filter-room");
+  const subjSel = document.getElementById("filter-subject");
 
   if (secSel) {
-    secSel.innerHTML = `<option value="">All Sections</option>` +
+    secSel.innerHTML = `<option value="">All Section ▾</option>` +
       _masterData.sections.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
   }
   if (facSel) {
-    facSel.innerHTML = `<option value="">All Faculty</option>` +
+    facSel.innerHTML = `<option value="">All Faculty ▾</option>` +
       _masterData.faculty.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
   }
   if (roomSel) {
-    roomSel.innerHTML = `<option value="">All Rooms</option>` +
+    roomSel.innerHTML = `<option value="">All Room ▾</option>` +
       _masterData.rooms.map(r => `<option value="${r.id}">${escapeHtml(r.room_code)}</option>`).join("");
+  }
+  if (subjSel) {
+    subjSel.innerHTML = `<option value="">All Subject ▾</option>` +
+      _masterData.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.code || s.name)}</option>`).join("");
   }
 }
 
@@ -245,7 +362,70 @@ function buildTimeSlotOptions() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. Fetch Schedules + Render
+// 4. Role-Adaptive Filters Helper
+// ─────────────────────────────────────────────────────────────────────────────
+function updateRoleAdaptiveFilters() {
+  const role = window.CURRENT_ROLE;
+  const wrapProg = document.getElementById("filter-wrap-program");
+  const wrapSec = document.getElementById("filter-wrap-section");
+  const wrapFac = document.getElementById("filter-wrap-faculty");
+  const wrapRoom = document.getElementById("filter-wrap-room");
+  const wrapSubj = document.getElementById("filter-wrap-subject");
+  const wrapRoomType = document.getElementById("filter-wrap-room-type");
+  const utilBadge = document.getElementById("sched-utilization-badge");
+  const chairRow = document.getElementById("chair-action-row");
+  const facLoadBar = document.getElementById("faculty-teaching-load-bar");
+  const studentBanner = document.getElementById("student-portal-banner");
+
+  if (role === "STUDENT") {
+    if (wrapProg) wrapProg.style.display = "none";
+    if (wrapSec) wrapSec.style.display = "none";
+    if (wrapFac) wrapFac.style.display = "none";
+    if (wrapRoom) wrapRoom.style.display = "inline-flex";
+    if (wrapSubj) wrapSubj.style.display = "inline-flex";
+    if (wrapRoomType) wrapRoomType.style.display = "none";
+    if (utilBadge) utilBadge.style.display = "none";
+    if (chairRow) chairRow.style.display = "none";
+    if (facLoadBar) facLoadBar.style.display = "none";
+    if (studentBanner) studentBanner.style.display = "flex";
+  } else if (role === "FACULTY") {
+    if (wrapProg) wrapProg.style.display = "none";
+    if (wrapSec) wrapSec.style.display = "inline-flex";
+    if (wrapFac) wrapFac.style.display = "none";
+    if (wrapRoom) wrapRoom.style.display = "none";
+    if (wrapSubj) wrapSubj.style.display = "inline-flex";
+    if (wrapRoomType) wrapRoomType.style.display = "none";
+    if (utilBadge) utilBadge.style.display = "none";
+    if (chairRow) chairRow.style.display = "none";
+    if (facLoadBar) facLoadBar.style.display = "flex";
+    if (studentBanner) studentBanner.style.display = "none";
+  } else {
+    // CHAIR or ADMIN
+    if (wrapProg) wrapProg.style.display = "inline-flex";
+    if (wrapSec) wrapSec.style.display = "inline-flex";
+    if (wrapFac) wrapFac.style.display = "inline-flex";
+    if (wrapRoom) wrapRoom.style.display = "inline-flex";
+    if (wrapSubj) wrapSubj.style.display = "none";
+    if (wrapRoomType) wrapRoomType.style.display = "inline-flex";
+    if (utilBadge) utilBadge.style.display = "inline-flex";
+    if (chairRow) chairRow.style.display = "flex";
+    if (facLoadBar) facLoadBar.style.display = "none";
+    if (studentBanner) studentBanner.style.display = "none";
+  }
+}
+
+async function fetchLiveUtilization() {
+  try {
+    const res = await API.getAnalyticsSummary();
+    if (res?.status === "success") {
+      const utilVal = document.getElementById("sched-room-util-val");
+      if (utilVal) utilVal.textContent = `${res.data.room_utilization || 0}%`;
+    }
+  } catch (e) {}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. Fetch Schedules + Render
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchAndRender() {
   const params = {};
@@ -303,35 +483,83 @@ async function fetchAndRender() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. Render Event Cards (pixel-spanning)
+// 6. Render Event Cards (Week & Day Mode)
 // ─────────────────────────────────────────────────────────────────────────────
 function renderEventCards(schedules) {
-  // Clear all columns
-  DAYS.forEach(day => {
-    const col = document.getElementById(`col-${day}`);
-    if (!col) return;
-    col.querySelectorAll(".event-card-v2").forEach(el => el.remove());
-  });
+  const weekContainer = document.getElementById("timetable-columns");
+  const dayContainer = document.getElementById("timetable-day-column");
+  const watermark = document.getElementById("timetable-empty-state");
 
-  // Bucket by day
-  const byDay = {};
-  DAYS.forEach(d => byDay[d] = []);
-  schedules.forEach(s => {
-    if (byDay[s.day_of_week]) byDay[s.day_of_week].push(s);
-  });
+  // Client-side Subject & Room Type filters
+  const subjVal = document.getElementById("filter-subject")?.value;
+  const roomTypeVal = document.getElementById("filter-room-type-sched")?.value;
 
-  DAYS.forEach(day => {
-    const col = document.getElementById(`col-${day}`);
-    if (!col) return;
+  let filtered = schedules;
+  if (subjVal) {
+    filtered = filtered.filter(s => String(s.subject_id) === String(subjVal));
+  }
+  if (roomTypeVal) {
+    const matchingRoomIds = _masterData.rooms
+      .filter(r => r.room_type === roomTypeVal)
+      .map(r => r.id);
+    filtered = filtered.filter(s => matchingRoomIds.includes(s.room_id));
+  }
 
-    const items = byDay[day];
-    resolveOverlaps(items); // adds .col & .cols fields for side-by-side
+  // Handle Empty State Watermark
+  if (watermark) {
+    watermark.style.display = filtered.length === 0 ? "flex" : "none";
+  }
 
-    items.forEach(s => {
-      const card = buildEventCard(s);
-      col.appendChild(card);
+  if (_activeViewMode === "DAY") {
+    if (weekContainer) weekContainer.style.display = "none";
+    if (dayContainer) {
+      dayContainer.style.display = "block";
+      dayContainer.querySelectorAll(".event-card-day").forEach(el => el.remove());
+    }
+
+    const currentDay = DAYS[_activeDayIndex];
+    const daySchedules = filtered.filter(s => s.day_of_week === currentDay);
+
+    if (watermark && daySchedules.length === 0) {
+      watermark.style.display = "flex";
+    }
+
+    daySchedules.forEach(s => {
+      const card = buildDayEventCard(s);
+      if (dayContainer) dayContainer.appendChild(card);
     });
-  });
+  } else {
+    // Week Mode
+    if (dayContainer) dayContainer.style.display = "none";
+    if (weekContainer) weekContainer.style.display = "grid";
+
+    // Clear all columns
+    DAYS.forEach(day => {
+      const col = document.getElementById(`col-${day}`);
+      if (!col) return;
+      col.querySelectorAll(".event-card-v2").forEach(el => el.remove());
+    });
+
+    // Bucket by day
+    const byDay = {};
+    DAYS.forEach(d => byDay[d] = []);
+    filtered.forEach(s => {
+      if (byDay[s.day_of_week]) byDay[s.day_of_week].push(s);
+    });
+
+    DAYS.forEach(day => {
+      const col = document.getElementById(`col-${day}`);
+      if (!col) return;
+
+      const items = byDay[day];
+      resolveOverlaps(items);
+
+      items.forEach(s => {
+        const card = buildEventCard(s);
+        col.appendChild(card);
+      });
+    });
+  }
 }
 
 /** Assign column position for overlapping cards within the same day */
@@ -366,9 +594,10 @@ function buildEventCard(s) {
   const heightPx  = ((endMin - startMin) / SLOT_MINUTES) * ROW_PX;
 
   const isConflict = s.has_conflict;
-  const cardClass  = isConflict ? "event-card-v2 ev-conflict"
-                   : s.status === "DRAFT" ? "event-card-v2 ev-draft"
-                   : "event-card-v2 ev-scheduled";
+  const catClass   = getSubjectCategoryClass(s);
+  const cardClass  = isConflict ? `event-card-v2 ev-conflict ${catClass}`
+                   : s.status === "DRAFT" ? `event-card-v2 ev-draft ${catClass}`
+                   : `event-card-v2 ev-scheduled ${catClass}`;
 
   const widthPct   = 100 / (s._cols || 1);
   const leftPct    = widthPct * (s._col || 0);
@@ -385,14 +614,15 @@ function buildEventCard(s) {
   const isShort = dur <= 30;
   const isAdmin = window.CURRENT_ROLE === "CHAIR" || window.CURRENT_ROLE === "ADMIN";
   const isStudent = window.CURRENT_ROLE === "STUDENT";
+  const displayTitle = s.subject_code ? `${s.subject_code} – ${s.subject_title || s.subject_name || ""}` : (s.subject_name || "Unknown");
 
   card.innerHTML = `
     <div class="ev-body">
-      <div class="ev-title">${escapeHtml(s.subject_code || s.subject_name || "Unknown")}</div>
+      <div class="ev-title">${escapeHtml(displayTitle)}</div>
       ${!isShort ? `
-        <div class="ev-meta">${escapeHtml(s.room_code || "—")}</div>
         <div class="ev-meta">${escapeHtml(s.section_name || "—")}</div>
         <div class="ev-meta ev-faculty">${escapeHtml(s.faculty_name || "—")}</div>
+        <div class="ev-meta" style="font-size: 9px; opacity: 0.85;">${escapeHtml(s.room_code || "—")}</div>
       ` : ""}
       ${isConflict ? `<div class="ev-conflict-badge">⚠ Conflict</div>` : ""}
     </div>
@@ -437,6 +667,46 @@ function buildEventCard(s) {
   }
 
   // Click card: if conflicted, open Conflict Radar; if admin, open edit modal
+  card.addEventListener("click", () => {
+    if (s.has_conflict) {
+      openRadar();
+    } else if (isAdmin) {
+      openModal(s.id);
+    }
+  });
+
+  return card;
+}
+
+function buildDayEventCard(s) {
+  const startMin  = timeToMin(s.start_time);
+  const endMin    = timeToMin(s.end_time);
+  const topPx     = ((startMin - GRID_START_HOUR * 60) / SLOT_MINUTES) * ROW_PX;
+  const heightPx  = ((endMin - startMin) / SLOT_MINUTES) * ROW_PX;
+
+  const isConflict = s.has_conflict;
+  const catClass   = getSubjectCategoryClass(s);
+  const cardClass  = isConflict ? `event-card-day ev-conflict ${catClass}`
+                   : s.status === "DRAFT" ? `event-card-day ev-draft ${catClass}`
+                   : `event-card-day ${catClass}`;
+
+  const card = document.createElement("div");
+  card.className    = cardClass;
+  card.dataset.id   = s.id;
+  card.style.top    = `${topPx}px`;
+  card.style.height = `${Math.max(heightPx - 4, 45)}px`;
+
+  const isAdmin = window.CURRENT_ROLE === "CHAIR" || window.CURRENT_ROLE === "ADMIN";
+  const displayTitle = s.subject_code ? `${s.subject_code} – ${s.subject_title || s.subject_name || ""}` : (s.subject_name || "Unknown");
+
+  card.innerHTML = `
+    <div class="day-card-title">${escapeHtml(displayTitle)}</div>
+    <div class="day-card-section">${escapeHtml(s.section_name || "—")} · Room ${escapeHtml(s.room_code || "—")}</div>
+    <div class="day-card-faculty">${escapeHtml(s.faculty_name || "—")}</div>
+    <div class="day-card-time">${formatTimeRange(s.start_time, s.end_time)}</div>
+    ${isConflict ? `<div class="ev-conflict-badge" style="margin-top: 4px;">⚠ Conflict Detected</div>` : ""}
+  `;
+
   card.addEventListener("click", () => {
     if (s.has_conflict) {
       openRadar();
@@ -1008,11 +1278,19 @@ window.deleteSchedule = deleteSchedule;
 function updateWeekLabel() {
   const label = document.getElementById("week-label");
   if (!label) return;
-  const monday = getWeekMonday(new Date(), _weekOffset);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  const fmt = (d) => d.toLocaleDateString("en-US", { month:"short", day:"numeric" });
-  label.textContent = `${fmt(monday)} – ${fmt(sunday)}`;
+  if (_activeViewMode === "DAY") {
+    const dayNames = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const monday = getWeekMonday(new Date(), _weekOffset);
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + _activeDayIndex);
+    label.textContent = `${dayNames[_activeDayIndex]} (${date.toLocaleDateString("en-US", { month:"short", day:"numeric" })})`;
+  } else {
+    const monday = getWeekMonday(new Date(), _weekOffset);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const fmt = (d) => d.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+    label.textContent = `${fmt(monday)} – ${fmt(sunday)}`;
+  }
 }
 
 function getWeekMonday(base, offset = 0) {
@@ -1034,12 +1312,27 @@ function refreshWeekHeaders() {
 // ─────────────────────────────────────────────────────────────────────────────
 // 10. Event Bindings
 // ─────────────────────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────────────────────
-// 10. Event Bindings
-// ─────────────────────────────────────────────────────────────────────────────
 function bindEvents() {
   // Add schedule button
   document.getElementById("btn-add-schedule")?.addEventListener("click", () => openModal());
+
+  // Week | Day View Toggle
+  document.getElementById("toggle-view-week")?.addEventListener("click", () => {
+    _activeViewMode = "WEEK";
+    document.getElementById("toggle-view-week")?.classList.add("active");
+    document.getElementById("toggle-view-day")?.classList.remove("active");
+    refreshWeekHeaders();
+    updateWeekLabel();
+    renderEventCards(_schedules);
+  });
+  document.getElementById("toggle-view-day")?.addEventListener("click", () => {
+    _activeViewMode = "DAY";
+    document.getElementById("toggle-view-day")?.classList.add("active");
+    document.getElementById("toggle-view-week")?.classList.remove("active");
+    refreshWeekHeaders();
+    updateWeekLabel();
+    renderEventCards(_schedules);
+  });
 
   // Print schedule
   document.getElementById("btn-print-schedule")?.addEventListener("click", () => {
@@ -1061,25 +1354,56 @@ function bindEvents() {
       openRadar();
     } finally {
       btn.disabled = false;
-      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Publish All`;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Publish`;
     }
   });
 
-  // Week navigation
+  // Batch Unpublish All button (Chair / Admin)
+  document.getElementById("btn-unpublish-all")?.addEventListener("click", async () => {
+    if (!confirm("Revert all published schedules back to DRAFT mode? This will make schedules editable again.")) return;
+    const btn = document.getElementById("btn-unpublish-all");
+    btn.disabled = true;
+    btn.textContent = "Unpublishing…";
+    try {
+      const res = await API.unpublishAllSchedules();
+      showToast(res.message || "All schedules reverted to draft mode.", "info");
+      await fetchAndRender();
+    } catch (err) {
+      showToast(err.message || "Unpublish failed.", "error");
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M12 3v18"/></svg> Unpublish`;
+    }
+  });
+
+  // Week & Day navigation
   document.getElementById("btn-prev-week")?.addEventListener("click", () => {
-    _weekOffset--;
+    if (_activeViewMode === "DAY") {
+      _activeDayIndex = (_activeDayIndex - 1 + 7) % 7;
+    } else {
+      _weekOffset--;
+    }
     refreshWeekHeaders();
     updateWeekLabel();
+    renderEventCards(_schedules);
   });
   document.getElementById("btn-next-week")?.addEventListener("click", () => {
-    _weekOffset++;
+    if (_activeViewMode === "DAY") {
+      _activeDayIndex = (_activeDayIndex + 1) % 7;
+    } else {
+      _weekOffset++;
+    }
     refreshWeekHeaders();
     updateWeekLabel();
+    renderEventCards(_schedules);
   });
   document.getElementById("btn-today")?.addEventListener("click", () => {
     _weekOffset = 0;
+    const today = new Date().getDay();
+    _activeDayIndex = today === 0 ? 6 : today - 1;
     refreshWeekHeaders();
     updateWeekLabel();
+    renderEventCards(_schedules);
   });
 
   // Filters (Multi-dropdown toolbar)
@@ -1090,6 +1414,8 @@ function bindEvents() {
     "filter-faculty",
     "filter-room",
     "filter-status",
+    "filter-subject",
+    "filter-room-type-sched",
   ].forEach(id => {
     document.getElementById(id)?.addEventListener("change", fetchAndRender);
   });
