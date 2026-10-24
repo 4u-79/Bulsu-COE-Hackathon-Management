@@ -89,13 +89,13 @@ class TestSmartSchedulerAndCreateSchedule(unittest.TestCase):
         self.login_as("chair_cpe", role="CHAIR")
 
         with self.app.app_context():
-            sections = Section.query.filter_by(program="BSCpE", year_level=2).all()
+            sections = Section.query.filter(Section.program.in_(["BSCpE", "CPE"]), Section.year_level == 2).all()
             sec_ids = [s.id for s in sections]
             rooms = Room.query.filter_by(is_available=True).all()
             room_ids = [r.id for r in rooms]
 
         payload = {
-            "program": "BSCpE",
+            "program": "CPE",
             "year_level": 2,
             "section_ids": sec_ids,
             "room_ids": room_ids,
@@ -141,10 +141,10 @@ class TestSmartSchedulerAndCreateSchedule(unittest.TestCase):
     # 3. Manual Pre-Flight Validation Tests
     def test_08_preflight_conflict_check_valid_slot(self):
         with self.app.app_context():
-            sub = Subject.query.filter_by(code="CPE 211").first()
-            sec = Section.query.filter_by(name="CpE 1A").first()
+            sub = Subject.query.filter_by(code="COE 101").first() or Subject.query.first()
+            sec = Section.query.filter_by(name="CPE - 1A").first() or Section.query.first()
             fac = Faculty.query.first()
-            room = Room.query.filter_by(room_code="Eng-302").first()
+            room = Room.query.filter_by(room_code="COE 101").first() or Room.query.first()
 
             payload = {
                 "subject_id": sub.id,
@@ -183,10 +183,10 @@ class TestSmartSchedulerAndCreateSchedule(unittest.TestCase):
         self.login_as("chair_cpe", role="CHAIR")
 
         with self.app.app_context():
-            sub = Subject.query.filter_by(code="MATH 101").first()
-            sec = Section.query.filter_by(name="CpE 1A").first()
+            sub = Subject.query.filter_by(code="COE 102").first() or Subject.query.first()
+            sec = Section.query.filter_by(name="CPE - 1A").first() or Section.query.first()
             fac = Faculty.query.first()
-            room = Room.query.filter_by(room_code="Eng-302").first()
+            room = Room.query.filter_by(room_code="COE 101").first() or Room.query.first()
 
             payload = {
                 "subject_id": sub.id,

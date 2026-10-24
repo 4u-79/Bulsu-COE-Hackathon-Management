@@ -46,18 +46,54 @@ class TestPhase5Governance(unittest.TestCase):
             cls.faculty_user = User.query.filter_by(role="FACULTY").first()
             cls.student_user = User.query.filter_by(role="STUDENT").first()
             cls.faculty_member = Faculty.query.first()
-            cls.section = Section.query.filter_by(name="CpE 2A").first() or Section.query.first()
+            cls.section = Section.query.filter(Section.name.in_(["CPE - 2A", "CpE 2A"])).first() or Section.query.first()
 
     def setUp(self):
         """Re-seed database before each test for clean test isolation."""
         with self.app.app_context():
             seed_database(self.app)
+            chair = User.query.filter_by(role="CHAIR").first()
+            fac_u = User.query.filter_by(role="FACULTY").first()
+            stud = User.query.filter_by(role="STUDENT").first()
+            sec = Section.query.filter(Section.name.in_(["CPE - 2A", "CpE 2A"])).first() or Section.query.first()
+            other_sec = Section.query.filter(Section.id != sec.id).first()
+            sub = Subject.query.filter_by(subject_type="LECTURE").first()
+            room = Room.query.filter_by(room_type="LECTURE").first()
+            fac = Faculty.query.first()
+
+            self.chair_user_id = chair.id
+            self.faculty_user_id = fac_u.id
+            self.student_user_id = stud.id
+            self.section_id = sec.id
+            
+            s1 = Schedule(
+                subject_id=sub.id,
+                section_id=sec.id,
+                faculty_id=fac.id,
+                room_id=room.id,
+                day_of_week="MON",
+                start_time=time(8, 0),
+                end_time=time(10, 0),
+                status="PUBLISHED",
+            )
+            s2 = Schedule(
+                subject_id=sub.id,
+                section_id=other_sec.id,
+                faculty_id=fac.id,
+                room_id=room.id,
+                day_of_week="TUE",
+                start_time=time(8, 0),
+                end_time=time(10, 0),
+                status="PUBLISHED",
+            )
+            db.session.add_all([s1, s2])
+            db.session.commit()
 
     def test_01_chair_status_toggle_and_visibility_isolation(self):
         """Test Chair status toggle and verify that Student is restricted with 403."""
         # 1. Chair updates status to Inactive / Out of Office
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.chair_user.id
+            sess["user_id"] = self.chair_user_id
             sess["role"] = "CHAIR"
             sess["active_role"] = "CHAIR"
 
@@ -67,7 +103,7 @@ class TestPhase5Governance(unittest.TestCase):
 
         # 2. Faculty views Chair status -> 200 OK
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.faculty_user.id
+            sess["user_id"] = self.faculty_user_id
             sess["role"] = "FACULTY"
             sess["active_role"] = "FACULTY"
 
@@ -77,7 +113,7 @@ class TestPhase5Governance(unittest.TestCase):
 
         # 3. Student attempts to view Chair status -> 403 Forbidden
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.student_user.id
+            sess["user_id"] = self.student_user_id
             sess["role"] = "STUDENT"
             sess["active_role"] = "STUDENT"
 
@@ -89,7 +125,7 @@ class TestPhase5Governance(unittest.TestCase):
         """Test full multi-tier reschedule workflow: Student -> Faculty Review -> Chair Approval."""
         with self.app.app_context():
             # Find a schedule for CpE 2A
-            sched = Schedule.query.filter_by(section_id=self.section.id).first()
+            sched = Schedule.query.filter_by(section_id=self.section_id).first()
             self.assertIsNotNone(sched)
             sched_id = sched.id
             initial_day = sched.day_of_week
@@ -97,11 +133,11 @@ class TestPhase5Governance(unittest.TestCase):
 
         # 1. Student submits a reschedule request for Friday 16:00 - 17:30
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.student_user.id
+            sess["user_id"] = self.student_user_id
             sess["role"] = "STUDENT"
             sess["active_role"] = "STUDENT"
-            sess["reference_id"] = self.section.id
-            sess["active_reference_id"] = self.section.id
+            sess["reference_id"] = self.section_id
+            sess["active_reference_id"] = self.section_id
 
         payload = {
             "schedule_id": sched_id,
@@ -117,7 +153,7 @@ class TestPhase5Governance(unittest.TestCase):
 
         # 2. Faculty reviews and endorses proposal
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.faculty_user.id
+            sess["user_id"] = self.faculty_user_id
             sess["role"] = "FACULTY"
             sess["active_role"] = "FACULTY"
             sess["reference_id"] = fac_id
@@ -133,7 +169,7 @@ class TestPhase5Governance(unittest.TestCase):
 
         # 3. Program Chair / Admin authorizes proposal -> Schedule updated atomically
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.chair_user.id
+            sess["user_id"] = self.chair_user_id
             sess["role"] = "CHAIR"
             sess["active_role"] = "CHAIR"
 
@@ -156,17 +192,17 @@ class TestPhase5Governance(unittest.TestCase):
         """Test that a Student cannot request reschedule for a class belonging to another section."""
         with self.app.app_context():
             # Find a schedule belonging to section 1 (CpE 1A)
-            other_sec_sched = Schedule.query.filter(Schedule.section_id != self.section.id).first()
+            other_sec_sched = Schedule.query.filter(Schedule.section_id != self.section_id).first()
             self.assertIsNotNone(other_sec_sched)
             other_sched_id = other_sec_sched.id
 
         # Student is for CpE 2A
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.student_user.id
+            sess["user_id"] = self.student_user_id
             sess["role"] = "STUDENT"
             sess["active_role"] = "STUDENT"
-            sess["reference_id"] = self.section.id
-            sess["active_reference_id"] = self.section.id
+            sess["reference_id"] = self.section_id
+            sess["active_reference_id"] = self.section_id
 
         payload = {
             "schedule_id": other_sched_id,

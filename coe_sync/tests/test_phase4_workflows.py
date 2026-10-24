@@ -57,6 +57,24 @@ class TestPhase4Workflows(unittest.TestCase):
 
     def test_01_search_and_filter_schedules_contract(self):
         """Test querying /api/schedules with program, year_level, and status."""
+        from datetime import time as dt_time
+        with self.app.app_context():
+            sec2 = Section.query.filter_by(program="CPE", year_level=2).first() or self.section
+            adequate_room = Room.query.filter(Room.capacity >= sec2.student_count).first()
+            s = Schedule(
+                section_id=sec2.id,
+                subject_id=self.subject.id,
+                faculty_id=self.faculty_member.id,
+                room_id=adequate_room.id,
+                day_of_week="MON",
+                start_time=dt_time(8, 0),
+                end_time=dt_time(10, 0),
+                status="DRAFT",
+            )
+            db.session.add(s)
+            db.session.commit()
+            expected_sec_name = sec2.name
+
         with self.client.session_transaction() as sess:
             sess["user_id"] = self.chair_user.id
             sess["role"] = "CHAIR"
@@ -70,28 +88,47 @@ class TestPhase4Workflows(unittest.TestCase):
         self.assertGreater(len(data), 0)
         for s in data:
             self.assertIn("section_name", s)
-            self.assertEqual(s["section_name"], "CpE 2A")
+            self.assertEqual(s["section_name"], expected_sec_name)
 
     def test_02_student_role_row_level_isolation(self):
         """Verify that Student view isolates only PUBLISHED schedules, hiding DRAFTs."""
-        # 1. As Chair, ensure we have both DRAFT and PUBLISHED schedules
+        from datetime import time as dt_time
         with self.app.app_context():
-            # Mark one schedule as DRAFT and another as PUBLISHED for section 2 (CpE 2A)
-            schedules = Schedule.query.filter_by(section_id=2).all()
-            self.assertGreaterEqual(len(schedules), 2)
-            schedules[0].status = "DRAFT"
-            schedules[1].status = "PUBLISHED"
+            sec2 = Section.query.filter_by(program="CPE", year_level=2).first() or self.section
+            adequate_room = Room.query.filter(Room.capacity >= sec2.student_count).first()
+            s1 = Schedule(
+                section_id=sec2.id,
+                subject_id=self.subject.id,
+                faculty_id=self.faculty_member.id,
+                room_id=adequate_room.id,
+                day_of_week="MON",
+                start_time=dt_time(8, 0),
+                end_time=dt_time(10, 0),
+                status="DRAFT",
+            )
+            s2 = Schedule(
+                section_id=sec2.id,
+                subject_id=self.subject.id,
+                faculty_id=self.faculty_member.id,
+                room_id=adequate_room.id,
+                day_of_week="TUE",
+                start_time=dt_time(8, 0),
+                end_time=dt_time(10, 0),
+                status="PUBLISHED",
+            )
+            db.session.add_all([s1, s2])
             db.session.commit()
+            sec2_id = sec2.id
 
         # 2. Impersonate Student
         with self.client.session_transaction() as sess:
             sess["user_id"] = self.student_user.id
             sess["role"] = "STUDENT"
             sess["active_role"] = "STUDENT"
-            sess["reference_id"] = 2  # CpE 2A
+            sess["reference_id"] = sec2_id
 
         # Query schedules as Student
-        res = self.client.get("/api/schedules?section_id=2")
+        res = self.client.get(f"/api/schedules?section_id={sec2_id}")
         self.assertEqual(res.status_code, 200)
         data = res.get_json()["data"]
         # Must only see PUBLISHED
@@ -115,22 +152,48 @@ class TestPhase4Workflows(unittest.TestCase):
 
     def test_04_publish_all_blocks_on_conflict_and_succeeds_when_clean(self):
         """Verify POST /api/schedules/publish-all returns 409 if conflict exists, 200 when clean."""
+        from datetime import time as dt_time
         with self.client.session_transaction() as sess:
             sess["user_id"] = self.chair_user.id
             sess["role"] = "CHAIR"
             sess["active_role"] = "CHAIR"
 
-        # Baseline seed contains intentional conflicts
-        res_conflict = self.client.post("/api/schedules/publish-all")
+        # Create two conflicting schedules
+        with self.app.app_context():
+            adequate_room = Room.query.filter(Room.capacity >= self.section.student_count).first()
+            c1 = Schedule(
+                section_id=self.section.id,
+                subject_id=self.subject.id,
+                faculty_id=self.faculty_member.id,
+                room_id=adequate_room.id,
+                day_of_week="MON",
+                start_time=dt_time(8, 0),
+                end_time=dt_time(10, 0),
+                status="DRAFT",
+            )
+            other_sec = Section.query.filter(Section.id != self.section.id).first()
+            other_fac = Faculty.query.filter(Faculty.id != self.faculty_member.id).first()
+            c2 = Schedule(
+                section_id=other_sec.id,
+                subject_id=self.subject.id,
+                faculty_id=other_fac.id,
+                room_id=adequate_room.id,
+                day_of_week="MON",
+                start_time=dt_time(9, 0),
+                end_time=dt_time(11, 0),
+                status="DRAFT",
+            )
+            db.session.add_all([c1, c2])
+            db.session.commit()
+
         # Should return 409 Conflict because seed has room collisions
+        res_conflict = self.client.post("/api/schedules/publish-all")
         self.assertEqual(res_conflict.status_code, 409)
         self.assertIn("error", res_conflict.get_json())
 
-        # Now clear conflicts by removing colliding schedule or keeping a clean single schedule
-        from datetime import time as dt_time
+        # Now clear conflicts by keeping a clean single schedule
         with self.app.app_context():
             Schedule.query.delete()
-            # Pick a room with capacity >= section student count
             adequate_room = Room.query.filter(Room.capacity >= self.section.student_count).first()
             clean_s = Schedule(
                 section_id=self.section.id,

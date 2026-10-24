@@ -37,6 +37,58 @@ class TestSecurityAuditVectors(unittest.TestCase):
         self.faculty_user = User.query.filter_by(role="FACULTY").first()
         self.student_user = User.query.filter_by(role="STUDENT").first()
 
+        # Seed baseline test schedules for security vector tests
+        sec1 = Section.query.get(1)
+        sec2 = Section.query.get(2)
+        sub1 = Subject.query.filter_by(subject_type="LECTURE").first()
+        room1 = Room.query.filter_by(room_type="LECTURE").first()
+        room2 = Room.query.filter(Room.room_type == "LECTURE", Room.id != room1.id).first()
+        fac1 = Faculty.query.get(1)
+        fac2 = Faculty.query.get(2)
+
+        s1 = Schedule(
+            subject_id=sub1.id,
+            section_id=sec1.id,
+            faculty_id=fac1.id,
+            room_id=room1.id,
+            day_of_week="MON",
+            start_time=time(8, 0),
+            end_time=time(10, 0),
+            status="PUBLISHED",
+        )
+        s2 = Schedule(
+            subject_id=sub1.id,
+            section_id=sec2.id,
+            faculty_id=fac1.id,
+            room_id=room2.id,
+            day_of_week="TUE",
+            start_time=time(10, 0),
+            end_time=time(12, 0),
+            status="PUBLISHED",
+        )
+        s3 = Schedule(
+            subject_id=sub1.id,
+            section_id=sec2.id,
+            faculty_id=fac2.id,
+            room_id=room1.id,
+            day_of_week="WED",
+            start_time=time(13, 0),
+            end_time=time(15, 0),
+            status="DRAFT",
+        )
+        s4 = Schedule(
+            subject_id=sub1.id,
+            section_id=sec2.id,
+            faculty_id=fac1.id,
+            room_id=room2.id,
+            day_of_week="THU",
+            start_time=time(10, 0),
+            end_time=time(12, 0),
+            status="PUBLISHED",
+        )
+        db.session.add_all([s1, s2, s3, s4])
+        db.session.commit()
+
     def tearDown(self):
         db.session.remove()
         db.drop_all()

@@ -249,7 +249,11 @@ def create_app(config_name=None):
                 (Faculty.name.ilike(f"%{search}%")) | (Faculty.email.ilike(f"%{search}%"))
             )
         if program and program.upper() != "ALL":
-            query = query.filter(Faculty.program.ilike(f"%{program}%"))
+            prog_clean = program.strip().upper()
+            if prog_clean == "GEN":
+                query = query.filter(Faculty.program == "GEN")
+            else:
+                query = query.filter(Faculty.program.in_([prog_clean, "GEN"]))
         if overloaded is not None:
             if str(overloaded).lower() in ("true", "1", "yes"):
                 query = query.filter(Faculty.current_units > Faculty.max_units)
@@ -280,7 +284,8 @@ def create_app(config_name=None):
         if search:
             query = query.filter(Section.name.ilike(f"%{search}%"))
         if program and program.upper() != "ALL":
-            query = query.filter(Section.program.ilike(f"%{program}%"))
+            prog_clean = program.strip().upper()
+            query = query.filter(Section.program == prog_clean)
         if year_level:
             query = query.filter(Section.year_level == year_level)
 
@@ -315,7 +320,11 @@ def create_app(config_name=None):
                 (Subject.code.ilike(f"%{search}%")) | (Subject.title.ilike(f"%{search}%"))
             )
         if program and program.upper() != "ALL":
-            query = query.filter(Subject.program.ilike(f"%{program}%"))
+            prog_clean = program.strip().upper()
+            if prog_clean == "GEN":
+                query = query.filter(Subject.program == "GEN")
+            else:
+                query = query.filter(Subject.program.in_([prog_clean, "GEN"]))
         if year_level:
             query = query.filter(Subject.year_level == year_level)
         if semester:
@@ -344,12 +353,15 @@ def create_app(config_name=None):
         query = Room.query
         search = request.args.get("search", "").strip()
         room_type = request.args.get("type", "").strip().upper()
+        building = request.args.get("building", "").strip()
         available = request.args.get("available")
 
         if search:
             query = query.filter(Room.room_code.ilike(f"%{search}%"))
         if room_type in ("LECTURE", "LAB"):
             query = query.filter(Room.room_type == room_type)
+        if building and building.upper() != "ALL":
+            query = query.filter(Room.building.ilike(f"%{building}%"))
         if available is not None:
             if str(available).lower() in ("true", "1", "yes"):
                 query = query.filter(Room.is_available.is_(True))

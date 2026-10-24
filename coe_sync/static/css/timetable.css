@@ -311,10 +311,12 @@
 .timetable-body {
   display: grid;
   grid-template-columns: 64px 1fr;
-  max-height: calc(100vh - 320px);
-  min-height: 480px;
+  height: 832px;
+  max-height: 832px;
   overflow-y: auto;
   overflow-x: hidden;
+  position: relative;
+  background: var(--bg-surface);
 }
 
 /* ── Time Gutter ── */
@@ -324,19 +326,21 @@
   left: 0;
   z-index: 5;
   background: var(--bg-surface);
+  height: 832px;
 }
 
 .gutter-slot {
-  height: 52px; /* ROW_PX */
+  height: 32px; /* 32px per 30-min slot = 64px per hour */
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
-  padding: 4px 8px 0 4px;
-  font-size: 10.5px;
+  padding: 2px 8px 0 4px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
+  box-sizing: border-box;
 }
 
 .gutter-slot--half {
@@ -349,37 +353,46 @@
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   min-width: 0;
+  height: 832px;
 }
 
-/* ── Individual Day Column ── */
-.day-column {
+/* ── Individual Day Column & Day View Container ── */
+.day-column-body, .day-column, .timetable-day-column {
   position: relative;
-  border-right: 1px solid var(--border-subtle);
-  cursor: pointer;
+  height: 832px; /* 13 hours * 64px */
+  overflow: hidden;
+  border-right: 1px solid rgba(110, 23, 23, 0.08);
+  box-sizing: border-box;
   min-width: 0;
 }
 
 .day-column:last-child { border-right: none; }
 
+.timetable-day-column {
+  width: 100%;
+}
+
 /* Background slot rows */
 .bg-slot {
-  height: 52px;
+  height: 32px;
   border-bottom: 1px solid var(--border-subtle);
   transition: background 0.15s;
+  box-sizing: border-box;
 }
 
 .bg-slot--half {
   border-bottom: 1px dashed var(--border-subtle);
 }
 
-.day-column:hover > .bg-slot { background: rgba(245, 194, 107, 0.04); }
+.day-column:hover > .bg-slot,
+.timetable-day-column:hover > .bg-slot { background: rgba(245, 194, 107, 0.04); }
 
 /* ══════════════════════════════════════════════════════════════════
    EVENT CARDS (pixel-positioned, absolute)
 ══════════════════════════════════════════════════════════════════ */
-.event-card-v2 {
+.event-card-v2, .schedule-card {
   position: absolute;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.25);
   cursor: pointer;
@@ -388,15 +401,104 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  font-size: 11.5px;
+  font-size: 11px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10);
-  padding: 6px 8px;
+  padding: 5px 6px;
+  box-sizing: border-box;
 }
 
 .event-card-v2:hover {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
   transform: translateY(-2px);
   z-index: 10;
+}
+
+/* PUBLISHED cards: Solid border, crisp shadow, subtle ✓ Published indicator */
+.event-card-v2.ev-published,
+.event-card-day.ev-published {
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14) !important;
+}
+
+/* DRAFT cards: Dashed white inner border and small DRAFT pill badge */
+.event-card-v2.ev-draft,
+.event-card-day.ev-draft {
+  border: 1.5px dashed rgba(255, 255, 255, 0.75) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+.ev-badge-draft {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+.ev-badge-published {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Day View event card */
+.event-card-day {
+  position: absolute;
+  border-radius: 10px;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  z-index: 4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transition: all 0.18s ease;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.event-card-day:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+/* +N more classes badge */
+.event-card-more {
+  position: absolute;
+  background: #6E1717;
+  color: #FFFFFF;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 6;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  box-sizing: border-box;
+}
+
+.event-card-more:hover {
+  background: #520F0F;
 }
 
 /* ══════════════════════════════════════════════════════════════════

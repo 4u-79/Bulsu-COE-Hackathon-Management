@@ -4,17 +4,21 @@
  */
 
 let activeTab = "rooms";
+let currentRoomMode = "availability";
 let masterDataCache = {
   rooms: [],
   faculty: [],
   sections: [],
   subjects: [],
 };
+let schedulesCache = [];
 
 document.addEventListener("DOMContentLoaded", () => {
   initManageTabs();
   initModalHandlers();
   initTableFilters();
+  initRoomModeSwitcher();
+  initRoomAvailabilityControls();
   loadAllMasterData();
 
   // Listen for role changes from the sticky "View As" selector
@@ -51,15 +55,41 @@ function switchTab(tabName) {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
   });
 
-  // 4. Update the top "+ Add" button
+  // 4. Update the top breadcrumb and page title
+  const breadcrumbEl = document.getElementById('breadcrumb-page-name');
+  const mainTitleEl = document.getElementById('page-main-title');
+  if (tabName === 'rooms') {
+    if (breadcrumbEl) breadcrumbEl.textContent = 'Rooms';
+    if (mainTitleEl) mainTitleEl.textContent = 'Room Availability';
+  } else if (tabName === 'faculty') {
+    if (breadcrumbEl) breadcrumbEl.textContent = 'Faculty';
+    if (mainTitleEl) mainTitleEl.textContent = 'Faculty Management';
+  } else if (tabName === 'sections') {
+    if (breadcrumbEl) breadcrumbEl.textContent = 'Sections';
+    if (mainTitleEl) mainTitleEl.textContent = 'Sections Management';
+  } else if (tabName === 'subjects') {
+    if (breadcrumbEl) breadcrumbEl.textContent = 'Subjects';
+    if (mainTitleEl) mainTitleEl.textContent = 'Curricular Subjects';
+  }
+
+  // 5. Update the top "+ Add" button
   const addBtn =
     document.getElementById('btn-add-entity') ||
     document.getElementById('add-entity-btn');
   if (addBtn) {
-    const singularName =
-      tabName.charAt(0).toUpperCase() + tabName.slice(1).replace(/s$/, '');
-    addBtn.textContent = `+ Add ${singularName}`;
-    addBtn.setAttribute('data-target-modal', `modal-add-${tabName}`);
+    if (tabName === 'rooms') {
+      addBtn.style.display = 'none'; // Inside rooms, CRUD sub-panel has its own + Add Room button
+    } else {
+      addBtn.style.display = '';
+      const singularName =
+        tabName.charAt(0).toUpperCase() + tabName.slice(1).replace(/s$/, '');
+      addBtn.textContent = `+ Add ${singularName}`;
+      addBtn.setAttribute('data-target-modal', `modal-add-${tabName}`);
+    }
+  }
+
+  if (tabName === 'rooms') {
+    updateRoomAvailabilityBoard();
   }
 
   if (typeof window.applyRolePermissions === 'function') {
@@ -110,8 +140,23 @@ async function loadAllMasterData() {
     fetchFaculty(),
     fetchSections(),
     fetchSubjects(),
+    fetchSchedulesData(),
   ]);
+  populateRoomAvailabilityFilters();
+  updateRoomAvailabilityBoard();
+  initRoomTimetableSubpanel();
   window.applyRolePermissions(window.CURRENT_ROLE);
+}
+
+async function fetchSchedulesData() {
+  try {
+    const res = await API.get("/api/schedules");
+    if (res.status === "success") {
+      schedulesCache = res.data || [];
+    }
+  } catch (err) {
+    schedulesCache = [];
+  }
 }
 
 async function fetchRooms() {
@@ -119,12 +164,15 @@ async function fetchRooms() {
     const res = await API.get("/api/rooms");
     if (res.status === "success") {
       masterDataCache.rooms = res.data;
-      document.getElementById("count-rooms").textContent = res.count;
+      const countEl = document.getElementById("count-rooms");
+      if (countEl) countEl.textContent = res.count;
+      const kpiTotal = document.getElementById("kpi-rooms-total");
+      if (kpiTotal) kpiTotal.textContent = res.count;
       renderRoomsTable(res.data);
     }
   } catch (err) {
     document.getElementById("table-rooms-body").innerHTML =
-      `<tr><td colspan="5" style="color:#EF4444; text-align:center;">Failed to load rooms.</td></tr>`;
+      `<tr><td colspan="6" style="color:#EF4444; text-align:center;">Failed to load rooms.</td></tr>`;
   }
 }
 
@@ -133,7 +181,7 @@ function renderRoomsTable(rooms) {
   if (!tbody) return;
 
   if (rooms.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted); padding: 24px;">No rooms found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 24px;">No rooms found.</td></tr>`;
     return;
   }
 
@@ -142,6 +190,7 @@ function renderRoomsTable(rooms) {
       (r) => `
     <tr>
       <td><strong>${escapeHtml(r.room_code)}</strong></td>
+      <td>${escapeHtml(r.building || 'COE Building')}</td>
       <td><span class="badge badge-${r.room_type}">${r.room_type}</span></td>
       <td>${r.capacity} seats</td>
       <td>
@@ -151,10 +200,10 @@ function renderRoomsTable(rooms) {
       </td>
       <td>
         <div class="table-actions">
-          <a href="/schedules?room=${r.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Room Timetable">
+          <button class="btn btn-secondary btn-sm" onclick="switchRoomModeTimetable(${r.id})" style="display:inline-flex; align-items:center; gap:4px;" title="View Room Timetable">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             Schedule
-          </a>
+          </button>
           <span class="admin-only" style="display:inline-flex; gap: 4px;">
             <button class="btn btn-secondary btn-sm" onclick="openEditModal('rooms', ${r.id})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="deleteEntity('rooms', ${r.id})">Delete</button>
@@ -758,9 +807,14 @@ function normalizeProgram(prog) {
   if (!prog) return "";
   const p = prog.trim().toUpperCase();
   if (p === "BSCE" || p === "CE") return "CE";
-  if (p === "BSEE" || p === "BSECE" || p === "ECE" || p === "BSCpE" || p === "CPE") return "ECE";
-  if (p === "BSME" || p === "MEE" || p === "ME") return "MEE";
-  if (p === "BSMFE" || p === "MFE") return "MFE";
+  if (p === "BSCPE" || p === "CPE") return "CPE";
+  if (p === "BSEE" || p === "EE") return "EE";
+  if (p === "BSECE" || p === "ECE") return "ECE";
+  if (p === "BSIE" || p === "IE") return "IE";
+  if (p === "BSMFGE" || p === "BSMFE" || p === "MFGE" || p === "MFE") return "MFGE";
+  if (p === "BSME" || p === "ME") return "ME";
+  if (p === "BSMEE" || p === "MEE") return "MEE";
+  if (p === "GEN" || p === "GENERAL") return "GEN";
   return p;
 }
 
@@ -912,5 +966,334 @@ window.openFacultyAvailabilityModal = async function (facultyId, facultyName) {
 function escapeAttr(str) {
   if (!str) return "";
   return String(str).replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
+
+// -------------------------------------------------------------
+// PART 4: Room Availability Dashboard & View Switcher Controller
+// -------------------------------------------------------------
+function initRoomModeSwitcher() {
+  const btnAvail = document.getElementById("btn-mode-availability");
+  const btnTime = document.getElementById("btn-mode-timetable");
+  const btnCrud = document.getElementById("btn-mode-crud");
+
+  const panelAvail = document.getElementById("room-subpanel-availability");
+  const panelTime = document.getElementById("room-subpanel-timetable");
+  const panelCrud = document.getElementById("room-subpanel-crud");
+
+  window.setRoomMode = function (mode) {
+    currentRoomMode = mode;
+    btnAvail?.classList.toggle("active", mode === "availability");
+    btnTime?.classList.toggle("active", mode === "timetable");
+    btnCrud?.classList.toggle("active", mode === "crud");
+
+    if (panelAvail) panelAvail.style.display = mode === "availability" ? "block" : "none";
+    if (panelTime) panelTime.style.display = mode === "timetable" ? "block" : "none";
+    if (panelCrud) panelCrud.style.display = mode === "crud" ? "block" : "none";
+
+    if (mode === "availability") {
+      updateRoomAvailabilityBoard();
+    } else if (mode === "timetable") {
+      renderRoomTimetable();
+    }
+  };
+
+  btnAvail?.addEventListener("click", () => window.setRoomMode("availability"));
+  btnTime?.addEventListener("click", () => window.setRoomMode("timetable"));
+  btnCrud?.addEventListener("click", () => window.setRoomMode("crud"));
+
+  const timeSelect = document.getElementById("room-timetable-select");
+  timeSelect?.addEventListener("change", () => {
+    const selId = timeSelect.value;
+    const openBtn = document.getElementById("btn-open-schedules-room");
+    if (openBtn) {
+      openBtn.href = selId ? `/schedules?room=${selId}` : "/schedules";
+    }
+    renderRoomTimetable();
+  });
+}
+
+window.switchRoomModeTimetable = function (roomId) {
+  window.setRoomMode("timetable");
+  const timeSelect = document.getElementById("room-timetable-select");
+  if (timeSelect) {
+    timeSelect.value = roomId;
+    const openBtn = document.getElementById("btn-open-schedules-room");
+    if (openBtn) openBtn.href = `/schedules?room=${roomId}`;
+  }
+  renderRoomTimetable();
+};
+
+function initRoomAvailabilityControls() {
+  const daySelect = document.getElementById("check-time-day");
+  const hourSelect = document.getElementById("check-time-hour");
+  const buildingFilter = document.getElementById("room-avail-filter-building");
+  const facultyFilter = document.getElementById("room-avail-filter-faculty");
+  const programFilter = document.getElementById("room-avail-filter-program");
+
+  daySelect?.addEventListener("change", updateRoomAvailabilityBoard);
+  hourSelect?.addEventListener("change", updateRoomAvailabilityBoard);
+  buildingFilter?.addEventListener("change", updateRoomAvailabilityBoard);
+  facultyFilter?.addEventListener("change", updateRoomAvailabilityBoard);
+  programFilter?.addEventListener("change", updateRoomAvailabilityBoard);
+}
+
+function populateRoomAvailabilityFilters() {
+  // Populate faculty filter
+  const facSel = document.getElementById("room-avail-filter-faculty");
+  if (facSel && masterDataCache.faculty.length > 0) {
+    facSel.innerHTML = `<option value="">All Faculty</option>` +
+      masterDataCache.faculty
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`)
+        .join("");
+  }
+
+  // Populate room timetable picker
+  const roomSel = document.getElementById("room-timetable-select");
+  if (roomSel && masterDataCache.rooms.length > 0) {
+    roomSel.innerHTML = masterDataCache.rooms
+      .slice()
+      .sort((a, b) => a.room_code.localeCompare(b.room_code))
+      .map(r => `<option value="${r.id}">${escapeHtml(r.room_code)} (${escapeHtml(r.building || 'COE')})</option>`)
+      .join("");
+    const openBtn = document.getElementById("btn-open-schedules-room");
+    if (openBtn && masterDataCache.rooms[0]) {
+      openBtn.href = `/schedules?room=${masterDataCache.rooms[0].id}`;
+    }
+  }
+}
+
+function timeToMinutes(t) {
+  if (!t) return 0;
+  const parts = t.slice(0, 5).split(":");
+  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+}
+
+function formatTimeShort(t) {
+  if (!t) return "";
+  const parts = t.slice(0, 5).split(":");
+  let h = parseInt(parts[0], 10);
+  const m = parts[1];
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+function updateRoomAvailabilityBoard() {
+  const day = document.getElementById("check-time-day")?.value || "MON";
+  const hourVal = document.getElementById("check-time-hour")?.value || "10:00";
+  const buildingVal = document.getElementById("room-avail-filter-building")?.value || "";
+  const facVal = document.getElementById("room-avail-filter-faculty")?.value || "";
+  const progVal = document.getElementById("room-avail-filter-program")?.value || "";
+
+  const checkMins = timeToMinutes(hourVal);
+  const displayTime = formatTimeShort(hourVal);
+
+  const headingAvail = document.getElementById("heading-available-title");
+  if (headingAvail) headingAvail.textContent = `Available at ${displayTime}`;
+
+  // Filter schedules on this day
+  const daySchedules = schedulesCache.filter((s) => s.day_of_week === day);
+
+  const occupiedList = [];
+  const availableList = [];
+
+  masterDataCache.rooms.forEach((room) => {
+    // Check building filter
+    if (buildingVal) {
+      if (buildingVal === "LAB") {
+        if (room.room_type !== "LAB") return;
+      } else if (buildingVal === "COE 1") {
+        if (!room.room_code.startsWith("COE 1") && room.building !== "COE 1 Building") return;
+      } else if (buildingVal === "COE 2") {
+        if (!room.room_code.startsWith("COE 2") && room.building !== "COE 2 Building") return;
+      }
+    }
+
+    const roomScheds = daySchedules.filter((s) => s.room_id === room.id);
+    const activeSched = roomScheds.find((s) => {
+      const sStart = timeToMinutes(s.start_time);
+      const sEnd = timeToMinutes(s.end_time);
+      return sStart <= checkMins && checkMins < sEnd;
+    });
+
+    if (activeSched) {
+      // Room is occupied
+      if (facVal && String(activeSched.faculty_id) !== String(facVal)) return;
+      if (progVal) {
+        const schedProg = normalizeProgram(activeSched.program || (activeSched.section_name ? activeSched.section_name.split("-")[0].trim() : ""));
+        if (schedProg !== normalizeProgram(progVal)) return;
+      }
+      occupiedList.push({ room, schedule: activeSched });
+    } else {
+      // Room is available
+      const upcoming = roomScheds
+        .filter((s) => timeToMinutes(s.start_time) >= checkMins)
+        .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+      const nextSched = upcoming[0] || null;
+
+      if (facVal && nextSched && String(nextSched.faculty_id) !== String(facVal)) return;
+      if (progVal && nextSched) {
+        const schedProg = normalizeProgram(nextSched.program || (nextSched.section_name ? nextSched.section_name.split("-")[0].trim() : ""));
+        if (schedProg !== normalizeProgram(progVal)) return;
+      }
+
+      availableList.push({ room, nextSchedule: nextSched });
+    }
+  });
+
+  // Update KPI 1 (Rooms in Inventory)
+  const kpiTotal = document.getElementById("kpi-rooms-total");
+  if (kpiTotal) kpiTotal.textContent = masterDataCache.rooms.length;
+
+  // Update KPI 2 (Available at Sample Check)
+  const kpiAvail = document.getElementById("kpi-avail-count");
+  if (kpiAvail) kpiAvail.textContent = availableList.length;
+
+  // Update KPI 3 (Next Booking)
+  const kpiNextTime = document.getElementById("kpi-next-booking-time");
+  const kpiNextDesc = document.getElementById("kpi-next-booking-desc");
+  const allUpcoming = daySchedules
+    .filter((s) => timeToMinutes(s.start_time) >= checkMins)
+    .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time));
+
+  if (allUpcoming.length > 0 && kpiNextTime && kpiNextDesc) {
+    const earliest = allUpcoming[0];
+    kpiNextTime.textContent = formatTimeShort(earliest.start_time);
+    kpiNextDesc.textContent = `${earliest.room_code || 'Room'} - ${earliest.subject_code || ''} ${earliest.subject_title || ''}`;
+  } else if (kpiNextTime && kpiNextDesc) {
+    kpiNextTime.textContent = "--:--";
+    kpiNextDesc.textContent = "No upcoming bookings today";
+  }
+
+  // Update column badges
+  const badgeOcc = document.getElementById("badge-occupied-count");
+  if (badgeOcc) badgeOcc.textContent = `${occupiedList.length} Preoccupied`;
+
+  const badgeAvail = document.getElementById("badge-available-count");
+  if (badgeAvail) badgeAvail.textContent = `${availableList.length} Open`;
+
+  // Render Occupied Rooms
+  const occContainer = document.getElementById("list-occupied-rooms");
+  if (occContainer) {
+    if (occupiedList.length === 0) {
+      occContainer.innerHTML = `<div style="text-align:center; padding: 32px; color: var(--text-muted); font-size: 13px;">No occupied rooms at this time.</div>`;
+    } else {
+      occContainer.innerHTML = occupiedList
+        .map(({ room, schedule: s }) => {
+          const sEndMins = timeToMinutes(s.end_time);
+          const remMins = Math.max(0, sEndMins - checkMins);
+          const remHours = Math.round((remMins / 60) * 10) / 10;
+          const remainingText = remMins >= 60
+            ? `${remHours} Hour${remHours === 1 ? '' : 's'} Remaining`
+            : `${remMins} Mins Remaining`;
+
+          return `
+            <div class="glass-card" style="padding: 14px 16px; background: rgba(255,255,255,0.85); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:15px; font-weight:800; color:var(--text-dark);">${escapeHtml(room.room_code)}</div>
+                <span style="background:#EF4444; color:#FFFFFF; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:9999px; text-transform:uppercase;">Occupied</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:4px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
+              <div style="font-size:12.5px; font-weight:600; color:var(--sidebar-bg); margin-bottom:8px;">${escapeHtml(s.section_name || 'Section')} • ${escapeHtml(s.faculty_name || 'Faculty')}</div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid rgba(0,0,0,0.06); padding-top:6px;">
+                <span>Occupied from ${formatTimeShort(s.start_time)} - ${formatTimeShort(s.end_time)}</span>
+                <span style="font-weight:700; color:#EF4444;">${remainingText}</span>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+  }
+
+  // Render Available Rooms
+  const availContainer = document.getElementById("list-available-rooms");
+  if (availContainer) {
+    if (availableList.length === 0) {
+      availContainer.innerHTML = `<div style="text-align:center; padding: 32px; color: var(--text-muted); font-size: 13px;">No available rooms match the selected criteria.</div>`;
+    } else {
+      availContainer.innerHTML = availableList
+        .map(({ room, nextSchedule: nextS }) => {
+          let nextBookingText = "No more bookings today";
+          let hoursLeftText = "Open All Day";
+
+          if (nextS) {
+            const nextStartMins = timeToMinutes(nextS.start_time);
+            const diffMins = Math.max(0, nextStartMins - checkMins);
+            const diffHours = Math.round((diffMins / 60) * 10) / 10;
+            hoursLeftText = `${diffHours} Hour${diffHours === 1 ? '' : 's'} Left`;
+            nextBookingText = `Next booking at ${formatTimeShort(nextS.start_time)}`;
+          }
+
+          return `
+            <div class="glass-card" style="padding: 14px 16px; background: rgba(255,255,255,0.85); border: 1px solid rgba(34,197,94,0.3); border-radius: var(--radius-sm); box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:15px; font-weight:800; color:var(--text-dark);">${escapeHtml(room.room_code)}</div>
+                <span style="background:#86EFAC; color:#14532D; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:9999px; text-transform:uppercase;">AVAILABLE</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid rgba(0,0,0,0.06); padding-top:6px;">
+                <span>${nextBookingText}</span>
+                <span style="font-weight:700; color:#15803D;">${hoursLeftText}</span>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+  }
+}
+
+function renderRoomTimetable() {
+  const roomSelect = document.getElementById("room-timetable-select");
+  const container = document.getElementById("room-timetable-grid-container");
+  if (!container) return;
+
+  const roomId = roomSelect ? parseInt(roomSelect.value, 10) : null;
+  if (!roomId) {
+    container.innerHTML = `<div style="text-align:center; padding: 40px; color: var(--text-muted);">Please select a room to view its timetable.</div>`;
+    return;
+  }
+
+  const room = masterDataCache.rooms.find((r) => r.id === roomId);
+  const roomScheds = schedulesCache.filter((s) => s.room_id === roomId);
+
+  const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const dayLabels = {
+    MON: "Mon",
+    TUE: "Tue",
+    WED: "Wed",
+    THU: "Thu",
+    FRI: "Fri",
+    SAT: "Sat",
+  };
+
+  container.innerHTML = `
+    <div style="margin-bottom: 12px; font-size: 14px; font-weight: 700; color: var(--sidebar-bg);">
+      Weekly Timetable: ${escapeHtml(room?.room_code || 'Room')} (${escapeHtml(room?.building || 'COE')}, ${escapeHtml(room?.room_type || '')})
+    </div>
+    <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap: 10px;">
+      ${days.map(d => {
+        const scheds = roomScheds.filter(s => s.day_of_week === d).sort((a,b) => a.start_time.localeCompare(b.start_time));
+        return `
+          <div style="background: rgba(255,255,255,0.7); border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 10px;">
+            <div style="font-size: 13px; font-weight: 700; color: var(--text-dark); margin-bottom: 8px; border-bottom: 2px solid var(--sidebar-bg); padding-bottom: 4px;">${dayLabels[d]}</div>
+            ${scheds.length === 0 ? `
+              <div style="font-size: 11.5px; color: var(--text-muted); font-style: italic; padding: 8px 0;">No classes scheduled</div>
+            ` : scheds.map(s => `
+              <div style="background: #FFFFFF; border-left: 3px solid var(--sidebar-bg); border-radius: 4px; padding: 8px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+                <div style="font-size: 11px; font-weight: 700; color: var(--sidebar-bg);">${formatTimeShort(s.start_time)} - ${formatTimeShort(s.end_time)}</div>
+                <div style="font-size: 12px; font-weight: 700; color: var(--text-dark); margin: 2px 0;">${escapeHtml(s.subject_code || '')}</div>
+                <div style="font-size: 11px; color: var(--text-secondary); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${escapeHtml(s.section_name || '')}</div>
+                <div style="font-size: 10.5px; color: var(--text-muted);">${escapeHtml(s.faculty_name || '')}</div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 

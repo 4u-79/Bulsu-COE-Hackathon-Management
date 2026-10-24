@@ -14,9 +14,10 @@
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 const GRID_START_HOUR   = 7;    // 7:00 AM
-const GRID_END_HOUR     = 19;   // last row starts at 19:00, ends 19:30
+const GRID_END_HOUR     = 20;   // 8:00 PM (13 hours = 832px height at 64px/hr)
 const SLOT_MINUTES      = 30;   // each row = 30 min
-const ROW_PX            = 52;   // pixel height of one 30-min slot
+const ROW_PX            = 32;   // pixel height of one 30-min slot (64px per hour)
+const PIXELS_PER_MINUTE = 64 / 60; // 64px per hour
 const DAYS = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
 const DAY_LABELS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
@@ -97,9 +98,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   buildTimeSlotOptions();
   bindEvents();
   updateRoleAdaptiveFilters();
-  await fetchAndRender();
-  await fetchLiveUtilization();
-  updateWeekLabel();
 
   // Check URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
@@ -108,24 +106,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     setTimeout(openRadar, 300);
   }
   const sec = urlParams.get("section_id") || urlParams.get("section");
+  const progParam = urlParams.get("program");
+  const rm = urlParams.get("room_id") || urlParams.get("room");
+  const fac = urlParams.get("faculty_id") || urlParams.get("faculty");
+  const statParam = urlParams.get("status");
+
+  if (progParam) {
+    setSelectVal("filter-program", progParam);
+    cascadeScheduleFilters();
+  }
   if (sec) {
     setSelectVal("filter-section", sec);
-    fetchAndRender();
+  } else if (!progParam && !rm && !fac && (window.CURRENT_ROLE === "CHAIR" || window.CURRENT_ROLE === "ADMIN")) {
+    // Smart default scope guard: auto-select first section to prevent dumping 200 concurrent classes
+    const secSel = document.getElementById("filter-section");
+    if (secSel && secSel.options.length > 1) {
+      secSel.selectedIndex = 1;
+    }
   }
-  if (urlParams.get("program")) {
-    setSelectVal("filter-program", urlParams.get("program"));
-    fetchAndRender();
-  }
-  const rm = urlParams.get("room_id") || urlParams.get("room");
   if (rm) {
     setSelectVal("filter-room", rm);
-    fetchAndRender();
   }
-  const fac = urlParams.get("faculty_id") || urlParams.get("faculty");
   if (fac) {
     setSelectVal("filter-faculty", fac);
-    fetchAndRender();
   }
+  if (statParam) {
+    setSelectVal("filter-status", statParam);
+  }
+
+  await fetchAndRender();
+  await fetchLiveUtilization();
+  updateWeekLabel();
 });
 
 window.addEventListener("roleChanged", () => {
@@ -191,16 +202,15 @@ function buildTimeGutter() {
   if (!gutter) return;
   gutter.innerHTML = "";
 
-  let hour = GRID_START_HOUR;
-  let min  = 0;
-
-  while (hour < GRID_END_HOUR || (hour === GRID_END_HOUR && min === 0)) {
+  const totalSlots = (GRID_END_HOUR - GRID_START_HOUR) * 2;
+  for (let s = 0; s < totalSlots; s++) {
+    const totalMin = GRID_START_HOUR * 60 + s * SLOT_MINUTES;
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
     const label = document.createElement("div");
-    label.className = "gutter-slot" + (min === 30 ? " gutter-slot--half" : "");
-    label.textContent = min === 0 ? `${hour}:00` : "";
+    label.className = "gutter-slot" + (m === 30 ? " gutter-slot--half" : "");
+    label.textContent = m === 0 ? `${h}:00` : "";
     gutter.appendChild(label);
-    min += 30;
-    if (min >= 60) { min = 0; hour++; }
   }
 }
 
@@ -209,7 +219,7 @@ function buildDayColumns() {
   if (!container) return;
   container.innerHTML = "";
 
-  const totalSlots = (GRID_END_HOUR - GRID_START_HOUR) * 2 + 1; // +1 for 19:00 row
+  const totalSlots = (GRID_END_HOUR - GRID_START_HOUR) * 2;
 
   DAYS.forEach((day, di) => {
     const col = document.createElement("div");
@@ -234,7 +244,7 @@ function buildDayColumns() {
       const totalMin  = GRID_START_HOUR * 60 + slotIndex * SLOT_MINUTES;
       const h = Math.floor(totalMin / 60);
       const m = totalMin % 60;
-      if (h > GRID_END_HOUR) return;
+      if (h >= GRID_END_HOUR) return;
       openModal(null, { day_of_week: day, start_time: `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}` });
     });
 
@@ -259,7 +269,7 @@ function buildDayColumns() {
       const totalMin  = GRID_START_HOUR * 60 + slotIndex * SLOT_MINUTES;
       const h = Math.floor(totalMin / 60);
       const m = totalMin % 60;
-      if (h > GRID_END_HOUR) return;
+      if (h >= GRID_END_HOUR) return;
       openModal(null, { day_of_week: DAYS[_activeDayIndex], start_time: `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}` });
     });
   }
@@ -291,10 +301,14 @@ function normalizeProgram(prog) {
   if (!prog) return "";
   const p = String(prog).toUpperCase().trim();
   if (p === "BSCE" || p === "CIVIL" || p === "CE") return "CE";
-  if (p === "BSEE" || p === "BSECE" || p === "ECE" || p === "ELECTRONICS") return "ECE";
-  if (p === "BSME" || p === "BSMEE" || p === "MEE" || p === "MECHANICAL") return "MEE";
-  if (p === "BSMFE" || p === "BSIE" || p === "MFE" || p === "MANUFACTURING") return "MFE";
-  if (p === "BSCPE" || p === "CPE") return "ECE";
+  if (p === "BSCPE" || p === "CPE") return "CPE";
+  if (p === "BSEE" || p === "EE") return "EE";
+  if (p === "BSECE" || p === "ECE" || p === "ELECTRONICS") return "ECE";
+  if (p === "BSIE" || p === "IE") return "IE";
+  if (p === "BSMFGE" || p === "BSMFE" || p === "MFGE" || p === "MFE" || p === "MANUFACTURING") return "MFGE";
+  if (p === "BSME" || p === "ME") return "ME";
+  if (p === "BSMEE" || p === "MEE" || p === "MECHANICAL") return "MEE";
+  if (p === "GEN" || p === "GENERAL") return "GEN";
   return p;
 }
 
@@ -318,6 +332,8 @@ function cascadeScheduleFilters() {
       filtered.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
     if (filtered.some(s => String(s.id) === String(prevVal))) {
       secSel.value = prevVal;
+    } else if (normProg && filtered.length > 0) {
+      secSel.value = filtered[0].id; // Auto-select first section when program chosen
     } else {
       secSel.value = "";
     }
@@ -326,7 +342,10 @@ function cascadeScheduleFilters() {
   if (facSel) {
     const prevVal = facSel.value;
     const filtered = _masterData.faculty.filter(f => {
-      if (normProg && normalizeProgram(f.program) !== normProg) return false;
+      if (normProg) {
+        const fp = normalizeProgram(f.program);
+        if (fp !== normProg && fp !== "GEN") return false;
+      }
       return true;
     });
     facSel.innerHTML = `<option value="">All Faculty ▾</option>` +
@@ -341,7 +360,10 @@ function cascadeScheduleFilters() {
   if (subjSel) {
     const prevVal = subjSel.value;
     const filtered = _masterData.subjects.filter(s => {
-      if (normProg && normalizeProgram(s.program) !== normProg) return false;
+      if (normProg) {
+        const sp = normalizeProgram(s.program);
+        if (sp !== normProg && sp !== "GEN") return false;
+      }
       if (yearVal && String(s.year_level) !== String(yearVal)) return false;
       return true;
     });
@@ -566,6 +588,10 @@ function renderEventCards(schedules) {
     if (weekContainer) weekContainer.style.display = "none";
     if (dayContainer) {
       dayContainer.style.display = "block";
+      dayContainer.style.position = "relative";
+      dayContainer.style.height = "832px";
+      dayContainer.style.overflow = "hidden";
+      dayContainer.style.width = "100%";
       dayContainer.querySelectorAll(".event-card-day").forEach(el => el.remove());
     }
 
@@ -575,6 +601,8 @@ function renderEventCards(schedules) {
     if (watermark && daySchedules.length === 0) {
       watermark.style.display = "flex";
     }
+
+    resolveDayOverlaps(daySchedules);
 
     daySchedules.forEach(s => {
       const card = buildDayEventCard(s);
@@ -589,7 +617,7 @@ function renderEventCards(schedules) {
     DAYS.forEach(day => {
       const col = document.getElementById(`col-${day}`);
       if (!col) return;
-      col.querySelectorAll(".event-card-v2").forEach(el => el.remove());
+      col.querySelectorAll(".event-card-v2, .event-card-more").forEach(el => el.remove());
     });
 
     // Bucket by day
@@ -606,7 +634,7 @@ function renderEventCards(schedules) {
       const items = byDay[day];
       resolveOverlaps(items);
 
-      items.forEach(s => {
+      items.filter(s => !s._hiddenByMore).forEach(s => {
         const card = buildEventCard(s);
         col.appendChild(card);
       });
@@ -614,14 +642,62 @@ function renderEventCards(schedules) {
   }
 }
 
-/** Assign column position for overlapping cards within the same day */
+/** Assign column position for overlapping cards within the same day (max 2 side-by-side) */
 function resolveOverlaps(items) {
   items.forEach(s => {
     s._startMin = timeToMin(s.start_time);
     s._endMin   = timeToMin(s.end_time);
     s._col = 0;
     s._cols = 1;
+    s._hiddenByMore = false;
+    s._moreCount = 0;
+    s._moreItems = [];
   });
+
+  items.sort((a, b) => a._startMin - b._startMin || (b._endMin - b._startMin) - (a._endMin - a._startMin));
+
+  for (let i = 0; i < items.length; i++) {
+    if (items[i]._hiddenByMore) continue;
+    const cluster = [items[i]];
+    for (let j = 0; j < items.length; j++) {
+      if (i !== j && !items[j]._hiddenByMore && overlapping(items[i], items[j])) {
+        cluster.push(items[j]);
+      }
+    }
+
+    if (cluster.length <= 2) {
+      cluster.forEach((item, idx) => {
+        item._cols = cluster.length;
+        item._col = idx;
+      });
+    } else {
+      // More than 2 classes overlap in this exact slot:
+      // Render at most 2 side-by-side cards (width ~50%) and add a compact +N more badge on card 2
+      cluster[0]._cols = 2;
+      cluster[0]._col = 0;
+
+      cluster[1]._cols = 2;
+      cluster[1]._col = 1;
+      cluster[1]._moreCount = cluster.length - 2;
+      cluster[1]._moreItems = cluster.slice(2);
+
+      for (let k = 2; k < cluster.length; k++) {
+        cluster[k]._hiddenByMore = true;
+      }
+    }
+  }
+}
+
+/** Resolve overlaps in Day View (place up to 2 cards side-by-side) */
+function resolveDayOverlaps(items) {
+  items.forEach(s => {
+    s._startMin = timeToMin(s.start_time);
+    s._endMin   = timeToMin(s.end_time);
+    s._col = 0;
+    s._cols = 1;
+  });
+
+  items.sort((a, b) => a._startMin - b._startMin);
 
   for (let i = 0; i < items.length; i++) {
     const overlaps = [items[i]];
@@ -630,8 +706,8 @@ function resolveOverlaps(items) {
         overlaps.push(items[j]);
       }
     }
-    items[i]._cols = overlaps.length;
-    items[i]._col  = overlaps.indexOf(items[i]);
+    items[i]._cols = Math.min(2, overlaps.length);
+    items[i]._col  = overlaps.indexOf(items[i]) % 2;
   }
 }
 
@@ -642,14 +718,17 @@ function overlapping(a, b) {
 function buildEventCard(s) {
   const startMin  = timeToMin(s.start_time);
   const endMin    = timeToMin(s.end_time);
-  const topPx     = ((startMin - GRID_START_HOUR * 60) / SLOT_MINUTES) * ROW_PX;
-  const heightPx  = ((endMin - startMin) / SLOT_MINUTES) * ROW_PX;
+  const startMinutesFrom7AM = startMin - (GRID_START_HOUR * 60);
+  const durationMinutes = endMin - startMin;
+  const topPx     = Math.max(0, startMinutesFrom7AM * PIXELS_PER_MINUTE);
+  const heightPx  = Math.max(28, durationMinutes * PIXELS_PER_MINUTE - 4);
 
   const isConflict = s.has_conflict;
   const catClass   = getSubjectCategoryClass(s);
+  const isDraft    = (s.status || "").toUpperCase() === "DRAFT";
   const cardClass  = isConflict ? `event-card-v2 ev-conflict ${catClass}`
-                   : s.status === "DRAFT" ? `event-card-v2 ev-draft ${catClass}`
-                   : `event-card-v2 ev-scheduled ${catClass}`;
+                   : isDraft ? `event-card-v2 ev-draft ${catClass}`
+                   : `event-card-v2 ev-published ${catClass}`;
 
   const widthPct   = 100 / (s._cols || 1);
   const leftPct    = widthPct * (s._col || 0);
@@ -658,7 +737,7 @@ function buildEventCard(s) {
   card.className    = cardClass;
   card.dataset.id   = s.id;
   card.style.top    = `${topPx}px`;
-  card.style.height = `${Math.max(heightPx - 4, 20)}px`;
+  card.style.height = `${heightPx}px`;
   card.style.left   = `calc(${leftPct}% + 2px)`;
   card.style.width  = `calc(${widthPct}% - 4px)`;
 
@@ -669,14 +748,20 @@ function buildEventCard(s) {
   const displayTitle = s.subject_code ? `${s.subject_code} – ${s.subject_title || s.subject_name || ""}` : (s.subject_name || "Unknown");
 
   card.innerHTML = `
-    <div class="ev-body">
-      <div class="ev-title">${escapeHtml(displayTitle)}</div>
+    <div class="ev-body" style="position: relative; width: 100%; height: 100%;">
+      ${isDraft ? `<span class="ev-badge-draft">DRAFT</span>` : `<span class="ev-badge-published">✓</span>`}
+      <div class="ev-title" style="padding-right: 32px; font-weight: 700; line-height: 1.2;">${escapeHtml(displayTitle)}</div>
       ${!isShort ? `
-        <div class="ev-meta">${escapeHtml(s.section_name || "—")}</div>
-        <div class="ev-meta ev-faculty">${escapeHtml(s.faculty_name || "—")}</div>
-        <div class="ev-meta" style="font-size: 9px; opacity: 0.85;">${escapeHtml(s.room_code || "—")}</div>
+        <div class="ev-meta" style="font-weight: 600;">${escapeHtml(s.section_name || "—")}</div>
+        <div class="ev-meta ev-faculty" style="opacity: 0.9;">${escapeHtml(s.faculty_name || "—")}</div>
+        <div class="ev-meta" style="font-size: 9.5px; opacity: 0.85;">${escapeHtml(s.room_code || "—")}</div>
       ` : ""}
       ${isConflict ? `<div class="ev-conflict-badge">⚠ Conflict</div>` : ""}
+      ${s._moreCount ? `
+        <button type="button" class="event-card-more" style="bottom: 2px; right: 2px;" title="View all ${s._moreCount + 2} concurrent classes">
+          +${s._moreCount} more
+        </button>
+      ` : ""}
     </div>
     ${isAdmin ? `
       <div class="ev-actions">
@@ -687,7 +772,7 @@ function buildEventCard(s) {
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         </button>
       </div>
-    ` : isStudent && s.status === "PUBLISHED" ? `
+    ` : isStudent && !isDraft ? `
       <div class="ev-actions" style="opacity: 1;">
         <button class="btn-card-reschedule" data-schedule-id="${s.id}" title="Request Reschedule for this class">
           ✎ Reschedule
@@ -695,6 +780,14 @@ function buildEventCard(s) {
       </div>
     ` : ""}
   `;
+
+  // Bind +N more button
+  if (s._moreCount) {
+    card.querySelector(".event-card-more")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openOverlappingClassesModal(s, s._moreItems);
+    });
+  }
 
   // Bind action buttons for admin
   if (isAdmin) {
@@ -709,7 +802,7 @@ function buildEventCard(s) {
   }
 
   // Bind student reschedule button
-  if (isStudent) {
+  if (isStudent && !isDraft) {
     card.querySelector(".btn-card-reschedule")?.addEventListener("click", (e) => {
       e.stopPropagation();
       if (typeof window.openRescheduleModal === "function") {
@@ -718,7 +811,7 @@ function buildEventCard(s) {
     });
   }
 
-  // Click card: if conflicted, open Conflict Radar; if admin, open edit modal
+  // Click card
   card.addEventListener("click", () => {
     if (s.has_conflict) {
       openRadar();
@@ -733,29 +826,44 @@ function buildEventCard(s) {
 function buildDayEventCard(s) {
   const startMin  = timeToMin(s.start_time);
   const endMin    = timeToMin(s.end_time);
-  const topPx     = ((startMin - GRID_START_HOUR * 60) / SLOT_MINUTES) * ROW_PX;
-  const heightPx  = ((endMin - startMin) / SLOT_MINUTES) * ROW_PX;
+  const startMinutesFrom7AM = startMin - (GRID_START_HOUR * 60);
+  const durationMinutes = endMin - startMin;
+  const topPx     = Math.max(0, startMinutesFrom7AM * PIXELS_PER_MINUTE);
+  const heightPx  = Math.max(36, durationMinutes * PIXELS_PER_MINUTE - 4);
 
   const isConflict = s.has_conflict;
   const catClass   = getSubjectCategoryClass(s);
+  const isDraft    = (s.status || "").toUpperCase() === "DRAFT";
   const cardClass  = isConflict ? `event-card-day ev-conflict ${catClass}`
-                   : s.status === "DRAFT" ? `event-card-day ev-draft ${catClass}`
-                   : `event-card-day ${catClass}`;
+                   : isDraft ? `event-card-day ev-draft ${catClass}`
+                   : `event-card-day ev-published ${catClass}`;
 
   const card = document.createElement("div");
   card.className    = cardClass;
   card.dataset.id   = s.id;
   card.style.top    = `${topPx}px`;
-  card.style.height = `${Math.max(heightPx - 4, 45)}px`;
+  card.style.height = `${heightPx}px`;
+
+  // Side-by-side positioning when 2 cards overlap in Day View
+  if (s._cols > 1) {
+    card.style.width = `calc(50% - 8px)`;
+    card.style.left  = s._col === 1 ? `calc(50% + 4px)` : `4px`;
+  } else {
+    card.style.width = `calc(100% - 8px)`;
+    card.style.left  = `4px`;
+  }
 
   const isAdmin = window.CURRENT_ROLE === "CHAIR" || window.CURRENT_ROLE === "ADMIN";
   const displayTitle = s.subject_code ? `${s.subject_code} – ${s.subject_title || s.subject_name || ""}` : (s.subject_name || "Unknown");
 
   card.innerHTML = `
-    <div class="day-card-title">${escapeHtml(displayTitle)}</div>
-    <div class="day-card-section">${escapeHtml(s.section_name || "—")} · Room ${escapeHtml(s.room_code || "—")}</div>
-    <div class="day-card-faculty">${escapeHtml(s.faculty_name || "—")}</div>
-    <div class="day-card-time">${formatTimeRange(s.start_time, s.end_time)}</div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div class="day-card-title" style="font-weight: 700;">${escapeHtml(displayTitle)}</div>
+      ${isDraft ? `<span class="ev-badge-draft">DRAFT</span>` : `<span class="ev-badge-published">✓ Published</span>`}
+    </div>
+    <div class="day-card-section" style="font-weight: 600; margin-top: 2px;">${escapeHtml(s.section_name || "—")} · Room ${escapeHtml(s.room_code || "—")}</div>
+    <div class="day-card-faculty" style="opacity: 0.9; margin-top: 1px;">${escapeHtml(s.faculty_name || "—")}</div>
+    <div class="day-card-time" style="font-size: 11px; margin-top: 2px;">${formatTimeRange(s.start_time, s.end_time)}</div>
     ${isConflict ? `<div class="ev-conflict-badge" style="margin-top: 4px;">⚠ Conflict Detected</div>` : ""}
   `;
 
@@ -768,6 +876,43 @@ function buildDayEventCard(s) {
   });
 
   return card;
+}
+
+function openOverlappingClassesModal(primary, moreItems) {
+  const backdrop = document.getElementById("modal-more-classes-backdrop");
+  const listEl = document.getElementById("modal-more-list");
+  const titleEl = document.getElementById("modal-more-title");
+  const subtitleEl = document.getElementById("modal-more-subtitle");
+  if (!backdrop || !listEl) return;
+
+  const allItems = [primary, ...(moreItems || [])];
+  if (titleEl) titleEl.textContent = `Concurrent Classes (${allItems.length})`;
+  if (subtitleEl) subtitleEl.textContent = `${primary.day_of_week} · Overlapping time slot`;
+
+  listEl.innerHTML = allItems.map(s => `
+    <div style="background: rgba(255,255,255,0.95); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); text-align: left;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <strong style="font-size: 13px; color: #111827;">${escapeHtml(s.subject_code || '')} – ${escapeHtml(s.subject_name || s.subject_title || '')}</strong>
+        <span class="badge ${s.status === 'PUBLISHED' ? 'badge-LECTURE' : 'badge-secondary'}" style="font-size: 9.5px;">${s.status}</span>
+      </div>
+      <div style="font-size: 11.5px; color: #4B5563; margin-top: 4px;">
+        <strong>Section:</strong> ${escapeHtml(s.section_name || '—')} &bull; <strong>Room:</strong> ${escapeHtml(s.room_code || '—')}
+      </div>
+      <div style="font-size: 11.5px; color: #6B7280; margin-top: 2px;">
+        <strong>Faculty:</strong> ${escapeHtml(s.faculty_name || '—')} &bull; <strong>Time:</strong> ${formatTimeRange(s.start_time, s.end_time)}
+      </div>
+    </div>
+  `).join("");
+
+  backdrop.style.display = "flex";
+  backdrop.classList.add("sched-modal-backdrop--open");
+
+  const closeFn = () => {
+    backdrop.style.display = "none";
+    backdrop.classList.remove("sched-modal-backdrop--open");
+  };
+  document.getElementById("modal-more-close")?.addEventListener("click", closeFn, { once: true });
+  document.getElementById("modal-more-ok")?.addEventListener("click", closeFn, { once: true });
 }
 
 function updateRoleSpecificPortals(schedules) {

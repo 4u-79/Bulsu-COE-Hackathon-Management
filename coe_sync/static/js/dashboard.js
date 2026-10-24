@@ -97,9 +97,14 @@ function normalizeProgram(prog) {
   if (!prog) return "";
   const p = prog.trim().toUpperCase();
   if (p === "BSCE" || p === "CE") return "CE";
-  if (p === "BSEE" || p === "BSECE" || p === "ECE" || p === "BSCpE" || p === "CPE") return "ECE";
-  if (p === "BSME" || p === "MEE" || p === "ME") return "MEE";
-  if (p === "BSMFE" || p === "MFE") return "MFE";
+  if (p === "BSCPE" || p === "CPE") return "CPE";
+  if (p === "BSEE" || p === "EE") return "EE";
+  if (p === "BSECE" || p === "ECE") return "ECE";
+  if (p === "BSIE" || p === "IE") return "IE";
+  if (p === "BSMFGE" || p === "BSMFE" || p === "MFGE" || p === "MFE") return "MFGE";
+  if (p === "BSME" || p === "ME") return "ME";
+  if (p === "BSMEE" || p === "MEE") return "MEE";
+  if (p === "GEN") return "GEN";
   return p;
 }
 
@@ -162,6 +167,7 @@ function renderDashboardTable() {
   const year = document.getElementById("dash-filter-year")?.value;
   const sec = document.getElementById("dash-filter-sec")?.value;
   const rm = document.getElementById("dash-filter-room")?.value;
+  const status = document.getElementById("dash-filter-status")?.value;
 
   let filtered = _dashSchedules;
 
@@ -183,6 +189,9 @@ function renderDashboardTable() {
   if (rm) {
     filtered = filtered.filter(s => s.room_id === parseInt(rm));
   }
+  if (status) {
+    filtered = filtered.filter(s => (s.status || "").toUpperCase() === status.toUpperCase());
+  }
 
   // Row-level security for student
   if (window.CURRENT_ROLE === "STUDENT") {
@@ -191,6 +200,7 @@ function renderDashboardTable() {
 
   if (filtered.length === 0) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 24px; color: var(--text-muted);">No matching schedules found.</td></tr>`;
+    renderDashboardGrid(filtered);
     return;
   }
 
@@ -209,6 +219,54 @@ function renderDashboardTable() {
       </td>
     </tr>
   `).join("");
+
+  renderDashboardGrid(filtered);
+}
+
+function renderDashboardGrid(filtered) {
+  const gridContainer = document.getElementById("dash-grid-container");
+  if (!gridContainer) return;
+
+  const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const byDay = {};
+  days.forEach(d => byDay[d] = []);
+  filtered.forEach(s => {
+    if (byDay[s.day_of_week]) byDay[s.day_of_week].push(s);
+  });
+
+  gridContainer.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <div>
+        <h4 style="font-size: 15px; font-weight: 700; color: #1F2937; margin: 0;">Weekly Schedule Overview</h4>
+        <span style="font-size: 12px; color: var(--text-muted);">${filtered.length} classes active</span>
+      </div>
+      <a href="/schedules" class="btn btn-primary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;">
+        Open Full Timetable Grid &rarr;
+      </a>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; text-align: left;">
+      ${days.map(d => `
+        <div style="background: rgba(255,255,255,0.7); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px;">
+          <div style="font-weight: 800; font-size: 12px; color: #6E1717; margin-bottom: 8px; border-bottom: 1.5px solid rgba(110,23,23,0.15); padding-bottom: 4px;">
+            ${d} (${byDay[d].length})
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; max-height: 400px; overflow-y: auto;">
+            ${byDay[d].length === 0 ? '<span style="font-size: 11px; color: #9CA3AF;">No classes</span>' : byDay[d].map(s => `
+              <div style="background: #FFFFFF; border-radius: 6px; padding: 6px 8px; font-size: 11px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-left: 3px solid ${s.status === 'PUBLISHED' ? '#22C55E' : '#F59E0B'};">
+                <div style="font-weight: 700; color: #111827;">${escapeHtml(s.subject_code || '')}</div>
+                <div style="color: #4B5563; font-size: 10px;">${formatTimeTo12(s.start_time)} - ${formatTimeTo12(s.end_time)}</div>
+                <div style="color: #6B7280; font-size: 10px;">${escapeHtml(s.section_name || '')} • ${escapeHtml(s.room_code || '')}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                  <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: ${s.status === 'PUBLISHED' ? '#166534' : '#92400E'};">
+                    ${s.status === 'PUBLISHED' ? '✓ Published' : 'Draft'}
+                  </span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+    </div>
+  `;
 }
 
 function bindDashboardEvents() {
@@ -223,6 +281,7 @@ function bindDashboardEvents() {
   });
   document.getElementById("dash-filter-sec")?.addEventListener("change", renderDashboardTable);
   document.getElementById("dash-filter-room")?.addEventListener("change", renderDashboardTable);
+  document.getElementById("dash-filter-status")?.addEventListener("change", renderDashboardTable);
 
   // View toggles
   const btnTable = document.getElementById("btn-view-table");

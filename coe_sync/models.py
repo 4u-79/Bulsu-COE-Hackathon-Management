@@ -230,6 +230,7 @@ class Room(db.Model):
     )
     capacity = db.Column(db.Integer, nullable=False)
     equipment = db.Column(db.String(255), nullable=True)
+    building = db.Column(db.String(100), default="COE 1 Building", nullable=True)
     is_available = db.Column(db.Boolean, default=True, nullable=False)
 
     # Relationships
@@ -249,6 +250,7 @@ class Room(db.Model):
             "room_type": self.room_type,
             "capacity": self.capacity,
             "equipment": self.equipment,
+            "building": self.building or ("COE 2 Building" if "COE 2" in self.room_code else "COE 1 Building"),
             "is_available": self.is_available,
         }
 

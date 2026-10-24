@@ -96,8 +96,172 @@ def parse_insert_tuples(sql_text: str, table_name: str) -> List[tuple]:
     return rows
 
 
+DEPT_MAP = {
+    "Civil Engineering": "CE",
+    "Computer Engineering": "CPE",
+    "Electrical Engineering": "EE",
+    "Electronics Engineering": "ECE",
+    "Industrial Engineering": "IE",
+    "Manufacturing Engineering": "MFGE",
+    "Manufactoring Engineering": "MFGE",
+    "Mechanical Engineering": "ME",
+    "Mechatronics Engineering": "MEE",
+    "General Engineering": "GEN",
+    "General Subject": "GEN",
+}
+
+DEPT_FULL_LABELS = {
+    "CE": "Civil Engineering (CE)",
+    "CPE": "Computer Engineering (CPE)",
+    "EE": "Electrical Engineering (EE)",
+    "ECE": "Electronics Engineering (ECE)",
+    "IE": "Industrial Engineering (IE)",
+    "MFGE": "Manufacturing Engineering (MFGE)",
+    "ME": "Mechanical Engineering (ME)",
+    "MEE": "Mechatronics Engineering (MEE)",
+    "GEN": "General Engineering (GEN)",
+}
+
+
+def generate_faculty_email(name: str, dept_code: str, existing_emails: set) -> str:
+    """Generate a unique deterministic bulsu.edu.ph email address for a faculty member."""
+    clean_name = re.sub(r"^(ENGR\.|DR\.|PROF\.|ARCH\.)\s+", "", name, flags=re.IGNORECASE).strip()
+    parts = clean_name.lower().replace("-", " ").replace(",", " ").split()
+    if len(parts) >= 2:
+        first = re.sub(r"[^a-z0-9]", "", parts[0])
+        last = re.sub(r"[^a-z0-9]", "", parts[-1])
+        base_username = f"{first}.{last}"
+    elif len(parts) == 1:
+        base_username = re.sub(r"[^a-z0-9]", "", parts[0])
+    else:
+        base_username = "faculty.member"
+
+    email = f"{base_username}@bulsu.edu.ph"
+    counter = 2
+    while email in existing_emails:
+        email = f"{base_username}{counter}@bulsu.edu.ph"
+        counter += 1
+    existing_emails.add(email)
+    return email
+
+
+def load_and_clean_data2_sql(sql_file_path: Path = None) -> Dict[str, Any]:
+    """
+    Parse and clean data-2.sql (Single Source of Truth for Faculty, Sections, Subjects).
+    Applies all canonical normalization, typo cleanup, deduplication, and department mapping.
+    """
+    if sql_file_path is None:
+        sql_file_path = Path(__file__).resolve().parent / "data-2.sql"
+
+    if not sql_file_path.exists():
+        raise FileNotFoundError(f"data-2.sql not found at {sql_file_path}")
+
+    sql_text = sql_file_path.read_text(encoding="utf-8")
+
+    # 1. Clean Faculty (126 real BulSU COE faculty across 8 depts + General Engineering)
+    raw_fac = parse_insert_tuples(sql_text, "coe facculty")
+    faculty_list = []
+    existing_emails = set()
+
+    for r in raw_fac:
+        row_id = int(r[0])
+        name = r[1].strip()
+        dept_raw = r[3].strip()
+        prog = DEPT_MAP.get(dept_raw, "GEN")
+        email = generate_faculty_email(name, prog, existing_emails)
+
+        faculty_list.append({
+            "id": row_id,
+            "name": name,
+            "email": email,
+            "program": prog,
+            "max_units": 21,
+            "current_units": 0,
+        })
+
+    # 2. Clean Sections (90 sections across 8 departments, student_count = 40)
+    raw_sec = parse_insert_tuples(sql_text, "coe sections")
+    sections_list = []
+
+    for r in raw_sec:
+        row_id = int(r[0])
+        sec_name = r[1].strip()
+        dept_raw = r[2].strip()
+        yr = int(r[3]) if len(r) > 3 and r[3] else 1
+        prog = DEPT_MAP.get(dept_raw, "GEN")
+
+        sections_list.append({
+            "id": row_id,
+            "name": sec_name,
+            "program": prog,
+            "year_level": yr,
+            "student_count": 40,
+        })
+
+    # 3. Clean Subjects (429 subject range with deduplication and typo fixes)
+    raw_subj = parse_insert_tuples(sql_text, "coe subjects")
+    subjects_list = []
+    seen_codes = set()
+
+    for r in raw_subj:
+        row_id = int(r[0])
+        code = r[1].strip()
+        title = r[2].strip()
+        dept_raw = r[3].strip()
+        yr = int(r[4]) if len(r) > 4 and r[4] and r[4] != "NULL" else 1
+        sem = int(r[5]) if len(r) > 5 and r[5] and r[5] != "NULL" else 1
+        units = int(r[6]) if len(r) > 6 and r[6] and r[6] != "NULL" else 3
+        stype = (r[7] or "Lecture").strip().upper() if len(r) > 7 else "LECTURE"
+        norm_type = "LAB" if "LAB" in stype else "LECTURE"
+        hours = int(r[8]) if len(r) > 8 and r[8] and r[8] != "NULL" else (3 if norm_type == "LAB" else units)
+
+        # Subject Fix 1: Fix ID 94 (CIV 414-CEM) department from 'General Subject' to 'Civil Engineering'
+        if row_id == 94 or code == "CIV 414-CEM":
+            dept_raw = "Civil Engineering"
+
+        # Subject Fix 2: Deduplicate COE 104 (IDs 8 and 9 are both Calculus 2 in Year 1 Sem 2)
+        if code == "COE 104":
+            if "COE 104" in seen_codes:
+                continue
+            seen_codes.add("COE 104")
+            title = "Calculus 2"
+
+        # Subject Fix 3: Clean typos
+        if code.startswith("MFE 201"):
+            code = "MFE 201"
+        title = title.replace("Microcontroller/Microproce ssor", "Microcontroller/Microprocessor")
+        title = title.replace("Enegineering Management", "Engineering Management")
+        title = title.replace("Desgin", "Design")
+
+        prog = DEPT_MAP.get(dept_raw, "GEN")
+        split_pref = "3_HOUR_BLOCK" if norm_type == "LAB" else "1.5_HOUR_SPLIT"
+
+        subjects_list.append({
+            "id": row_id,
+            "code": code,
+            "title": title,
+            "program": prog,
+            "year_level": yr,
+            "semester": sem,
+            "units": units,
+            "subject_type": norm_type,
+            "hours_per_week": hours,
+            "split_preference": split_pref,
+        })
+
+    return {
+        "faculty": faculty_list,
+        "sections": sections_list,
+        "subjects": subjects_list,
+    }
+
+
 def load_and_clean_sql_dump(sql_file_path: Path = None) -> Dict[str, Any]:
-    """Parse and clean all 12 department tables from coe-database.sql."""
+    """Parse and clean SQL dump data. Prioritizes data-2.sql as the single source of truth."""
+    data2_path = Path(__file__).resolve().parent / "data-2.sql"
+    if data2_path.exists():
+        return load_and_clean_data2_sql(data2_path)
+
     if sql_file_path is None:
         sql_file_path = Path(__file__).resolve().parent / "coe-database.sql"
 

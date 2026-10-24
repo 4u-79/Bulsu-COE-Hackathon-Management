@@ -27,6 +27,31 @@ from services.conflict_detector import (
 )
 
 
+def normalize_prog_code(p: Optional[str]) -> str:
+    if not p:
+        return ""
+    p_up = str(p).strip().upper()
+    if p_up in ("CPE", "BSCPE"):
+        return "CPE"
+    if p_up in ("CE", "BSCE"):
+        return "CE"
+    if p_up in ("EE", "BSEE"):
+        return "EE"
+    if p_up in ("ECE", "BSECE"):
+        return "ECE"
+    if p_up in ("IE", "BSIE"):
+        return "IE"
+    if p_up in ("MFGE", "MFE", "BSMFGE", "BSMFE"):
+        return "MFGE"
+    if p_up in ("ME", "BSME"):
+        return "ME"
+    if p_up in ("MEE", "BSMEE"):
+        return "MEE"
+    if p_up in ("GEN", "GENERAL"):
+        return "GEN"
+    return p_up
+
+
 def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -> Dict[str, Any]:
     """
     Executes the intelligent timetable placement algorithm based on user parameters.
@@ -48,7 +73,8 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
         sec_query = sec_query.filter(Section.id.in_(section_ids))
     else:
         if program and str(program).strip().upper() != "ALL":
-            sec_query = sec_query.filter(Section.program == str(program).strip())
+            norm_p = normalize_prog_code(program)
+            sec_query = sec_query.filter(db.or_(Section.program == norm_p, Section.program == str(program).strip()))
         if year_level and str(year_level).strip().upper() != "ALL":
             try:
                 sec_query = sec_query.filter(Section.year_level == int(year_level))
@@ -167,19 +193,19 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
 
     for sec in sections:
         # Match curriculum: only subjects corresponding to this section's program and year level
+        sec_p = normalize_prog_code(sec.program)
         sec_subjects = [
             sub
             for sub in subjects
             if (
                 not sub.program
                 or not sec.program
-                or sec.program == "BSCpE"
-                or sub.program in (sec.program, "ALL", "COMMON", "COE")
+                or normalize_prog_code(sub.program) == sec_p
+                or normalize_prog_code(sub.program) in ("GEN", "ALL", "COMMON", "COE")
             )
             and (
                 not sub.year_level
                 or not sec.year_level
-                or sec.program == "BSCpE"
                 or sub.year_level == sec.year_level
             )
         ]
@@ -210,7 +236,10 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
             # Candidate faculty matching program & workload
             dept_faculty = [
                 f for f in faculty_list
-                if not f.program or not sec.program or f.program == sec.program or sec.program == "BSCpE"
+                if not f.program
+                or not sec.program
+                or normalize_prog_code(f.program) == sec_p
+                or normalize_prog_code(f.program) in ("GEN", "ALL", "COMMON", "COE")
             ]
             valid_faculty = dept_faculty if dept_faculty else [f for f in faculty_list]
             if balance_workload:

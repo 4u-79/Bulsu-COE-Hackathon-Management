@@ -53,10 +53,12 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
 
     def setUp(self):
         """Reset session and re-seed for clean test isolation."""
-        with self.app.app_context():
-            # Clear schedules while keeping master seed data
-            Schedule.query.delete()
-            db.session.commit()
+        self.app_context = self.app.app_context()
+        self.app_context.push()
+
+        # Clear schedules while keeping master seed data
+        Schedule.query.delete()
+        db.session.commit()
 
         # Login as CHAIR by default for administrative endpoints
         with self.client.session_transaction() as sess:
@@ -67,12 +69,16 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
             sess["reference_id"] = None
             sess["active_reference_id"] = None
 
+    def tearDown(self):
+        db.session.rollback()
+        self.app_context.pop()
+
     def test_01_room_collision_raises_409_with_suggestions(self):
         """Test: A room collision raises HTTP 409 with alternative suggestions."""
-        math101 = self.subjects["MATH 101"]
-        cpe2a = self.sections["CpE 2A"]
-        santos = self.faculty["Prof. Juan Santos"]
-        eng201 = self.rooms["Eng-201"]
+        math101 = Subject.query.filter_by(subject_type="LECTURE").first()
+        cpe2a = Section.query.first()
+        santos = Faculty.query.first()
+        eng201 = Room.query.filter_by(room_type="LECTURE").first()
 
         # Step A: Create initial schedule slot
         payload_1 = {
@@ -88,9 +94,9 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
         self.assertEqual(res1.status_code, 201)
 
         # Step B: Attempt overlapping booking in the exact same room with different faculty & section
-        chem101 = self.subjects["CHEM 101"]
-        cpe3a = self.sections["CpE 3A"]
-        cruz = self.faculty["Engr. Alex Cruz"]
+        chem101 = Subject.query.filter_by(subject_type="LECTURE").offset(1).first() or math101
+        cpe3a = Section.query.offset(1).first() or cpe2a
+        cruz = Faculty.query.offset(1).first() or santos
 
         payload_2 = {
             "subject_id": chem101.id,
@@ -119,10 +125,10 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
 
     def test_02_overcapacity_assignment_rejected(self):
         """Test: An overcapacity class assignment is rejected."""
-        math101 = self.subjects["MATH 101"]
-        cpe1a = self.sections["CpE 1A"]  # 45 students
-        santos = self.faculty["Prof. Juan Santos"]
-        eng104 = self.rooms["Eng-104"]  # Capacity: 35 seats
+        math101 = Subject.query.filter_by(subject_type="LECTURE").first()
+        cpe1a = Section.query.filter(Section.student_count > 35).first() or Section.query.first()
+        santos = Faculty.query.first()
+        eng104 = Room.query.filter(Room.capacity < cpe1a.student_count).first()
 
         payload = {
             "subject_id": math101.id,
@@ -144,10 +150,10 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
 
     def test_03_lab_subject_assigned_to_lecture_room_rejected(self):
         """Test: A lab subject assigned to a lecture room is rejected."""
-        cpe211l = self.subjects["CPE 211L"]  # LAB subject
-        cpe2a = self.sections["CpE 2A"]  # 40 students
-        santos = self.faculty["Prof. Juan Santos"]
-        eng201 = self.rooms["Eng-201"]  # LECTURE room
+        cpe211l = Subject.query.filter_by(subject_type="LAB").first()
+        cpe2a = Section.query.first()
+        santos = Faculty.query.first()
+        eng201 = Room.query.filter_by(room_type="LECTURE").first()
 
         payload = {
             "subject_id": cpe211l.id,
@@ -172,20 +178,26 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
 
     def test_04_student_cannot_post_schedules(self):
         """Test: A Student attempting POST /api/schedules receives HTTP 403."""
+        student_user = User.query.filter_by(role="STUDENT").first()
+        sec = Section.query.first()
+        sub = Subject.query.first()
+        fac = Faculty.query.first()
+        room = Room.query.first()
+
         # Impersonate / authenticate as STUDENT
         with self.client.session_transaction() as sess:
-            sess["user_id"] = self.users["student_cpe2a"].id
-            sess["username"] = "student_cpe2a"
+            sess["user_id"] = student_user.id
+            sess["username"] = student_user.username
             sess["role"] = "STUDENT"
             sess["active_role"] = "STUDENT"
-            sess["reference_id"] = self.sections["CpE 2A"].id
-            sess["active_reference_id"] = self.sections["CpE 2A"].id
+            sess["reference_id"] = sec.id
+            sess["active_reference_id"] = sec.id
 
         payload = {
-            "subject_id": self.subjects["MATH 101"].id,
-            "section_id": self.sections["CpE 2A"].id,
-            "faculty_id": self.faculty["Prof. Juan Santos"].id,
-            "room_id": self.rooms["Eng-201"].id,
+            "subject_id": sub.id,
+            "section_id": sec.id,
+            "faculty_id": fac.id,
+            "room_id": room.id,
             "day_of_week": "THU",
             "start_time": "08:00:00",
             "end_time": "10:00:00",
@@ -198,11 +210,16 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
 
     def test_05_inverted_time_rejected_with_400(self):
         """Test: Inverted time (start_time >= end_time) receives HTTP 400."""
+        sec = Section.query.first()
+        sub = Subject.query.first()
+        fac = Faculty.query.first()
+        room = Room.query.first()
+
         payload = {
-            "subject_id": self.subjects["MATH 101"].id,
-            "section_id": self.sections["CpE 2A"].id,
-            "faculty_id": self.faculty["Prof. Juan Santos"].id,
-            "room_id": self.rooms["Eng-201"].id,
+            "subject_id": sub.id,
+            "section_id": sec.id,
+            "faculty_id": fac.id,
+            "room_id": room.id,
             "day_of_week": "FRI",
             "start_time": "11:00:00",  # Inverted: start is later than end
             "end_time": "09:00:00",
@@ -214,18 +231,19 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
         self.assertIn("start_time must be strictly earlier than end_time", data["error"])
 
     def test_06_faculty_unavailability_blackout_enforced(self):
-        """Test: Prof. Maria Rivera unavailable on Friday 08:00-12:00."""
-        rivera = self.faculty["Prof. Maria Rivera"]
-        cpe3a = self.sections["CpE 3A"]
-        eng201 = self.rooms["Eng-201"]
-        math101 = self.subjects["MATH 101"]
+        """Test: Faculty unavailability blackout on Friday is enforced."""
+        blackout = FacultyAvailability.query.filter_by(is_preferred=False).first()
+        rivera = Faculty.query.get(blackout.faculty_id)
+        cpe3a = Section.query.first()
+        eng201 = Room.query.filter_by(room_type="LECTURE").first()
+        math101 = Subject.query.filter_by(subject_type="LECTURE").first()
 
         payload = {
             "subject_id": math101.id,
             "section_id": cpe3a.id,
             "faculty_id": rivera.id,
             "room_id": eng201.id,
-            "day_of_week": "FRI",
+            "day_of_week": blackout.day_of_week,
             "start_time": "09:00:00",  # Inside 08:00 - 12:00 blackout
             "end_time": "11:00:00",
         }
@@ -240,10 +258,10 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
     def test_07_locked_schedule_edit_rejected(self):
         """Test: Updating a locked (PUBLISHED) schedule receives HTTP 400."""
         # Create schedule
-        math101 = self.subjects["MATH 101"]
-        cpe2a = self.sections["CpE 2A"]
-        santos = self.faculty["Prof. Juan Santos"]
-        eng201 = self.rooms["Eng-201"]
+        math101 = Subject.query.filter_by(subject_type="LECTURE").first()
+        cpe2a = Section.query.first()
+        santos = Faculty.query.first()
+        eng201 = Room.query.filter(Room.room_type == "LECTURE", Room.capacity >= cpe2a.student_count).first()
 
         payload = {
             "subject_id": math101.id,
@@ -268,11 +286,16 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
     def test_08_analytics_summary_endpoint(self):
         """Test: Analytics summary endpoint returns valid metrics."""
         # Create a valid schedule to populate analytics
+        sub = Subject.query.filter_by(subject_type="LECTURE").first()
+        sec = Section.query.first()
+        fac = Faculty.query.first()
+        room = Room.query.filter(Room.room_type == "LECTURE", Room.capacity >= sec.student_count).first()
+
         payload = {
-            "subject_id": self.subjects["MATH 101"].id,
-            "section_id": self.sections["CpE 2A"].id,
-            "faculty_id": self.faculty["Prof. Juan Santos"].id,
-            "room_id": self.rooms["Eng-201"].id,
+            "subject_id": sub.id,
+            "section_id": sec.id,
+            "faculty_id": fac.id,
+            "room_id": room.id,
             "day_of_week": "MON",
             "start_time": "08:00:00",
             "end_time": "11:00:00",  # 3 hours
@@ -287,7 +310,7 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
         self.assertGreater(data["room_utilization"], 0.0)
         self.assertEqual(data["unresolved_conflicts"], 0)
         self.assertLessEqual(data["schedule_quality_score"], 100)
-        self.assertEqual(len(data["faculty_workloads"]), len(self.faculty))
+        self.assertEqual(len(data["faculty_workloads"]), Faculty.query.count())
 
 
 if __name__ == "__main__":

@@ -88,9 +88,13 @@
         <select class="filter-pill-select" id="filter-program" title="Filter by Degree Program">
           <option value="">All Programs ▾</option>
           <option value="CE">CE ▾</option>
+          <option value="CPE">CPE ▾</option>
+          <option value="EE">EE ▾</option>
           <option value="ECE">ECE ▾</option>
+          <option value="IE">IE ▾</option>
+          <option value="MFGE">MFGE ▾</option>
+          <option value="ME">ME ▾</option>
           <option value="MEE">MEE ▾</option>
-          <option value="MFE">MFE ▾</option>
         </select>
       </div>
 
@@ -112,6 +116,15 @@
         </select>
       </div>
 
+      <!-- Status Filter Pill -->
+      <div id="filter-wrap-status" class="filter-wrap">
+        <select class="filter-pill-select filter-pill" id="filter-status" title="Filter by Schedule Status">
+          <option value="">All Status</option>
+          <option value="DRAFT">Draft Only</option>
+          <option value="PUBLISHED">Published Only</option>
+        </select>
+      </div>
+
       <!-- Faculty / Student Adaptive Filters -->
       <div id="filter-wrap-subject" class="filter-wrap" style="display:none;">
         <select class="filter-pill-select" id="filter-subject" title="Filter by Subject">
@@ -130,7 +143,6 @@
       <!-- Hidden filters kept for compatibility with existing tests -->
       <div style="display:none;">
         <select id="filter-year"><option value="">All Year Levels</option></select>
-        <select id="filter-status"><option value="">All Statuses</option></select>
       </div>
     </div>
 
@@ -380,6 +392,21 @@
         <button type="submit" class="btn btn-primary" id="sched-modal-save">Save Schedule</button>
       </div>
     </form>
+  </div>
+<!-- Overlapping Classes Popover Modal -->
+<div class="sched-modal-backdrop" id="modal-more-classes-backdrop" style="display:none; z-index: 1000;">
+  <div class="sched-modal" style="max-width: 480px;">
+    <div class="sched-modal-header">
+      <h3 id="modal-more-title">Concurrent Classes</h3>
+      <button class="sched-modal-close" id="modal-more-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="sched-modal-body">
+      <p id="modal-more-subtitle" style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;"></p>
+      <div id="modal-more-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto;"></div>
+    </div>
+    <div class="sched-modal-footer">
+      <button type="button" class="btn btn-secondary" id="modal-more-ok">Close</button>
+    </div>
   </div>
 </div>
 {% endif %}
