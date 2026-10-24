@@ -17,6 +17,7 @@ from models import (
     Section,
     Faculty,
     Room,
+    FacultyAvailability,
     AuditLog,
 )
 from services.conflict_detector import (
@@ -24,6 +25,7 @@ from services.conflict_detector import (
     find_alternatives,
     parse_time,
     time_to_minutes,
+    times_overlap,
 )
 from services.scheduler import run_smart_scheduler
 from routes.auth import (
@@ -575,6 +577,10 @@ def generate_draft_schedules():
     faculty_list = Faculty.query.all()
     rooms = Room.query.filter_by(is_available=True).all()
 
+    current_schedules = list(Schedule.query.all())
+    blackouts = FacultyAvailability.query.filter_by(is_preferred=False).all()
+    faculty_units_map = {f.id: (f.current_units or 0) for f in faculty_list}
+
     placed = []
     unplaced = []
 
@@ -589,10 +595,26 @@ def generate_draft_schedules():
     ]
 
     for sec in sections:
-        for sub in subjects:
+        # Match curriculum: only subjects corresponding to this section's program and year level
+        sec_subjects = [
+            sub
+            for sub in subjects
+            if (
+                not sub.program
+                or not sec.program
+                or sub.program in (sec.program, "ALL", "COMMON", "COE")
+                or sec.program == "BSCpE"
+            )
+            and (
+                not sub.year_level
+                or not sec.year_level
+                or sub.year_level == sec.year_level
+            )
+        ]
+
+        for sub in sec_subjects:
             # Check if this section already has this subject scheduled
-            exists = Schedule.query.filter_by(section_id=sec.id, subject_id=sub.id).first()
-            if exists:
+            if any(s.section_id == sec.id and s.subject_id == sub.id for s in current_schedules):
                 continue
 
             # Find matching candidate rooms
@@ -609,11 +631,17 @@ def generate_draft_schedules():
                 })
                 continue
 
-            # Find candidate faculty with remaining unit capacity
+            # Find candidate faculty with matching program and remaining unit capacity
             valid_fac = [
                 f for f in faculty_list
-                if (f.current_units or 0) + sub.units <= f.max_units
+                if (not f.program or not sec.program or f.program == sec.program or sec.program == "BSCpE")
+                and (faculty_units_map.get(f.id, 0) + sub.units <= f.max_units)
             ]
+            if not valid_fac:
+                valid_fac = [
+                    f for f in faculty_list
+                    if (not f.program or not sec.program or f.program == sec.program or sec.program == "BSCpE")
+                ]
             if not valid_fac:
                 valid_fac = faculty_list  # Fallback to avoid deadlocks
 
@@ -626,39 +654,65 @@ def generate_draft_schedules():
                 for st_str, et_str in candidate_slots:
                     if slot_assigned:
                         break
+                    st = parse_time(st_str)
+                    et = parse_time(et_str)
+
+                    # Quick pre-check: Is section free at this time on this day?
+                    if any(
+                        s.section_id == sec.id
+                        and s.day_of_week == day
+                        and times_overlap(s.start_time, s.end_time, st, et)
+                        for s in current_schedules
+                    ):
+                        continue
+
+                    # Find first free room among valid_rooms
                     for r in valid_rooms:
                         if slot_assigned:
                             break
+                        if any(
+                            s.room_id == r.id
+                            and s.day_of_week == day
+                            and times_overlap(s.start_time, s.end_time, st, et)
+                            for s in current_schedules
+                        ):
+                            continue
+
+                        # Find first free faculty among valid_fac
                         for fac in valid_fac:
-                            candidate_payload = {
-                                "subject_id": sub.id,
-                                "section_id": sec.id,
-                                "faculty_id": fac.id,
-                                "room_id": r.id,
-                                "day_of_week": day,
-                                "start_time": st_str,
-                                "end_time": et_str,
-                            }
-                            val = validate_schedule_slot(candidate_payload)
-                            if val["valid"]:
-                                st = parse_time(st_str)
-                                et = parse_time(et_str)
-                                new_sched = Schedule(
-                                    subject_id=sub.id,
-                                    section_id=sec.id,
-                                    faculty_id=fac.id,
-                                    room_id=r.id,
-                                    day_of_week=day,
-                                    start_time=st,
-                                    end_time=et,
-                                    status="DRAFT",
-                                )
-                                db.session.add(new_sched)
-                                db.session.flush()
-                                recalculate_faculty_units(fac.id)
-                                placed.append(new_sched)
-                                slot_assigned = True
-                                break
+                            if any(
+                                s.faculty_id == fac.id
+                                and s.day_of_week == day
+                                and times_overlap(s.start_time, s.end_time, st, et)
+                                for s in current_schedules
+                            ):
+                                continue
+
+                            # Check faculty blackout availability
+                            if any(
+                                b.faculty_id == fac.id
+                                and b.day_of_week == day
+                                and times_overlap(b.start_time, b.end_time, st, et)
+                                for b in blackouts
+                            ):
+                                continue
+
+                            new_sched = Schedule(
+                                subject_id=sub.id,
+                                section_id=sec.id,
+                                faculty_id=fac.id,
+                                room_id=r.id,
+                                day_of_week=day,
+                                start_time=st,
+                                end_time=et,
+                                status="DRAFT",
+                            )
+                            db.session.add(new_sched)
+                            current_schedules.append(new_sched)
+                            faculty_units_map[fac.id] = faculty_units_map.get(fac.id, 0) + sub.units
+                            placed.append(new_sched)
+                            slot_assigned = True
+                            break
 
             if not slot_assigned:
                 unplaced.append({

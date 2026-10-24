@@ -81,7 +81,7 @@ class User(db.Model):
 class Faculty(db.Model):
     """
     Faculty model storing faculty member credentials, workload limits,
-    and current unit assignments.
+    department program assignment, and current unit assignments.
     """
 
     __tablename__ = "faculty"
@@ -89,6 +89,7 @@ class Faculty(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    program = db.Column(db.String(50), default="CE", nullable=False, index=True)
     max_units = db.Column(db.Integer, default=21, nullable=False)
     current_units = db.Column(db.Integer, default=0, nullable=False)
 
@@ -114,26 +115,27 @@ class Faculty(db.Model):
             "id": self.id,
             "name": self.name,
             "email": self.email,
+            "program": self.program,
             "max_units": self.max_units,
             "current_units": self.current_units,
         }
 
     def __repr__(self) -> str:
-        return f"<Faculty id={self.id} name='{self.name}' units={self.current_units}/{self.max_units}>"
+        return f"<Faculty id={self.id} name='{self.name}' program='{self.program}' units={self.current_units}/{self.max_units}>"
 
 
 class Section(db.Model):
     """
-    Academic Section model representing student cohort classes (e.g. CpE 1A, CpE 2A).
+    Academic Section model representing student cohort classes (e.g. CE-1A, ECE-1A, MEE-1A, MFE-1A).
     """
 
     __tablename__ = "section"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     name = db.Column(db.String(50), nullable=False)
-    program = db.Column(db.String(50), default="BSCpE", nullable=False)
-    year_level = db.Column(db.Integer, nullable=False)
-    student_count = db.Column(db.Integer, nullable=False)
+    program = db.Column(db.String(50), nullable=True, index=True)
+    year_level = db.Column(db.Integer, nullable=True)
+    student_count = db.Column(db.Integer, default=42, nullable=False)
 
     # Relationships
     schedules = db.relationship(
@@ -160,20 +162,23 @@ class Section(db.Model):
 
 class Subject(db.Model):
     """
-    Course Subject model representing academic offerings (Lecture or Lab).
+    Course Subject model representing academic offerings across departments (Lecture or Lab).
     """
 
     __tablename__ = "subject"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    code = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    code = db.Column(db.String(50), nullable=False, index=True)
     title = db.Column(db.String(150), nullable=False)
+    program = db.Column(db.String(50), nullable=True, index=True)
     units = db.Column(db.Integer, nullable=False)
     subject_type = db.Column(
         db.Enum("LECTURE", "LAB", name="subject_type_enum"),
         nullable=False,
     )
     hours_per_week = db.Column(db.Integer, nullable=False)
+    year_level = db.Column(db.Integer, nullable=True)
+    semester = db.Column(db.Integer, nullable=True)
     split_preference = db.Column(
         db.Enum("3_HOUR_BLOCK", "1.5_HOUR_SPLIT", name="subject_split_pref_enum"),
         default="1.5_HOUR_SPLIT",
@@ -195,19 +200,22 @@ class Subject(db.Model):
             "id": self.id,
             "code": self.code,
             "title": self.title,
+            "program": self.program,
             "units": self.units,
             "subject_type": self.subject_type,
             "hours_per_week": self.hours_per_week,
+            "year_level": self.year_level,
+            "semester": self.semester,
             "split_preference": self.split_preference,
         }
 
     def __repr__(self) -> str:
-        return f"<Subject id={self.id} code='{self.code}' units={self.units} type='{self.subject_type}'>"
+        return f"<Subject id={self.id} code='{self.code}' program='{self.program}' units={self.units} type='{self.subject_type}'>"
 
 
 class Room(db.Model):
     """
-    Classroom and Laboratory facility model.
+    Classroom and Laboratory facility model with equipment and capacity metadata.
     """
 
     __tablename__ = "room"
@@ -221,6 +229,7 @@ class Room(db.Model):
         nullable=False,
     )
     capacity = db.Column(db.Integer, nullable=False)
+    equipment = db.Column(db.String(255), nullable=True)
     is_available = db.Column(db.Boolean, default=True, nullable=False)
 
     # Relationships
@@ -239,11 +248,56 @@ class Room(db.Model):
             "room_code": self.room_code,
             "room_type": self.room_type,
             "capacity": self.capacity,
+            "equipment": self.equipment,
             "is_available": self.is_available,
         }
 
     def __repr__(self) -> str:
         return f"<Room id={self.id} code='{self.room_code}' type='{self.room_type}' capacity={self.capacity}>"
+
+
+class Conflict(db.Model):
+    """
+    Conflict log entity tracking detected hard constraints and schedule overlaps.
+    """
+
+    __tablename__ = "conflict"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    schedule_id = db.Column(
+        db.Integer,
+        db.ForeignKey("schedule.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    conflict_type = db.Column(db.String(50), nullable=False)
+    severity = db.Column(db.String(20), default="HARD", nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    resolved = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    schedule = db.relationship(
+        "Schedule",
+        backref=db.backref("conflicts", cascade="all, delete-orphan", lazy=True),
+    )
+
+    def to_dict(self) -> dict:
+        """Serialize Conflict to dictionary."""
+        return {
+            "id": self.id,
+            "schedule_id": self.schedule_id,
+            "conflict_type": self.conflict_type,
+            "severity": self.severity,
+            "description": self.description,
+            "resolved": self.resolved,
+            "created_at": (
+                self.created_at.isoformat() if self.created_at else None
+            ),
+        }
+
+    def __repr__(self) -> str:
+        return f"<Conflict id={self.id} type='{self.conflict_type}' resolved={self.resolved}>"
 
 
 class FacultyAvailability(db.Model):

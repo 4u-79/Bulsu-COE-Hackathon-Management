@@ -23,6 +23,7 @@ from services.conflict_detector import (
     validate_schedule_slot,
     parse_time,
     time_to_minutes,
+    times_overlap,
 )
 
 
@@ -138,12 +139,54 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
 
     # Dynamic workload counter during this generation run
     faculty_units_assigned = {f.id: (f.current_units or 0) for f in faculty_list}
+    existing_schedules = list(Schedule.query.all())
+
+    def is_sec_busy(sec_id, day, st, et):
+        return any(
+            s.section_id == sec_id
+            and s.day_of_week == day
+            and times_overlap(s.start_time, s.end_time, st, et)
+            for s in existing_schedules
+        )
+
+    def is_room_busy(room_id, day, st, et):
+        return any(
+            s.room_id == room_id
+            and s.day_of_week == day
+            and times_overlap(s.start_time, s.end_time, st, et)
+            for s in existing_schedules
+        )
+
+    def is_fac_busy(fac_id, day, st, et):
+        return any(
+            s.faculty_id == fac_id
+            and s.day_of_week == day
+            and times_overlap(s.start_time, s.end_time, st, et)
+            for s in existing_schedules
+        )
 
     for sec in sections:
-        for sub in subjects:
+        # Match curriculum: only subjects corresponding to this section's program and year level
+        sec_subjects = [
+            sub
+            for sub in subjects
+            if (
+                not sub.program
+                or not sec.program
+                or sec.program == "BSCpE"
+                or sub.program in (sec.program, "ALL", "COMMON", "COE")
+            )
+            and (
+                not sub.year_level
+                or not sec.year_level
+                or sec.program == "BSCpE"
+                or sub.year_level == sec.year_level
+            )
+        ]
+
+        for sub in sec_subjects:
             # Check if this section already has this subject scheduled
-            existing = Schedule.query.filter_by(section_id=sec.id, subject_id=sub.id).first()
-            if existing:
+            if any(s.section_id == sec.id and s.subject_id == sub.id for s in existing_schedules):
                 continue
 
             # Candidate rooms matching capacity and room type
@@ -164,8 +207,12 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
             if optimize_utilization:
                 valid_rooms.sort(key=lambda r: (r.capacity - sec.student_count))
 
-            # Candidate faculty matching workload
-            valid_faculty = [f for f in faculty_list]
+            # Candidate faculty matching program & workload
+            dept_faculty = [
+                f for f in faculty_list
+                if not f.program or not sec.program or f.program == sec.program or sec.program == "BSCpE"
+            ]
+            valid_faculty = dept_faculty if dept_faculty else [f for f in faculty_list]
             if balance_workload:
                 valid_faculty.sort(
                     key=lambda f: (
@@ -192,10 +239,25 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                     for st_str, et_str in lecture_slots_1_5:
                         if slot_placed:
                             break
+                        st = parse_time(st_str)
+                        et = parse_time(et_str)
+
+                        # Fast pre-check: section must be free on both days
+                        if is_sec_busy(sec.id, day1, st, et) or is_sec_busy(sec.id, day2, st, et):
+                            continue
+
                         for r in valid_rooms:
                             if slot_placed:
                                 break
+                            # Fast pre-check: room must be free on both days
+                            if is_room_busy(r.id, day1, st, et) or is_room_busy(r.id, day2, st, et):
+                                continue
+
                             for fac in valid_faculty:
+                                # Fast pre-check: faculty must be free on both days
+                                if is_fac_busy(fac.id, day1, st, et) or is_fac_busy(fac.id, day2, st, et):
+                                    continue
+
                                 p1 = {
                                     "subject_id": sub.id,
                                     "section_id": sec.id,
@@ -217,8 +279,6 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                 v1 = validate_schedule_slot(p1)
                                 v2 = validate_schedule_slot(p2)
                                 if v1["valid"] and v2["valid"]:
-                                    st = parse_time(st_str)
-                                    et = parse_time(et_str)
                                     sched1 = Schedule(
                                         subject_id=sub.id,
                                         section_id=sec.id,
@@ -246,6 +306,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     db.session.flush()
 
                                     placed_schedules.extend([sched1, sched2])
+                                    existing_schedules.extend([sched1, sched2])
                                     used_rooms.add(r.id)
                                     used_faculty.add(fac.id)
                                     faculty_units_assigned[fac.id] = faculty_units_assigned.get(fac.id, 0) + sub.units
@@ -264,7 +325,8 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                 if minimize_gaps:
                     sec_days_with_classes = {
                         s.day_of_week
-                        for s in Schedule.query.filter_by(section_id=sec.id).all()
+                        for s in existing_schedules
+                        if s.section_id == sec.id
                     }
                     days_to_try.sort(key=lambda d: 0 if d in sec_days_with_classes else 1)
 
@@ -275,12 +337,25 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                     for st_str, et_str in slots:
                         if slot_placed:
                             break
+                        st = parse_time(st_str)
+                        et = parse_time(et_str)
+
+                        # Fast pre-check: section free
+                        if is_sec_busy(sec.id, day, st, et):
+                            continue
 
                         for r in valid_rooms:
                             if slot_placed:
                                 break
+                            # Fast pre-check: room free
+                            if is_room_busy(r.id, day, st, et):
+                                continue
 
                             for fac in valid_faculty:
+                                # Fast pre-check: faculty free
+                                if is_fac_busy(fac.id, day, st, et):
+                                    continue
+
                                 candidate_payload = {
                                     "subject_id": sub.id,
                                     "section_id": sec.id,
@@ -293,8 +368,6 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
 
                                 validation = validate_schedule_slot(candidate_payload)
                                 if validation["valid"]:
-                                    st = parse_time(st_str)
-                                    et = parse_time(et_str)
                                     new_sched = Schedule(
                                         subject_id=sub.id,
                                         section_id=sec.id,
@@ -310,6 +383,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     db.session.flush()
 
                                     placed_schedules.append(new_sched)
+                                    existing_schedules.append(new_sched)
                                     used_rooms.add(r.id)
                                     used_faculty.add(fac.id)
                                     faculty_units_assigned[fac.id] = faculty_units_assigned.get(fac.id, 0) + sub.units

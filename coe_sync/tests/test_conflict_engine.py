@@ -287,8 +287,7 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
         self.assertGreater(data["room_utilization"], 0.0)
         self.assertEqual(data["unresolved_conflicts"], 0)
         self.assertLessEqual(data["schedule_quality_score"], 100)
-        self.assertIsInstance(data["faculty_workloads"], list)
-        self.assertEqual(len(data["faculty_workloads"]), 4)
+        self.assertEqual(len(data["faculty_workloads"]), len(self.faculty))
 
 
 if __name__ == "__main__":

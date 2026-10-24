@@ -22,6 +22,8 @@ from models import (
     FacultyAvailability,
     Schedule,
     AuditLog,
+    Conflict,
+    RescheduleRequest,
 )
 from routes.auth import (
     auth_bp,
@@ -238,12 +240,15 @@ def create_app(config_name=None):
         """List all faculty members and their unit workloads with optional filtering."""
         query = Faculty.query
         search = request.args.get("search", "").strip()
+        program = request.args.get("program", "").strip()
         overloaded = request.args.get("overloaded")
 
         if search:
             query = query.filter(
                 (Faculty.name.ilike(f"%{search}%")) | (Faculty.email.ilike(f"%{search}%"))
             )
+        if program and program.upper() != "ALL":
+            query = query.filter(Faculty.program.ilike(f"%{program}%"))
         if overloaded is not None:
             if str(overloaded).lower() in ("true", "1", "yes"):
                 query = query.filter(Faculty.current_units > Faculty.max_units)
@@ -272,7 +277,7 @@ def create_app(config_name=None):
 
         if search:
             query = query.filter(Section.name.ilike(f"%{search}%"))
-        if program:
+        if program and program.upper() != "ALL":
             query = query.filter(Section.program.ilike(f"%{program}%"))
         if year_level:
             query = query.filter(Section.year_level == year_level)
@@ -296,6 +301,9 @@ def create_app(config_name=None):
         """List course subjects with optional filtering."""
         query = Subject.query
         search = request.args.get("search", "").strip()
+        program = request.args.get("program", "").strip()
+        year_level = request.args.get("year_level", type=int)
+        semester = request.args.get("semester", type=int)
         subject_type = request.args.get("type", "").strip().upper()
         units = request.args.get("units", type=int)
 
@@ -303,6 +311,12 @@ def create_app(config_name=None):
             query = query.filter(
                 (Subject.code.ilike(f"%{search}%")) | (Subject.title.ilike(f"%{search}%"))
             )
+        if program and program.upper() != "ALL":
+            query = query.filter(Subject.program.ilike(f"%{program}%"))
+        if year_level:
+            query = query.filter(Subject.year_level == year_level)
+        if semester:
+            query = query.filter(Subject.semester == semester)
         if subject_type in ("LECTURE", "LAB"):
             query = query.filter(Subject.subject_type == subject_type)
         if units:
