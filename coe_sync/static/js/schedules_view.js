@@ -31,6 +31,12 @@ let _schedules       = [];      // raw API data
 let _editingId       = null;    // null = create, number = update
 let _radarCategory   = "ALL";   // "ALL" | "ROOM" | "FACULTY" | "SECTION"
 let _allConflicts    = [];      // current detected conflicts
+let _masterData      = {
+  sections: [],
+  faculty: [],
+  rooms: [],
+  subjects: [],
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Subject Category Mapping (6-Category System)
@@ -309,10 +315,10 @@ function buildDayColumns() {
 async function loadMasterData() {
   try {
     const [secRes, facRes, roomRes, subjRes] = await Promise.all([
-      API.get("/api/sections"),
-      API.get("/api/faculty"),
-      API.get("/api/rooms"),
-      API.get("/api/subjects"),
+      API.get("/api/sections").catch(() => ({ data: [] })),
+      API.get("/api/faculty").catch(() => ({ data: [] })),
+      API.get("/api/rooms").catch(() => ({ data: [] })),
+      API.get("/api/subjects").catch(() => ({ data: [] })),
     ]);
     _masterData.sections = secRes?.data  || [];
     _masterData.faculty  = facRes?.data  || [];
@@ -424,32 +430,48 @@ function populateModalSelects() {
   const mFac  = document.getElementById("m-faculty");
   const mRoom = document.getElementById("m-room");
 
-  if (mSubj) mSubj.innerHTML = `<option value="">Select subject…</option>` +
-    _masterData.subjects.map(s =>
-      `<option value="${s.id}">${escapeHtml(s.code)} — ${escapeHtml(s.name)}</option>`
-    ).join("");
+  if (mSubj) {
+    const prev = mSubj.value;
+    mSubj.innerHTML = `<option value="">Select subject…</option>` +
+      (_masterData.subjects || []).map(s =>
+        `<option value="${s.id}">${escapeHtml(s.code || "")} — ${escapeHtml(s.title || s.name || "")} (${escapeHtml(s.program || "GEN")})</option>`
+      ).join("");
+    if (prev) mSubj.value = prev;
+  }
 
-  if (mSec) mSec.innerHTML = `<option value="">Select section…</option>` +
-    _masterData.sections.map(s =>
-      `<option value="${s.id}">${escapeHtml(s.name)} (${escapeHtml(s.program)})</option>`
-    ).join("");
+  if (mSec) {
+    const prev = mSec.value;
+    mSec.innerHTML = `<option value="">Select section…</option>` +
+      (_masterData.sections || []).map(s =>
+        `<option value="${s.id}">${escapeHtml(s.name || "")} (${escapeHtml(s.program || "")})</option>`
+      ).join("");
+    if (prev) mSec.value = prev;
+  }
 
-  if (mFac) mFac.innerHTML = `<option value="">Select faculty…</option>` +
-    _masterData.faculty.map(f =>
-      `<option value="${f.id}">${escapeHtml(f.name)}</option>`
-    ).join("");
+  if (mFac) {
+    const prev = mFac.value;
+    mFac.innerHTML = `<option value="">Select faculty…</option>` +
+      (_masterData.faculty || []).map(f =>
+        `<option value="${f.id}">${escapeHtml(f.name || "")}</option>`
+      ).join("");
+    if (prev) mFac.value = prev;
+  }
 
-  if (mRoom) mRoom.innerHTML = `<option value="">Select room…</option>` +
-    _masterData.rooms.map(r =>
-      `<option value="${r.id}">${escapeHtml(r.room_code)} (${escapeHtml(r.room_type)})</option>`
-    ).join("");
+  if (mRoom) {
+    const prev = mRoom.value;
+    mRoom.innerHTML = `<option value="">Select room…</option>` +
+      (_masterData.rooms || []).map(r =>
+        `<option value="${r.id}">${escapeHtml(r.room_code || "")} (${escapeHtml(r.room_type || "LECTURE")})</option>`
+      ).join("");
+    if (prev) mRoom.value = prev;
+  }
 }
 
 function buildTimeSlotOptions() {
   const slots = [];
-  for (let h = GRID_START_HOUR; h <= GRID_END_HOUR + 1; h++) {
+  for (let h = GRID_START_HOUR; h <= GRID_END_HOUR; h++) {
     for (let m = 0; m < 60; m += 30) {
-      if (h === GRID_END_HOUR + 1 && m > 0) break;
+      if (h === GRID_END_HOUR && m > 0) break;
       slots.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
     }
   }
@@ -458,12 +480,26 @@ function buildTimeSlotOptions() {
   const mEnd   = document.getElementById("m-end");
 
   if (mStart) {
-    mStart.innerHTML = `<option value="">Start time…</option>` +
+    const prev = mStart.value;
+    mStart.innerHTML = `<option value="">Select start time…</option>` +
       slots.map(t => `<option value="${t}">${formatTimeTo12(t)}</option>`).join("");
+    if (prev) mStart.value = prev;
   }
   if (mEnd) {
-    mEnd.innerHTML = `<option value="">End time…</option>` +
-      slots.map(t => `<option value="${t}">${formatTimeTo12(t)}</option>`).join("");
+    const prev = mEnd.value;
+    const endSlots = [];
+    for (let h = GRID_START_HOUR; h <= GRID_END_HOUR; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        if (h === GRID_START_HOUR && m === 0) continue;
+        endSlots.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+      }
+    }
+    if (!endSlots.includes(`${GRID_END_HOUR}:00`)) {
+      endSlots.push(`${GRID_END_HOUR}:00`);
+    }
+    mEnd.innerHTML = `<option value="">Select end time…</option>` +
+      endSlots.map(t => `<option value="${t}">${formatTimeTo12(t)}</option>`).join("");
+    if (prev) mEnd.value = prev;
   }
 }
 
@@ -1404,6 +1440,8 @@ function updateRadarBadge(schedules) {
 function openModal(editId = null, prefill = {}) {
   _editingId = editId;
   const backdrop  = document.getElementById("sched-modal-backdrop");
+  if (!backdrop) return;
+
   const titleEl   = document.getElementById("sched-modal-title");
   const saveBtn   = document.getElementById("sched-modal-save");
   const form      = document.getElementById("sched-modal-form");
@@ -1411,6 +1449,10 @@ function openModal(editId = null, prefill = {}) {
   const suggestionsPanel = document.getElementById("suggestions-panel");
   const deleteBtn = document.getElementById("sched-modal-delete");
   const conflictBanner = document.getElementById("modal-conflict-banner");
+
+  // Ensure options are populated with latest master data
+  populateModalSelects();
+  buildTimeSlotOptions();
 
   // Reset form
   form.reset();
@@ -1459,9 +1501,20 @@ function openModal(editId = null, prefill = {}) {
     saveBtn.textContent = "Save Schedule";
     if (conflictBanner) conflictBanner.style.display = "none";
     if (deleteBtn) deleteBtn.style.display = "none";
-    // Apply prefill values from click-on-grid
+
+    // Apply prefill values from active filters or grid-click
+    const activeSec = prefill.section_id || document.getElementById("filter-section")?.value;
+    if (activeSec) setSelectVal("m-section", activeSec);
+
+    const activeFac = prefill.faculty_id || document.getElementById("filter-faculty")?.value;
+    if (activeFac) setSelectVal("m-faculty", activeFac);
+
+    const activeRoom = prefill.room_id || document.getElementById("filter-room")?.value;
+    if (activeRoom) setSelectVal("m-room", activeRoom);
+
     if (prefill.day_of_week) setSelectVal("m-day", prefill.day_of_week);
     if (prefill.start_time)  setSelectVal("m-start", prefill.start_time);
+    if (prefill.end_time)    setSelectVal("m-end", prefill.end_time);
   }
 
   backdrop.classList.add("sched-modal-backdrop--open");
