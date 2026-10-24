@@ -67,9 +67,18 @@ def create_app(config_name=None):
     selected_config = config_by_name.get(config_name, config_by_name["default"])
     app.config.from_object(selected_config)
 
-    # Configure session security
+    # Configure session security and secrets
+    app.secret_key = app.config.get(
+        "SECRET_KEY", "coe-sync-2026-default-secret-key-bulsu-cpe"
+    )
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+    # Ensure instance directory exists for SQLite storage
+    try:
+        os.makedirs(app.instance_path, exist_ok=True)
+    except Exception:
+        pass
 
     # Initialize extensions
     CORS(

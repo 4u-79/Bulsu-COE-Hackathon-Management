@@ -33,6 +33,7 @@ def logout():
 
 
 @views_bp.route("/")
+@views_bp.route("/dashboard")
 @login_required
 def dashboard():
     """Render Executive Dashboard. Students are strictly redirected to Schedules view."""

@@ -541,13 +541,22 @@
         try {
           const res = await fetch("/api/auth/login", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json"
+            },
             body: JSON.stringify({ username, password })
           });
-          const data = await res.json();
+          
+          let data;
+          try {
+            data = await res.json();
+          } catch (parseErr) {
+            data = { error: `Server error (HTTP ${res.status}): unexpected response.` };
+          }
 
           if (!res.ok) {
-            alertBox.textContent = data.error || "Login failed. Please check your credentials.";
+            alertBox.textContent = data.error || data.message || "Invalid username or password.";
             alertBox.className = "login-alert error";
             alertBox.style.display = "block";
             return;
@@ -561,10 +570,12 @@
             return;
           }
 
-          // Successful login -> Redirect to dashboard
-          window.location.href = "/";
+          // Successful login -> Redirect to destination
+          window.location.href = data.redirect || "/";
         } catch (err) {
-          alertBox.textContent = "Network or server error during authentication.";
+          alertBox.textContent = (err && err.message)
+            ? `Connection error: ${err.message}`
+            : "Network or server error during authentication.";
           alertBox.className = "login-alert error";
           alertBox.style.display = "block";
         }
@@ -591,17 +602,26 @@
         try {
           const res = await fetch("/api/auth/change-credentials", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json"
+            },
             body: JSON.stringify({
               current_password: currentPassword,
               new_username: newUsername,
               new_password: newPassword
             })
           });
-          const data = await res.json();
+          
+          let data;
+          try {
+            data = await res.json();
+          } catch (parseErr) {
+            data = { error: `Server error (HTTP ${res.status}): unexpected response.` };
+          }
 
           if (!res.ok) {
-            changeAlert.textContent = data.error || "Failed to update credentials.";
+            changeAlert.textContent = data.error || data.message || "Failed to update credentials.";
             changeAlert.className = "login-alert error";
             changeAlert.style.display = "block";
             return;
@@ -612,10 +632,12 @@
           changeAlert.style.display = "block";
 
           setTimeout(() => {
-            window.location.href = "/";
+            window.location.href = data.redirect || "/";
           }, 800);
         } catch (err) {
-          changeAlert.textContent = "Error saving credentials.";
+          changeAlert.textContent = (err && err.message)
+            ? `Connection error: ${err.message}`
+            : "Error saving credentials.";
           changeAlert.className = "login-alert error";
           changeAlert.style.display = "block";
         }

@@ -105,11 +105,14 @@ def require_roles(*roles):
 def login():
     """
     POST /api/auth/login
-    Inputs: { "username": "...", "password": "..." }
+    Inputs: { "username": "...", "password": "..." } or form data.
     """
-    data = request.get_json(silent=True) or {}
-    username = data.get("username", "").strip()
-    password = data.get("password", "")
+    data = request.get_json(silent=True) or request.form.to_dict()
+    if not data:
+        return jsonify({"error": "No login data provided"}), 400
+
+    username = str(data.get("username", "")).strip()
+    password = str(data.get("password", "")).strip()
 
     if not username or not password:
         return (
@@ -117,47 +120,56 @@ def login():
             400,
         )
 
-    user = User.query.filter_by(username=username).first()
-    if not user or not user.check_password(password):
+    try:
+        user = User.query.filter_by(username=username).first()
+        if not user or not user.check_password(password):
+            return (
+                jsonify({"error": "Invalid username or password"}),
+                401,
+            )
+
+        # Initialize session
+        session.clear()
+        session["user_id"] = user.id
+        session["username"] = user.username
+        session["role"] = user.role
+        session["active_role"] = user.role
+        session["reference_id"] = user.reference_id
+        session["active_reference_id"] = user.reference_id
+        session["must_change_credentials"] = user.must_change_credentials
+        session.permanent = True
+
+        # Record login audit safely
+        try:
+            audit = AuditLog(
+                user_id=user.id,
+                action="USER_LOGIN",
+                details=f"User #{user.id} ({user.username}, {user.role}) logged in.",
+            )
+            db.session.add(audit)
+            db.session.commit()
+        except Exception as audit_err:
+            db.session.rollback()
+            print(f"[AUTH AUDIT WARNING] Could not record login audit: {audit_err}", flush=True)
+
         return (
-            jsonify({"error": "Invalid username or password."}),
-            401,
+            jsonify(
+                {
+                    "status": "success",
+                    "message": "Login successful",
+                    "redirect": "/schedules" if user.role == "STUDENT" else "/dashboard",
+                    "role": user.role,
+                    "user": user.to_dict(),
+                    "must_change_credentials": user.must_change_credentials,
+                    "active_role": user.role,
+                    "active_reference_id": user.reference_id,
+                }
+            ),
+            200,
         )
-
-    # Initialize session
-    session.clear()
-    session["user_id"] = user.id
-    session["username"] = user.username
-    session["role"] = user.role
-    session["reference_id"] = user.reference_id
-    session["must_change_credentials"] = user.must_change_credentials
-
-    # Active impersonation state defaults to native user role
-    session["active_role"] = user.role
-    session["active_reference_id"] = user.reference_id
-
-    # Record login audit
-    audit = AuditLog(
-        user_id=user.id,
-        action="USER_LOGIN",
-        details=f"User #{user.id} ({user.username}, {user.role}) logged in.",
-    )
-    db.session.add(audit)
-    db.session.commit()
-
-    return (
-        jsonify(
-            {
-                "status": "success",
-                "message": "Login successful",
-                "user": user.to_dict(),
-                "must_change_credentials": user.must_change_credentials,
-                "active_role": user.role,
-                "active_reference_id": user.reference_id,
-            }
-        ),
-        200,
-    )
+    except Exception as err:
+        print(f"[AUTH ERROR] Failed during login execution: {str(err)}", flush=True)
+        return jsonify({"error": f"Internal authentication error: {str(err)}"}), 500
 
 
 @auth_bp.route("/logout", methods=["POST"])

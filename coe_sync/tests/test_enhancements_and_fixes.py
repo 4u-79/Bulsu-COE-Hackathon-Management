@@ -24,9 +24,7 @@ class TestEnhancementsAndFixes(unittest.TestCase):
     """Test suite covering the 4 critical bug fixes and functional enhancements."""
 
     def setUp(self):
-        self.app = create_app()
-        self.app.config["TESTING"] = True
-        self.app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+        self.app = create_app("testing")
         self.app.config["SHOW_DEMO_CREDENTIALS"] = True
         self.client = self.app.test_client()
 
