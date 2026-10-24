@@ -132,13 +132,9 @@ def validate_schedule_slot(
         return {"valid": False, "conflicts": conflicts}
 
     # -------------------------------------------------------------
-    # HC 4: Room Capacity
+    # HC 4: Room Capacity (DEPRECATED - room capacity is not a blocking constraint)
+    # Any section can be assigned to any room regardless of class size.
     # -------------------------------------------------------------
-    if section.student_count > room.capacity:
-        conflicts.append(
-            f"Room capacity exceeded: {section.name} has {section.student_count} "
-            f"students, but {room.room_code} capacity is {room.capacity}."
-        )
 
     # -------------------------------------------------------------
     # HC 5: Room Type Mismatch
@@ -263,12 +259,11 @@ def find_alternatives(
     # =============================================================
     # STEP 1: Same Time, Alt Room
     # =============================================================
-    # Query rooms of matching room_type with capacity >= student_count
+    # Query rooms of matching room_type (capacity is no longer a restriction)
     candidate_rooms = (
         Room.query.filter(
             Room.id != room_id,
             Room.room_type == subject.subject_type,
-            Room.capacity >= section.student_count,
             Room.is_available == True,
         )
         .order_by(Room.capacity.asc())
@@ -296,8 +291,7 @@ def find_alternatives(
                     "start_time": start_time.strftime("%H:%M:%S"),
                     "end_time": end_time.strftime("%H:%M:%S"),
                     "label": (
-                        f"Switch to {alt_room.room_code} ({alt_room.room_type}, "
-                        f"Cap: {alt_room.capacity}) at same time"
+                        f"Switch to {alt_room.room_code} ({alt_room.room_type}) at same time"
                     ),
                 }
             )
@@ -307,13 +301,10 @@ def find_alternatives(
     # =============================================================
     # STEP 2: Same Room, Next Slot
     # =============================================================
-    # Target room must satisfy capacity and room type
+    # Target room must satisfy room type
     target_room = (
         room
-        if (
-            room.capacity >= section.student_count
-            and (subject.subject_type != "LAB" or room.room_type == "LAB")
-        )
+        if (subject.subject_type != "LAB" or room.room_type == "LAB")
         else (candidate_rooms[0] if candidate_rooms else room)
     )
 

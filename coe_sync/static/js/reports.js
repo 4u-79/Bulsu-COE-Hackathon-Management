@@ -137,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
       tbody.innerHTML = deductions.map((d) => `
         <tr>
           <td><span class="status-badge crimson">${d.points} pts</span></td>
-          <td><strong>${d.type === 'SECTION_IDLE_GAP' ? 'Section Idle Gap (&gt;2h)' : 'Room Mismatch (&gt;30 seats)'}</strong></td>
+          <td><strong>${d.type === 'SECTION_IDLE_GAP' ? 'Section Idle Gap (&gt;2h)' : 'Faculty Overload (&gt;21 units)'}</strong></td>
           <td style="font-size: 13px; color: var(--text-secondary);">${this.escapeHtml(d.reason)}</td>
         </tr>
       `).join("");

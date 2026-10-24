@@ -308,7 +308,7 @@ function renderSectionsTable(sections) {
   if (!tbody) return;
 
   if (sections.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted); padding: 24px;">No cohort sections found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-muted); padding: 24px;">No cohort sections found.</td></tr>`;
     return;
   }
 
@@ -319,7 +319,6 @@ function renderSectionsTable(sections) {
       <td><strong>${escapeHtml(s.name)}</strong></td>
       <td>${escapeHtml(s.program)}</td>
       <td>Year ${s.year_level}</td>
-      <td>${s.student_count} Students</td>
       <td>
         <div class="table-actions">
           <a href="/schedules?section=${s.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Section Timetable">
@@ -522,11 +521,6 @@ function buildModalForm(entity, data = null) {
           <option value="4" ${data && data.year_level === 4 ? "selected" : ""}>Year 4</option>
         </select>
       </div>
-      <div class="form-field">
-        <label class="form-label" for="inp-student-count">Enrolled Student Count *</label>
-        <input class="form-input" type="number" id="inp-student-count" name="student_count" min="1" max="200" required placeholder="e.g. 40" value="${data ? data.student_count : "40"}">
-        <span class="form-error" id="err-student_count"></span>
-      </div>
     `;
   } else if (entity === "subjects") {
     container.innerHTML = `
@@ -605,11 +599,6 @@ async function handleModalSubmit() {
   } else if (currentModalEntity === "sections") {
     if (!payload.name || !payload.name.trim()) {
       showFieldError("name", "Section name is required.");
-      hasError = true;
-    }
-    const sc = parseInt(payload.student_count);
-    if (isNaN(sc) || sc <= 0) {
-      showFieldError("student_count", "Student count must be greater than 0.");
       hasError = true;
     }
   } else if (currentModalEntity === "subjects") {

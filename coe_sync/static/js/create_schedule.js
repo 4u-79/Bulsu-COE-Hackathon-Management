@@ -472,7 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
       filteredSections.forEach((sec) => {
         const opt = document.createElement("option");
         opt.value = sec.id;
-        opt.textContent = `${sec.name} (${sec.program} · Yr ${sec.year_level} · ${sec.student_count || 40} studs)`;
+        opt.textContent = `${sec.name} (${sec.program} · Yr ${sec.year_level})`;
         manualSection.appendChild(opt);
       });
 
@@ -591,8 +591,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sec && manualSectionMeta) {
       manualSectionMeta.style.display = "block";
       manualSectionMeta.innerHTML = `
-        <span><strong>Cohort:</strong> ${escapeHtml(sec.program)} Year ${sec.year_level} (${escapeHtml(sec.name)})</span> •
-        <span><strong>Class Size:</strong> ${sec.student_count || 40} Students</span>
+        <span><strong>Cohort:</strong> ${escapeHtml(sec.program)} Year ${sec.year_level} (${escapeHtml(sec.name)})</span>
       `;
     } else if (manualSectionMeta) {
       manualSectionMeta.style.display = "none";
@@ -670,7 +669,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <span class="banner-icon">✔</span>
             <div>
               <strong>No Collisions Detected (Safe to Place)</strong>
-              <p>Physical facility, instructor blackout windows, cohort availability, and seating capacity are all clear.</p>
+              <p>Physical facility, instructor blackout windows, and cohort availability are all clear.</p>
             </div>
           </div>
         `;

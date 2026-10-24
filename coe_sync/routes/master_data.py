@@ -267,17 +267,25 @@ def create_section():
         return jsonify({"error": "Section name and program are required."}), 400
     try:
         year_level = int(year_level)
-        student_count = int(student_count)
-        if year_level <= 0 or student_count <= 0:
+        if year_level <= 0:
             raise ValueError()
     except (ValueError, TypeError):
-        return jsonify({"error": "Year level and student count must be positive integers."}), 400
+        return jsonify({"error": "Year level must be a positive integer."}), 400
+
+    sc_val = None
+    if student_count is not None and str(student_count).strip() != "":
+        try:
+            parsed_sc = int(student_count)
+            if parsed_sc > 0:
+                sc_val = parsed_sc
+        except (ValueError, TypeError):
+            pass
 
     section = Section(
         name=name,
         program=program,
         year_level=year_level,
-        student_count=student_count,
+        student_count=sc_val,
     )
     db.session.add(section)
     db.session.flush()
@@ -285,7 +293,7 @@ def create_section():
     audit = AuditLog(
         user_id=session.get("user_id"),
         action="SECTION_CREATED",
-        details=f"Created section {section.name} ({section.program}, Year {section.year_level}, {section.student_count} students).",
+        details=f"Created section {section.name} ({section.program}, Year {section.year_level}).",
     )
     db.session.add(audit)
     db.session.commit()
@@ -324,13 +332,16 @@ def update_section(section_id: int):
             return jsonify({"error": "Year level must be a positive integer."}), 400
 
     if "student_count" in data:
-        try:
-            sc = int(data["student_count"])
-            if sc <= 0:
-                raise ValueError()
-            section.student_count = sc
-        except (ValueError, TypeError):
-            return jsonify({"error": "Student count must be a positive integer."}), 400
+        raw_sc = data["student_count"]
+        if raw_sc is None or str(raw_sc).strip() == "":
+            section.student_count = None
+        else:
+            try:
+                sc = int(raw_sc)
+                if sc > 0:
+                    section.student_count = sc
+            except (ValueError, TypeError):
+                pass
 
     audit = AuditLog(
         user_id=session.get("user_id"),

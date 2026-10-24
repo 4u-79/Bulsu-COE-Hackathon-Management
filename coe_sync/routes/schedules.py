@@ -653,14 +653,13 @@ def generate_draft_schedules():
             # Find matching candidate rooms
             valid_rooms = [
                 r for r in rooms
-                if r.capacity >= sec.student_count
-                and (sub.subject_type != "LAB" or r.room_type == "LAB")
+                if (sub.subject_type != "LAB" or r.room_type == "LAB")
             ]
             if not valid_rooms:
                 unplaced.append({
                     "section": sec.name,
                     "subject": sub.code,
-                    "reason": f"No available {sub.subject_type} room with capacity >= {sec.student_count}",
+                    "reason": f"No available {sub.subject_type} room",
                 })
                 continue
 
@@ -789,12 +788,7 @@ def publish_all_schedules():
                             f"Section overlap: {s1.section.name} assigned to two classes simultaneously on {s1.day_of_week}."
                         )
 
-        # Room capacity check
-        if s1.section and s1.room and s1.section.student_count > s1.room.capacity:
-            conflicts.append(
-                f"Capacity violation: {s1.section.name} ({s1.section.student_count} students) "
-                f"exceeds {s1.room.room_code} capacity ({s1.room.capacity})."
-            )
+        # Room capacity is no longer checked or enforced
 
     if conflicts:
         return (

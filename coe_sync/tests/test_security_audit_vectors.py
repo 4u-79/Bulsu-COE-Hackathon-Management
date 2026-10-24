@@ -369,10 +369,10 @@ class TestSecurityAuditVectors(unittest.TestCase):
         self.assertFalse(times_overlap(start_b, end_b, start_a, end_a))
 
     def test_v5_hard_constraint_validations(self):
-        """Validates capacity and room type hard constraints."""
-        # HC4: Capacity violation
-        large_sec = Section.query.filter(Section.student_count > 30).first()
-        small_room = Room.query.filter(Room.capacity < large_sec.student_count).first()
+        """Validates capacity is no longer blocking, and room type hard constraints remain active."""
+        # HC4: Capacity violation check is deprecated/bypassed
+        large_sec = Section.query.filter(Section.student_count > 30).first() or Section.query.first()
+        small_room = Room.query.filter(Room.capacity < (large_sec.student_count or 40), Room.room_type == "LECTURE").first() or Room.query.filter_by(room_type="LECTURE").first()
         val_cap = validate_schedule_slot({
             "subject_id": 1,
             "section_id": large_sec.id,
@@ -382,8 +382,7 @@ class TestSecurityAuditVectors(unittest.TestCase):
             "start_time": "13:00",
             "end_time": "14:30",
         })
-        self.assertFalse(val_cap["valid"])
-        self.assertTrue(any("capacity exceeded" in c.lower() for c in val_cap["conflicts"]))
+        self.assertFalse(any("capacity exceeded" in c.lower() for c in val_cap.get("conflicts", [])))
 
         # HC5: Room type mismatch (LAB subject in LECTURE room)
         lab_sub = Subject.query.filter_by(subject_type="LAB").first()

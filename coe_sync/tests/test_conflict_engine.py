@@ -124,11 +124,11 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
         )
 
     def test_02_overcapacity_assignment_rejected(self):
-        """Test: An overcapacity class assignment is rejected."""
+        """Test: Capacity is no longer a blocking constraint; room assignment succeeds without capacity conflict."""
         math101 = Subject.query.filter_by(subject_type="LECTURE").first()
         cpe1a = Section.query.filter(Section.student_count > 35).first() or Section.query.first()
         santos = Faculty.query.first()
-        eng104 = Room.query.filter(Room.capacity < cpe1a.student_count).first()
+        eng104 = Room.query.filter(Room.capacity < (cpe1a.student_count or 40), Room.room_type == "LECTURE").first() or Room.query.filter_by(room_type="LECTURE").first()
 
         payload = {
             "subject_id": math101.id,
@@ -140,12 +140,12 @@ class TestConflictEngineAndRBAC(unittest.TestCase):
             "end_time": "10:00:00",
         }
         res = self.client.post("/api/schedules", json=payload)
-        self.assertEqual(res.status_code, 409)
-
-        data = res.get_json()
-        self.assertTrue(
-            any("Room capacity exceeded" in c for c in data["conflicts"]),
-            f"Expected capacity overflow message, got: {data['conflicts']}",
+        data = res.get_json() or {}
+        # Capacity is no longer a blocking constraint
+        conflicts = data.get("conflicts", [])
+        self.assertFalse(
+            any("capacity" in str(c).lower() for c in conflicts),
+            f"Expected no capacity overflow message, got: {conflicts}",
         )
 
     def test_03_lab_subject_assigned_to_lecture_room_rejected(self):

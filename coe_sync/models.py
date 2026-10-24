@@ -135,7 +135,7 @@ class Section(db.Model):
     name = db.Column(db.String(50), nullable=False)
     program = db.Column(db.String(50), nullable=True, index=True)
     year_level = db.Column(db.Integer, nullable=True)
-    student_count = db.Column(db.Integer, default=42, nullable=False)
+    student_count = db.Column(db.Integer, nullable=True, default=None)
 
     # Relationships
     schedules = db.relationship(
@@ -153,7 +153,7 @@ class Section(db.Model):
             "name": self.name,
             "program": self.program,
             "year_level": self.year_level,
-            "student_count": self.student_count,
+            "student_count": getattr(self, "student_count", None),
         }
 
     def __repr__(self) -> str:

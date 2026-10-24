@@ -1111,18 +1111,6 @@ function detectConflictsLocally(schedules) {
   for (let i = 0; i < n; i++) {
     const a = schedules[i];
 
-    // Check capacity overflow
-    const sec = _masterData.sections.find(x => x.id === a.section_id);
-    const rm  = _masterData.rooms.find(x => x.id === a.room_id);
-    if (sec && rm && sec.student_count > rm.capacity) {
-      conflicts.push({
-        type: "capacity",
-        resource: `${rm.room_code} (Cap: ${rm.capacity}) vs ${sec.name} (${sec.student_count} studs)`,
-        schedA: a,
-        schedB: null,
-      });
-    }
-
     for (let j = i + 1; j < n; j++) {
       const b = schedules[j];
       if (a.day_of_week !== b.day_of_week) continue;

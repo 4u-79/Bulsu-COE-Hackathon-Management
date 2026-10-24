@@ -86,9 +86,7 @@ def get_analytics_summary():
                     elif s1.section_id == s2.section_id:
                         unresolved_conflicts += 1
 
-        # Check room capacity overflow
-        if s1.section and s1.room and s1.section.student_count > s1.room.capacity:
-            unresolved_conflicts += 1
+        # Check room capacity overflow (DEPRECATED - room capacity is not a conflict)
 
         # Check room type mismatch
         if (
@@ -115,7 +113,7 @@ def get_analytics_summary():
     # Starts at 100.
     # Penalties:
     #   - 5 points per gap > 2 hours in a section's daily timetable
-    #   - 5 points for room overcapacity waste > 50 seats
+    #   - 5 points per overloaded faculty instructor
     # -------------------------------------------------------------
     penalties = 0
 
@@ -137,12 +135,17 @@ def get_analytics_summary():
                 if gap > 120:  # Gap greater than 2 hours (120 minutes)
                     penalties += 5
 
-    # Check room seat waste
-    for s in schedules:
-        if s.room and s.section:
-            waste = s.room.capacity - s.section.student_count
-            if waste > 50:
-                penalties += 5
+    # Check faculty overload penalties
+    for f in all_faculty:
+        f_units = (
+            db.session.query(db.func.sum(Subject.units))
+            .join(Schedule, Schedule.subject_id == Subject.id)
+            .filter(Schedule.faculty_id == f.id)
+            .scalar()
+            or 0
+        )
+        if f_units > f.max_units:
+            penalties += 5
 
     quality_score = max(0, min(100, 100 - penalties))
 
@@ -362,21 +365,16 @@ def get_analytics_reports():
                         }
                     )
 
-    # Check for room capacity waste where unassigned seats > 30
-    for s in schedules:
-        if s.room and s.section:
-            unassigned_seats = s.room.capacity - s.section.student_count
-            if unassigned_seats > 30:
-                deductions.append(
-                    {
-                        "type": "ROOM_CAPACITY_MISMATCH",
-                        "points": -5,
-                        "reason": (
-                            f"{s.subject.code if s.subject else 'Class'} ({s.section.name}, {s.section.student_count} students) "
-                            f"in {s.room.room_code} (Capacity: {s.room.capacity}) wastes {unassigned_seats} seats (>30)."
-                        ),
-                    }
-                )
+    # Check for faculty workload overload (assigned units > 21)
+    for f in faculty_workload_list:
+        if f.get("is_overloaded"):
+            deductions.append(
+                {
+                    "type": "FACULTY_OVERLOAD",
+                    "points": -5,
+                    "reason": f"Faculty {f['name']} assigned {f['assigned_units']} units (exceeds {f['max_units']} limit).",
+                }
+            )
 
     total_penalty = sum(abs(d["points"]) for d in deductions)
     quality_score = max(0, min(100, 100 - total_penalty))

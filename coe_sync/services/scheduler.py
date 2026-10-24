@@ -215,23 +215,22 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
             if any(s.section_id == sec.id and s.subject_id == sub.id for s in existing_schedules):
                 continue
 
-            # Candidate rooms matching capacity and room type
+            # Candidate rooms matching room type
             valid_rooms = [
                 r for r in rooms
-                if r.capacity >= sec.student_count
-                and (sub.subject_type != "LAB" or r.room_type == "LAB")
+                if (sub.subject_type != "LAB" or r.room_type == "LAB")
             ]
             if not valid_rooms:
                 unplaced_items.append({
                     "section": sec.name,
                     "subject": f"{sub.code} - {sub.title}",
-                    "reason": f"No available {sub.subject_type} room with capacity >= {sec.student_count}",
+                    "reason": f"No available {sub.subject_type} room",
                 })
                 continue
 
-            # Soft constraint: Optimize room utilization (tightest capacity fit first)
+            # Soft constraint: Optimize room utilization (order available rooms)
             if optimize_utilization:
-                valid_rooms.sort(key=lambda r: (r.capacity - sec.student_count))
+                valid_rooms.sort(key=lambda r: r.room_code)
 
             # Candidate faculty matching program & workload
             dept_faculty = [
@@ -449,12 +448,28 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
     if unplaced_items:
         quality_score = max(50, quality_score - len(unplaced_items) * 5)
 
-    # Soft constraint deduction: Room capacity excess > 30 seats
-    for sched in placed_schedules:
-        room = db.session.get(Room, sched.room_id)
-        section = db.session.get(Section, sched.section_id)
-        if room and section and (room.capacity - section.student_count) > 30:
-            quality_score = max(50, quality_score - 2)
+    # Soft constraint deductions:
+    # 1. Section idle gaps (> 2h)
+    days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"]
+    sec_ids = {sched.section_id for sched in placed_schedules}
+    for s_id in sec_ids:
+        for day in days:
+            day_scheds = [
+                s for s in placed_schedules
+                if s.section_id == s_id and s.day_of_week == day
+            ]
+            day_scheds.sort(key=lambda s: time_to_minutes(s.start_time))
+            for k in range(len(day_scheds) - 1):
+                prev_end = time_to_minutes(day_scheds[k].end_time)
+                next_start = time_to_minutes(day_scheds[k + 1].start_time)
+                if (next_start - prev_end) > 120:
+                    quality_score = max(50, quality_score - 4)
+
+    # 2. Faculty workload balance (excess over max_units)
+    for f in faculty_list:
+        assigned = faculty_units_assigned.get(f.id, 0)
+        if assigned > f.max_units:
+            quality_score = max(50, quality_score - 3)
 
     # Log audit and commit transaction atomically
     try:
