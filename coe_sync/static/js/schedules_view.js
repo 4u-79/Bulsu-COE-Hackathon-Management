@@ -287,29 +287,81 @@ async function loadMasterData() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 3. Populate Selects
-// ─────────────────────────────────────────────────────────────────────────────
-function populateFilterSelects() {
+function normalizeProgram(prog) {
+  if (!prog) return "";
+  const p = String(prog).toUpperCase().trim();
+  if (p === "BSCE" || p === "CIVIL" || p === "CE") return "CE";
+  if (p === "BSEE" || p === "BSECE" || p === "ECE" || p === "ELECTRONICS") return "ECE";
+  if (p === "BSME" || p === "BSMEE" || p === "MEE" || p === "MECHANICAL") return "MEE";
+  if (p === "BSMFE" || p === "BSIE" || p === "MFE" || p === "MANUFACTURING") return "MFE";
+  if (p === "BSCPE" || p === "CPE") return "ECE";
+  return p;
+}
+
+function cascadeScheduleFilters() {
+  const progVal = document.getElementById("filter-program")?.value || "";
+  const yearVal = document.getElementById("filter-year")?.value || "";
   const secSel  = document.getElementById("filter-section");
   const facSel  = document.getElementById("filter-faculty");
-  const roomSel = document.getElementById("filter-room");
   const subjSel = document.getElementById("filter-subject");
 
+  const normProg = normalizeProgram(progVal);
+
   if (secSel) {
+    const prevVal = secSel.value;
+    const filtered = _masterData.sections.filter(s => {
+      if (normProg && normalizeProgram(s.program) !== normProg) return false;
+      if (yearVal && String(s.year_level) !== String(yearVal)) return false;
+      return true;
+    });
     secSel.innerHTML = `<option value="">All Section ▾</option>` +
-      _masterData.sections.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+      filtered.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+    if (filtered.some(s => String(s.id) === String(prevVal))) {
+      secSel.value = prevVal;
+    } else {
+      secSel.value = "";
+    }
   }
+
   if (facSel) {
+    const prevVal = facSel.value;
+    const filtered = _masterData.faculty.filter(f => {
+      if (normProg && normalizeProgram(f.program) !== normProg) return false;
+      return true;
+    });
     facSel.innerHTML = `<option value="">All Faculty ▾</option>` +
-      _masterData.faculty.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
+      filtered.map(f => `<option value="${f.id}">${escapeHtml(f.name)}</option>`).join("");
+    if (filtered.some(f => String(f.id) === String(prevVal))) {
+      facSel.value = prevVal;
+    } else {
+      facSel.value = "";
+    }
   }
+
+  if (subjSel) {
+    const prevVal = subjSel.value;
+    const filtered = _masterData.subjects.filter(s => {
+      if (normProg && normalizeProgram(s.program) !== normProg) return false;
+      if (yearVal && String(s.year_level) !== String(yearVal)) return false;
+      return true;
+    });
+    subjSel.innerHTML = `<option value="">All Subject ▾</option>` +
+      filtered.map(s => `<option value="${s.id}">${escapeHtml(s.code || s.name)}</option>`).join("");
+    if (filtered.some(s => String(s.id) === String(prevVal))) {
+      subjSel.value = prevVal;
+    } else {
+      subjSel.value = "";
+    }
+  }
+}
+
+function populateFilterSelects() {
+  const roomSel = document.getElementById("filter-room");
   if (roomSel) {
     roomSel.innerHTML = `<option value="">All Room ▾</option>` +
       _masterData.rooms.map(r => `<option value="${r.id}">${escapeHtml(r.room_code)}</option>`).join("");
   }
-  if (subjSel) {
-    subjSel.innerHTML = `<option value="">All Subject ▾</option>` +
-      _masterData.subjects.map(s => `<option value="${s.id}">${escapeHtml(s.code || s.name)}</option>`).join("");
-  }
+  cascadeScheduleFilters();
 }
 
 function populateModalSelects() {
@@ -1406,10 +1458,16 @@ function bindEvents() {
     renderEventCards(_schedules);
   });
 
-  // Filters (Multi-dropdown toolbar)
+  // Filters (Multi-dropdown toolbar with dynamic cascading)
+  document.getElementById("filter-program")?.addEventListener("change", () => {
+    cascadeScheduleFilters();
+    fetchAndRender();
+  });
+  document.getElementById("filter-year")?.addEventListener("change", () => {
+    cascadeScheduleFilters();
+    fetchAndRender();
+  });
   [
-    "filter-program",
-    "filter-year",
     "filter-section",
     "filter-faculty",
     "filter-room",

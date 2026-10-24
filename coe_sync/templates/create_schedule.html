@@ -25,328 +25,416 @@
   </div>
 
   <!-- ═════════════════════════════════════════════════════════════ -->
-  <!-- PANEL A: SMART GENERATE MODE (Two-Column Layout)               -->
+  <!-- PANEL A: SMART GENERATE MODE (Balanced 2-Column Split Layout)   -->
   <!-- ═════════════════════════════════════════════════════════════ -->
   <div id="panel-smart-generate" class="scheduling-panel active">
-    <div class="generator-layout">
-      <!-- Left Column: Configuration Form -->
-      <div class="card config-card">
-        <div class="card-header-clean">
-          <div>
-            <h2 class="section-title">Schedule Parameters</h2>
-            <p class="section-subtitle">Configure cohort scope, target physical rooms, and soft constraints.</p>
-          </div>
-          <span class="badge-role">AI Solver Heuristics</span>
-        </div>
-
-        <form id="form-smart-generate">
-          <!-- Program & Year Level -->
-          <div class="form-row-2">
-            <div class="form-group">
-              <label class="form-label" for="sg-program">Degree Program</label>
-              <select id="sg-program" class="form-select">
-                <option value="ALL">All Degree Programs</option>
-              </select>
+    <form id="form-smart-generate">
+      <div class="smart-split-grid">
+        <!-- Left Column: Scope & Resource Configuration -->
+        <div class="smart-col-left">
+          
+          <!-- Step 1: Target Cohorts -->
+          <div class="card smart-config-step-card">
+            <div class="card-header-clean">
+              <div>
+                <h2 class="section-title">1. Scope &amp; Target Cohorts</h2>
+                <p class="section-subtitle">Select academic department and cohorts to include in this generation run.</p>
+              </div>
+              <span class="badge-role">Step 1 of 3</span>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="sg-year-level">Year Level</label>
-              <select id="sg-year-level" class="form-select">
-                <option value="ALL">All Year Levels</option>
-                <option value="1">1st Year</option>
-                <option value="2" selected>2nd Year</option>
-                <option value="3">3rd Year</option>
-                <option value="4">4th Year</option>
-              </select>
-            </div>
-          </div>
 
-          <!-- Cohort Sections Multi-Select Pills -->
-          <div class="form-group">
-            <div class="label-row">
-              <label class="form-label">Target Cohort Sections *</label>
-              <div class="label-actions">
-                <button type="button" class="btn-text-action" id="btn-sec-select-all">Select All</button>
-                <span class="sep">•</span>
-                <button type="button" class="btn-text-action" id="btn-sec-clear-all">Clear</button>
+            <!-- Program & Year Level Filters -->
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label" for="sg-program">Degree Program *</label>
+                <select id="sg-program" class="form-select">
+                  <option value="ALL">All Degree Programs</option>
+                  <option value="CE">Civil Engineering (CE)</option>
+                  <option value="ECE">Electronics Engineering (ECE)</option>
+                  <option value="MEE">Mechanical Engineering (MEE)</option>
+                  <option value="MFE">Manufacturing Engineering (MFE)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="sg-year-level">Year Level</label>
+                <select id="sg-year-level" class="form-select">
+                  <option value="ALL">All Year Levels</option>
+                  <option value="1">1st Year</option>
+                  <option value="2" selected>2nd Year</option>
+                  <option value="3">3rd Year</option>
+                  <option value="4">4th Year</option>
+                </select>
               </div>
             </div>
-            <div id="sg-sections-container" class="section-pills-wrap">
-              <span class="loading-hint">Loading sections...</span>
+
+            <!-- Cohort Sections Multi-Select Pills -->
+            <div class="form-group" style="margin-bottom: 0;">
+              <div class="label-row">
+                <label class="form-label">Target Cohort Sections *</label>
+                <div class="label-actions">
+                  <button type="button" class="btn-text-action" id="btn-sec-select-all">Select All</button>
+                  <span class="sep">•</span>
+                  <button type="button" class="btn-text-action" id="btn-sec-clear-all">Clear</button>
+                </div>
+              </div>
+              <div id="sg-sections-container" class="section-pills-wrap">
+                <span class="loading-hint">Loading sections...</span>
+              </div>
+              <span class="field-help">Click pills to include or exclude specific cohorts. Program filter instantly narrows down visible cohorts.</span>
             </div>
-            <span class="field-help">Click pills to include or exclude specific cohorts from this generation batch.</span>
           </div>
 
-          <!-- Available Rooms Selector (Multi-Checkbox Grid) -->
-          <div class="form-group">
-            <div class="label-row">
-              <label class="form-label">Available Rooms &amp; Laboratories *</label>
-              <div class="label-actions">
-                <button type="button" class="btn-text-action" id="btn-room-select-all">Select All Rooms</button>
+          <!-- Step 2: Available Physical Rooms -->
+          <div class="card smart-config-step-card">
+            <div class="card-header-clean">
+              <div>
+                <h2 class="section-title">2. Physical Facilities &amp; Labs</h2>
+                <p class="section-subtitle">Select candidate classrooms and specialized laboratories available for booking.</p>
+              </div>
+              <div class="room-filter-pill-group">
+                <button type="button" class="room-pill-btn active" data-type="ALL">All</button>
+                <button type="button" class="room-pill-btn" data-type="LECTURE">Lecture</button>
+                <button type="button" class="room-pill-btn" data-type="LAB">Labs</button>
               </div>
             </div>
-            <div id="sg-rooms-container" class="room-checkbox-grid">
-              <span class="loading-hint">Loading physical rooms...</span>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <div class="label-row">
+                <label class="form-label">Eligible Rooms &amp; Laboratories *</label>
+                <div class="label-actions">
+                  <button type="button" class="btn-text-action" id="btn-room-select-all">Select All Rooms</button>
+                </div>
+              </div>
+              <div id="sg-rooms-container" class="room-checkbox-grid">
+                <span class="loading-hint">Loading physical rooms...</span>
+              </div>
             </div>
           </div>
 
-          <!-- Faculty Pool Selection -->
-          <div class="form-group">
-            <label class="form-label" for="sg-faculty">Available Faculty Pool</label>
-            <select id="sg-faculty" class="form-select">
-              <option value="all" selected>All Department Faculty (Recommended for Global Load Balancing)</option>
-            </select>
-            <span class="field-help">The solver respects blackout windows and max teaching load limits (21 units).</span>
-          </div>
+          <!-- Step 3: Faculty Load & Soft Constraints -->
+          <div class="card smart-config-step-card">
+            <div class="card-header-clean">
+              <div>
+                <h2 class="section-title">3. Faculty Pool &amp; Heuristics</h2>
+                <p class="section-subtitle">Configure instructor allocation rules and soft constraint weights.</p>
+              </div>
+              <span class="badge-role">Step 3 of 3</span>
+            </div>
 
-          <!-- Additional Soft Constraint Preferences -->
-          <div class="form-group">
-            <label class="form-label">Optimization Preferences (Soft Constraints)</label>
-            <div class="preferences-box">
-              <label class="checkbox-option">
-                <input type="checkbox" id="pref-minimize-gaps" checked>
-                <div class="checkbox-label-wrap">
-                  <strong>Minimize Student Idle Gaps (SC1)</strong>
-                  <span>Clusters daily classes consecutively; avoids gap windows &gt; 2 hours between courses.</span>
-                </div>
-              </label>
-              <label class="checkbox-option">
-                <input type="checkbox" id="pref-balance-workload" checked>
-                <div class="checkbox-label-wrap">
-                  <strong>Balance Faculty Workload (SC3)</strong>
-                  <span>Equitably distributes teaching hours across instructors without exceeding 21 units.</span>
-                </div>
-              </label>
-              <label class="checkbox-option">
-                <input type="checkbox" id="pref-optimize-utilization" checked>
-                <div class="checkbox-label-wrap">
-                  <strong>Optimize Room Utilization (SC2)</strong>
-                  <span>Matches section enrollment tightly to facility capacity to minimize wasted vacant seats.</span>
-                </div>
-              </label>
+            <div class="form-group">
+              <label class="form-label" for="sg-faculty">Available Faculty Pool</label>
+              <select id="sg-faculty" class="form-select">
+                <option value="all" selected>All Department Faculty (Recommended for Global Load Balancing)</option>
+              </select>
+              <span class="field-help">The solver respects blackout windows and max teaching load limits (21 units).</span>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label">Optimization Preferences (Soft Constraints)</label>
+              <div class="preferences-box">
+                <label class="checkbox-option">
+                  <input type="checkbox" id="pref-minimize-gaps" checked>
+                  <div class="checkbox-label-wrap">
+                    <strong>Minimize Student Idle Gaps (SC1)</strong>
+                    <span>Clusters daily classes consecutively; avoids gap windows &gt; 2 hours between courses.</span>
+                  </div>
+                </label>
+                <label class="checkbox-option">
+                  <input type="checkbox" id="pref-balance-workload" checked>
+                  <div class="checkbox-label-wrap">
+                    <strong>Balance Faculty Workload (SC3)</strong>
+                    <span>Equitably distributes teaching hours across instructors without exceeding 21 units.</span>
+                  </div>
+                </label>
+                <label class="checkbox-option">
+                  <input type="checkbox" id="pref-optimize-utilization" checked>
+                  <div class="checkbox-label-wrap">
+                    <strong>Optimize Room Utilization (SC2)</strong>
+                    <span>Matches section enrollment tightly to facility capacity to minimize wasted vacant seats.</span>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
 
-          <!-- Action Button -->
-          <div class="form-actions-bar">
-            <button type="submit" id="btn-smart-generate" class="btn btn-primary btn-lg" style="width: 100%;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              <span>⚡ Generate Smart Schedule</span>
-            </button>
+        </div>
+
+        <!-- Right Column: Live Generation Scope & Action Panel -->
+        <div class="smart-col-right">
+          <div class="card smart-summary-panel" id="visualizer-container">
+            
+            <!-- State 1: Idle / Heuristics Summary -->
+            <div id="vis-idle-state" class="vis-state active">
+              <div class="summary-card-header">
+                <div>
+                  <h3 class="summary-card-title">Generation Scope &amp; Heuristics</h3>
+                  <p class="summary-card-subtitle">Live parameter assessment before engine synthesis.</p>
+                </div>
+                <span class="badge-solver-ai">⚡ AI Solver Engine</span>
+              </div>
+
+              <!-- Dynamic Metrics Matrix -->
+              <div class="summary-matrix">
+                <div class="summary-stat-box">
+                  <div class="stat-num" id="summary-section-count">0</div>
+                  <div class="stat-lbl">Target Cohorts</div>
+                </div>
+                <div class="summary-stat-box">
+                  <div class="stat-num" id="summary-subject-count">0</div>
+                  <div class="stat-lbl">Offerings to Place</div>
+                </div>
+                <div class="summary-stat-box">
+                  <div class="stat-num" id="summary-room-count">0</div>
+                  <div class="stat-lbl">Eligible Rooms</div>
+                </div>
+                <div class="summary-stat-box">
+                  <div class="stat-num" style="color: #059669;">6 / 6</div>
+                  <div class="stat-lbl">Hard Constraints</div>
+                </div>
+              </div>
+
+              <!-- Rule Enforcement Indicator -->
+              <div class="constraint-assurance-box">
+                <div class="assurance-row">
+                  <span class="assurance-check">✔</span>
+                  <span><strong>Zero Room Collisions:</strong> No facility overlaps.</span>
+                </div>
+                <div class="assurance-row">
+                  <span class="assurance-check">✔</span>
+                  <span><strong>Faculty Blackouts:</strong> Blackout periods strictly respected.</span>
+                </div>
+                <div class="assurance-row">
+                  <span class="assurance-check">✔</span>
+                  <span><strong>Lab Match:</strong> Lab courses assigned only to Lab facilities.</span>
+                </div>
+                <div class="assurance-row">
+                  <span class="assurance-check">✔</span>
+                  <span><strong>Capacity Guarantee:</strong> Room seats &ge; cohort student count.</span>
+                </div>
+              </div>
+
+              <!-- Pre-Flight Status Message -->
+              <div class="preflight-status-note">
+                <span class="status-pulse-dot"></span>
+                <span>Ready to Synthesize Timetable — 0 hard collisions allowed.</span>
+              </div>
+
+              <!-- Action Button -->
+              <div class="generator-cta-wrap">
+                <button type="submit" id="btn-smart-generate" class="btn btn-primary btn-generate-cta">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  <span>⚡ Generate Smart Schedule</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- State 2: Running / Live Solver Progress -->
+            <div id="vis-running-state" class="vis-state" style="display:none;">
+              <div class="vis-spinner-wrap">
+                <div class="solver-spinner"></div>
+                <div class="solver-spinner-core">⚡</div>
+              </div>
+              <h3 class="vis-title">Synthesizing Optimal Timetable...</h3>
+              <p class="vis-desc">Evaluating multi-criteria permutations against HC1–HC6 and SC1–SC3.</p>
+
+              <!-- Animated Step-by-Step Checklist -->
+              <div class="checklist-container">
+                <div class="checklist-step" id="step-analyze">
+                  <span class="step-icon">○</span>
+                  <span class="step-text">Analyzing classes &amp; curricular requirements...</span>
+                </div>
+                <div class="checklist-step" id="step-rooms">
+                  <span class="step-icon">○</span>
+                  <span class="step-text">Checking room availability &amp; capacity constraints...</span>
+                </div>
+                <div class="checklist-step" id="step-faculty">
+                  <span class="step-icon">○</span>
+                  <span class="step-text">Checking faculty availability &amp; blackout windows...</span>
+                </div>
+                <div class="checklist-step" id="step-conflicts">
+                  <span class="step-icon">○</span>
+                  <span class="step-text">Resolving hard conflicts (HC1–HC6)...</span>
+                </div>
+                <div class="checklist-step" id="step-optimize">
+                  <span class="step-icon">○</span>
+                  <span class="step-text">Optimizing resources &amp; workload balance...</span>
+                </div>
+              </div>
+
+              <!-- Progress Bar -->
+              <div class="progress-wrap">
+                <div class="progress-track">
+                  <div id="vis-progress-fill" class="progress-fill" style="width: 0%;"></div>
+                </div>
+                <div class="progress-label-row">
+                  <span id="vis-progress-status">Initializing engine...</span>
+                  <span id="vis-progress-percent">0%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- State 3: Completed Results Summary -->
+            <div id="vis-completed-state" class="vis-state" style="display:none;">
+              <div class="vis-success-badge">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+              <h3 class="vis-title" style="color: #065F46;">Optimal Schedule Generated!</h3>
+              <p class="vis-desc">All candidate courses have been evaluated and staged as conflict-free drafts.</p>
+
+              <!-- Metrics Summary Cards -->
+              <div class="metrics-summary-grid">
+                <div class="metric-box">
+                  <div class="metric-val" id="res-classes-scheduled">0</div>
+                  <div class="metric-lbl">Classes Placed</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-val" style="color:#059669;">0</div>
+                  <div class="metric-lbl">Hard Conflicts</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-val" id="res-quality-score" style="color:#D97706;">95</div>
+                  <div class="metric-lbl">Quality Score</div>
+                </div>
+              </div>
+
+              <!-- Unplaced Items Alert (if any) -->
+              <div id="res-unplaced-container" style="display:none; margin: 16px 0; text-align: left;">
+                <div style="font-size: 12px; font-weight: 700; color: #B91C1C; margin-bottom: 6px;">Unplaced Offerings:</div>
+                <ul id="res-unplaced-list" style="margin: 0; padding-left: 20px; font-size: 12px; color: #7F1D1D;"></ul>
+              </div>
+
+              <!-- Completion Action Buttons -->
+              <div class="vis-actions-row">
+                <a href="/schedules" class="btn btn-primary btn-lg" style="flex: 1; text-align: center; text-decoration: none; border-radius: 9999px;">
+                  Review Timetable on Grid &rarr;
+                </a>
+                <button type="button" id="btn-generate-again" class="btn btn-secondary" style="border-radius: 9999px;">
+                  Generate Again
+                </button>
+              </div>
+            </div>
+
           </div>
-        </form>
+        </div>
       </div>
-
-      <!-- Right Column: Live Generation Visualizer -->
-      <div class="card visualizer-card" id="visualizer-container">
-        <!-- State 1: Idle Placeholder -->
-        <div id="vis-idle-state" class="vis-state active">
-          <div class="vis-graphic-wrap">
-            <div class="pulsing-calendar-circle">
-              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--sidebar-bg)" stroke-width="1.75">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-                <circle cx="8" cy="15" r="1.5" fill="var(--nav-pill-bg)"/>
-                <circle cx="12" cy="15" r="1.5" fill="var(--sidebar-bg)"/>
-                <circle cx="16" cy="15" r="1.5" fill="var(--nav-pill-bg)"/>
-              </svg>
-            </div>
-          </div>
-          <h3 class="vis-title">Ready to Generate Optimal Timetable</h3>
-          <p class="vis-desc">
-            Configure your cohort sections, physical facilities, and optimization preferences on the left.
-            The heuristic engine will synthesize conflict-free timetable drafts satisfying all 6 Hard Constraints.
-          </p>
-          <div class="vis-feature-tags">
-            <span class="vis-tag">Zero Room Collisions</span>
-            <span class="vis-tag">Faculty Blackouts Protected</span>
-            <span class="vis-tag">Lab Facility Match</span>
-          </div>
-        </div>
-
-        <!-- State 2: Running / Live Solver Progress -->
-        <div id="vis-running-state" class="vis-state" style="display:none;">
-          <div class="vis-spinner-wrap">
-            <div class="solver-spinner"></div>
-            <div class="solver-spinner-core">⚡</div>
-          </div>
-          <h3 class="vis-title">COE SYNC is generating the optimal schedule...</h3>
-          <p class="vis-desc">Evaluating timetable permutations against Hard &amp; Soft constraints.</p>
-
-          <!-- Animated Step-by-Step Checklist -->
-          <div class="checklist-container">
-            <div class="checklist-step" id="step-analyze">
-              <span class="step-icon">○</span>
-              <span class="step-text">Analyzing classes &amp; curricular requirements...</span>
-            </div>
-            <div class="checklist-step" id="step-rooms">
-              <span class="step-icon">○</span>
-              <span class="step-text">Checking room availability &amp; capacity constraints...</span>
-            </div>
-            <div class="checklist-step" id="step-faculty">
-              <span class="step-icon">○</span>
-              <span class="step-text">Checking faculty availability &amp; blackout windows...</span>
-            </div>
-            <div class="checklist-step" id="step-conflicts">
-              <span class="step-icon">○</span>
-              <span class="step-text">Resolving hard conflicts (HC1–HC6)...</span>
-            </div>
-            <div class="checklist-step" id="step-optimize">
-              <span class="step-icon">○</span>
-              <span class="step-text">Optimizing resources &amp; workload balance...</span>
-            </div>
-          </div>
-
-          <!-- Progress Bar -->
-          <div class="progress-wrap">
-            <div class="progress-track">
-              <div id="vis-progress-fill" class="progress-fill" style="width: 0%;"></div>
-            </div>
-            <div class="progress-label-row">
-              <span id="vis-progress-status">Initializing engine...</span>
-              <span id="vis-progress-percent">0%</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- State 3: Completed Results Summary -->
-        <div id="vis-completed-state" class="vis-state" style="display:none;">
-          <div class="vis-success-badge">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          </div>
-          <h3 class="vis-title" style="color: #065F46;">Optimal Schedule Generated!</h3>
-          <p class="vis-desc">All candidate courses have been evaluated and staged as conflict-free drafts.</p>
-
-          <!-- Metrics Summary Cards -->
-          <div class="metrics-summary-grid">
-            <div class="metric-box">
-              <div class="metric-val" id="res-classes-scheduled">0</div>
-              <div class="metric-lbl">Classes Placed</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-val" style="color:#059669;">0</div>
-              <div class="metric-lbl">Hard Conflicts</div>
-            </div>
-            <div class="metric-box">
-              <div class="metric-val" id="res-quality-score" style="color:#D97706;">95</div>
-              <div class="metric-lbl">Quality Score</div>
-            </div>
-          </div>
-
-          <!-- Unplaced Items Alert (if any) -->
-          <div id="res-unplaced-container" style="display:none; margin: 16px 0; text-align: left;">
-            <div style="font-size: 12px; font-weight: 700; color: #B91C1C; margin-bottom: 6px;">Unplaced Offerings:</div>
-            <ul id="res-unplaced-list" style="margin: 0; padding-left: 20px; font-size: 12px; color: #7F1D1D;"></ul>
-          </div>
-
-          <!-- Completion Action Buttons -->
-          <div class="vis-actions-row">
-            <a href="/schedules" class="btn btn-primary btn-lg" style="flex: 1; text-align: center; text-decoration: none;">
-              Review Timetable on Grid &rarr;
-            </a>
-            <button type="button" id="btn-generate-again" class="btn btn-secondary">
-              Generate Again
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </form>
   </div>
 
   <!-- ═════════════════════════════════════════════════════════════ -->
-  <!-- PANEL B: MANUAL SCHEDULING MODE                                -->
+  <!-- PANEL B: MANUAL SCHEDULING MODE (Glassmorphic 2-Col Grid)       -->
   <!-- ═════════════════════════════════════════════════════════════ -->
   <div id="panel-manual-scheduling" class="scheduling-panel">
-    <div class="manual-layout">
-      <div class="card manual-form-card">
-        <div class="card-header-clean">
-          <div>
-            <h2 class="section-title">Schedule Single Course Slot</h2>
-            <p class="section-subtitle">Manually assign a subject offering with instant pre-flight collision verification.</p>
+    <div class="schedule-form-container max-w-4xl mx-auto bg-white/80 backdrop-blur-md rounded-2xl shadow-lg border border-white/60 p-8">
+      <div class="card-header-clean" style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid rgba(229, 212, 216, 0.6);">
+        <div>
+          <h2 class="section-title">Schedule Single Course Slot</h2>
+          <p class="section-subtitle">Manually assign a subject offering with instant pre-flight collision verification.</p>
+        </div>
+        <span class="badge-role">Real-Time HC Validation</span>
+      </div>
+
+      <form id="form-manual-schedule">
+        <!-- Row 1: Program & Year Level -->
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label" for="manual-program">Degree Program *</label>
+            <select id="manual-program" class="form-select" required>
+              <option value="">-- All Programs --</option>
+              <option value="CE">Civil Engineering (CE)</option>
+              <option value="ECE">Electronics Engineering (ECE)</option>
+              <option value="MEE">Mechanical Engineering (MEE)</option>
+              <option value="MFE">Manufacturing Engineering (MFE)</option>
+            </select>
           </div>
-          <span class="badge-role">Real-Time HC Validation</span>
+          <div class="form-group">
+            <label class="form-label" for="manual-year-level">Year Level</label>
+            <select id="manual-year-level" class="form-select">
+              <option value="">-- All Years --</option>
+              <option value="1">1st Year</option>
+              <option value="2">2nd Year</option>
+              <option value="3">3rd Year</option>
+              <option value="4">4th Year</option>
+            </select>
+          </div>
         </div>
 
-        <form id="form-manual-schedule">
-          <div class="form-row-2">
-            <!-- Subject Selection -->
-            <div class="form-group">
-              <label class="form-label" for="manual-subject">Subject Offering *</label>
-              <select id="manual-subject" class="form-select" required>
-                <option value="">-- Choose Subject --</option>
-              </select>
-              <div id="manual-subject-meta" class="meta-preview-box" style="display:none;"></div>
-            </div>
+        <!-- Row 2: Subject Offering -->
+        <div class="form-row-full">
+          <div class="form-group">
+            <label class="form-label" for="manual-subject">Subject Offering *</label>
+            <select id="manual-subject" class="form-select" required>
+              <option value="">-- Choose Subject --</option>
+            </select>
+            <div id="manual-subject-meta" class="meta-preview-box" style="display:none;"></div>
+          </div>
+        </div>
 
-            <!-- Section Selection -->
-            <div class="form-group">
-              <label class="form-label" for="manual-section">Cohort Section *</label>
-              <select id="manual-section" class="form-select" required>
-                <option value="">-- Choose Section --</option>
-              </select>
-              <div id="manual-section-meta" class="meta-preview-box" style="display:none;"></div>
-            </div>
+        <!-- Row 3: Cohort Section & Assigned Instructor -->
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label" for="manual-section">Cohort Section *</label>
+            <select id="manual-section" class="form-select" required>
+              <option value="">-- Choose Section --</option>
+            </select>
+            <div id="manual-section-meta" class="meta-preview-box" style="display:none;"></div>
           </div>
 
-          <div class="form-row-2">
-            <!-- Faculty Selection -->
-            <div class="form-group">
-              <label class="form-label" for="manual-faculty">Instructor / Faculty *</label>
-              <select id="manual-faculty" class="form-select" required>
-                <option value="">-- Choose Faculty Member --</option>
-              </select>
-            </div>
+          <div class="form-group">
+            <label class="form-label" for="manual-faculty">Assigned Instructor *</label>
+            <select id="manual-faculty" class="form-select" required>
+              <option value="">-- Choose Faculty Member --</option>
+            </select>
+          </div>
+        </div>
 
-            <!-- Room Selection -->
-            <div class="form-group">
-              <label class="form-label" for="manual-room">Classroom / Laboratory *</label>
-              <select id="manual-room" class="form-select" required>
-                <option value="">-- Choose Physical Room --</option>
-              </select>
-            </div>
+        <!-- Row 4: Classroom / Laboratory & Day of Week -->
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label" for="manual-room">Classroom / Laboratory *</label>
+            <select id="manual-room" class="form-select" required>
+              <option value="">-- Choose Physical Room --</option>
+            </select>
           </div>
 
-          <div class="form-row-3">
-            <!-- Day of Week -->
-            <div class="form-group">
-              <label class="form-label" for="manual-day">Day of Week *</label>
-              <select id="manual-day" class="form-select" required>
-                <option value="MON">Monday</option>
-                <option value="TUE">Tuesday</option>
-                <option value="WED">Wednesday</option>
-                <option value="THU">Thursday</option>
-                <option value="FRI">Friday</option>
-                <option value="SAT">Saturday</option>
-              </select>
-            </div>
+          <div class="form-group">
+            <label class="form-label" for="manual-day">Day of Week *</label>
+            <select id="manual-day" class="form-select" required>
+              <option value="MON">Monday</option>
+              <option value="TUE">Tuesday</option>
+              <option value="WED">Wednesday</option>
+              <option value="THU">Thursday</option>
+              <option value="FRI">Friday</option>
+              <option value="SAT">Saturday</option>
+              <option value="SUN">Sunday</option>
+            </select>
+          </div>
+        </div>
 
-            <!-- Start Time -->
-            <div class="form-group">
-              <label class="form-label" for="manual-start-time">Start Time *</label>
-              <input type="time" id="manual-start-time" class="form-input" required value="08:00" step="1800">
-            </div>
-
-            <!-- End Time -->
-            <div class="form-group">
-              <label class="form-label" for="manual-end-time">End Time *</label>
-              <input type="time" id="manual-end-time" class="form-input" required value="09:30" step="1800">
-            </div>
+        <!-- Row 5 (Time Range): Start Time & End Time -->
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label" for="manual-start-time">Start Time *</label>
+            <input type="time" id="manual-start-time" class="form-input" required value="08:00" step="1800">
           </div>
 
-          <!-- Real-Time Pre-Flight Conflict Check Banner -->
-          <div id="manual-conflict-banner" class="validation-banner" style="display:none;">
-            <!-- Dynamic validation result injected via JavaScript -->
+          <div class="form-group">
+            <label class="form-label" for="manual-end-time">End Time *</label>
+            <input type="time" id="manual-end-time" class="form-input" required value="09:30" step="1800">
           </div>
+        </div>
 
-          <!-- Submit Button -->
-          <div class="form-actions-bar" style="margin-top: 24px;">
-            <button type="submit" id="btn-save-manual-slot" class="btn btn-primary btn-lg" style="width: 100%;">
-              <span>Save Schedule Slot &rarr;</span>
-            </button>
-          </div>
-        </form>
-      </div>
+        <!-- Real-Time Pre-Flight Conflict Radar Banner -->
+        <div id="manual-conflict-banner" class="validation-banner" style="display:none;">
+          <!-- Dynamic validation result injected via JavaScript -->
+        </div>
+
+        <!-- Submit Button -->
+        <div class="form-actions-bar" style="margin-top: 28px; display: flex; justify-content: flex-end;">
+          <button type="submit" id="btn-save-manual-slot" class="btn btn-primary btn-lg" style="background: #6E1717; color: #FFF; font-weight: 700; border-radius: 9999px; padding: 0.85rem 2.5rem; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+            <span>Save Schedule Slot &rarr;</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

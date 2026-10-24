@@ -91,6 +91,37 @@ const API = {
     return this.get("/api/analytics/summary");
   },
 
+  async getSections(params = null) {
+    return this.get("/api/sections", params);
+  },
+
+  async getSubjects(params = null) {
+    return this.get("/api/subjects", params);
+  },
+
+  async getFaculty(params = null) {
+    return this.get("/api/faculty", params);
+  },
+
+  async getRooms(params = null) {
+    return this.get("/api/rooms", params);
+  },
+
+  async getMasterData() {
+    const [sec, sub, fac, rm] = await Promise.all([
+      this.get("/api/sections"),
+      this.get("/api/subjects"),
+      this.get("/api/faculty"),
+      this.get("/api/rooms"),
+    ]);
+    return {
+      sections: sec.data || [],
+      subjects: sub.data || [],
+      faculty: fac.data || [],
+      rooms: rm.data || [],
+    };
+  },
+
   async getSchedules(filters = null) {
     return this.get("/api/schedules", filters);
   },

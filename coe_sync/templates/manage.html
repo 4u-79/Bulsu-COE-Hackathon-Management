@@ -81,6 +81,13 @@
         <input type="text" id="search-faculty" class="manage-search-input" placeholder="Search faculty name or email...">
       </div>
       <div class="manage-filter-group">
+        <select id="filter-faculty-prog" class="manage-filter-select">
+          <option value="">All Programs</option>
+          <option value="CE">Civil Engineering (CE)</option>
+          <option value="ECE">Electronics Engineering (ECE)</option>
+          <option value="MEE">Mechanical Engineering (MEE)</option>
+          <option value="MFE">Manufacturing Engineering (MFE)</option>
+        </select>
         <select id="filter-faculty-status" class="manage-filter-select">
           <option value="">All Workloads</option>
           <option value="normal">Normal Load (≤ 21 units)</option>
@@ -119,11 +126,10 @@
       <div class="manage-filter-group">
         <select id="filter-section-prog" class="manage-filter-select">
           <option value="">All Programs</option>
-          <option value="BSCpE">BS Computer Engineering</option>
-          <option value="BSME">BS Mechanical Engineering</option>
-          <option value="BSEE">BS Electrical Engineering</option>
-          <option value="BSCE">BS Civil Engineering</option>
-          <option value="BSIE">BS Industrial Engineering</option>
+          <option value="CE">Civil Engineering (CE)</option>
+          <option value="ECE">Electronics Engineering (ECE)</option>
+          <option value="MEE">Mechanical Engineering (MEE)</option>
+          <option value="MFE">Manufacturing Engineering (MFE)</option>
         </select>
         <select id="filter-section-year" class="manage-filter-select">
           <option value="">All Years</option>
@@ -162,6 +168,20 @@
         <input type="text" id="search-subjects" class="manage-search-input" placeholder="Search course code or title (e.g. CPE 211)...">
       </div>
       <div class="manage-filter-group">
+        <select id="filter-subject-prog" class="manage-filter-select">
+          <option value="">All Programs</option>
+          <option value="CE">Civil Engineering (CE)</option>
+          <option value="ECE">Electronics Engineering (ECE)</option>
+          <option value="MEE">Mechanical Engineering (MEE)</option>
+          <option value="MFE">Manufacturing Engineering (MFE)</option>
+        </select>
+        <select id="filter-subject-year" class="manage-filter-select">
+          <option value="">All Years</option>
+          <option value="1">1st Year</option>
+          <option value="2">2nd Year</option>
+          <option value="3">3rd Year</option>
+          <option value="4">4th Year</option>
+        </select>
         <select id="filter-subject-type" class="manage-filter-select">
           <option value="">All Types</option>
           <option value="LECTURE">Lecture</option>

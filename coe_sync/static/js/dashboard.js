@@ -93,6 +93,41 @@ async function loadDashboardMetrics() {
   }
 }
 
+function normalizeProgram(prog) {
+  if (!prog) return "";
+  const p = prog.trim().toUpperCase();
+  if (p === "BSCE" || p === "CE") return "CE";
+  if (p === "BSEE" || p === "BSECE" || p === "ECE" || p === "BSCpE" || p === "CPE") return "ECE";
+  if (p === "BSME" || p === "MEE" || p === "ME") return "MEE";
+  if (p === "BSMFE" || p === "MFE") return "MFE";
+  return p;
+}
+
+function cascadeDashboardSections() {
+  const prog = document.getElementById("dash-filter-prog")?.value || "";
+  const year = document.getElementById("dash-filter-year")?.value || "";
+  const secSelect = document.getElementById("dash-filter-sec");
+  if (!secSelect) return;
+
+  const currentSecVal = secSelect.value;
+  let matchingSections = _dashSections;
+  if (prog) {
+    matchingSections = matchingSections.filter(s => normalizeProgram(s.program) === normalizeProgram(prog));
+  }
+  if (year) {
+    matchingSections = matchingSections.filter(s => String(s.year_level) === String(year));
+  }
+
+  secSelect.innerHTML = `<option value="">All Sections</option>` +
+    matchingSections.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+
+  if (currentSecVal && matchingSections.some(s => String(s.id) === String(currentSecVal))) {
+    secSelect.value = currentSecVal;
+  } else {
+    secSelect.value = "";
+  }
+}
+
 async function loadDashboardData() {
   try {
     const [schedRes, secRes, rmRes] = await Promise.all([
@@ -106,18 +141,13 @@ async function loadDashboardData() {
     _dashRooms = rmRes?.data || [];
 
     // Populate filter dropdowns
-    const secSelect = document.getElementById("dash-filter-sec");
     const rmSelect = document.getElementById("dash-filter-room");
-
-    if (secSelect) {
-      secSelect.innerHTML = `<option value="">All Sections</option>` +
-        _dashSections.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
-    }
     if (rmSelect) {
       rmSelect.innerHTML = `<option value="">All Rooms</option>` +
         _dashRooms.map(r => `<option value="${r.id}">${escapeHtml(r.room_code)}</option>`).join("");
     }
 
+    cascadeDashboardSections();
     renderDashboardTable();
   } catch (err) {
     console.warn("Failed to load dashboard schedule data:", err);
@@ -129,13 +159,22 @@ function renderDashboardTable() {
   if (!tbody) return;
 
   const prog = document.getElementById("dash-filter-prog")?.value;
+  const year = document.getElementById("dash-filter-year")?.value;
   const sec = document.getElementById("dash-filter-sec")?.value;
   const rm = document.getElementById("dash-filter-room")?.value;
 
   let filtered = _dashSchedules;
 
   if (prog) {
-    const sectionIds = _dashSections.filter(s => s.program === prog).map(s => s.id);
+    const sectionIds = _dashSections
+      .filter(s => normalizeProgram(s.program) === normalizeProgram(prog))
+      .map(s => s.id);
+    filtered = filtered.filter(s => sectionIds.includes(s.section_id));
+  }
+  if (year) {
+    const sectionIds = _dashSections
+      .filter(s => String(s.year_level) === String(year))
+      .map(s => s.id);
     filtered = filtered.filter(s => sectionIds.includes(s.section_id));
   }
   if (sec) {
@@ -173,10 +212,17 @@ function renderDashboardTable() {
 }
 
 function bindDashboardEvents() {
-  // Filters
-  ["dash-filter-prog", "dash-filter-sec", "dash-filter-room"].forEach(id => {
-    document.getElementById(id)?.addEventListener("change", renderDashboardTable);
+  // Cascading filters
+  document.getElementById("dash-filter-prog")?.addEventListener("change", () => {
+    cascadeDashboardSections();
+    renderDashboardTable();
   });
+  document.getElementById("dash-filter-year")?.addEventListener("change", () => {
+    cascadeDashboardSections();
+    renderDashboardTable();
+  });
+  document.getElementById("dash-filter-sec")?.addEventListener("change", renderDashboardTable);
+  document.getElementById("dash-filter-room")?.addEventListener("change", renderDashboardTable);
 
   // View toggles
   const btnTable = document.getElementById("btn-view-table");

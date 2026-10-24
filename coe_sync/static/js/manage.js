@@ -675,15 +675,18 @@ function initTableFilters() {
   // Faculty Filter
   const sFaculty = document.getElementById("search-faculty");
   const fFacultyStatus = document.getElementById("filter-faculty-status");
+  const fFacultyProg = document.getElementById("filter-faculty-prog");
 
   function applyFacultyFilter() {
     const q = (sFaculty?.value || "").toLowerCase().trim();
     const st = fFacultyStatus?.value || "";
+    const p = fFacultyProg?.value || "";
 
     const filtered = masterDataCache.faculty.filter((f) => {
       if (q && !f.name.toLowerCase().includes(q) && !f.email.toLowerCase().includes(q)) return false;
       if (st === "normal" && f.current_units > f.max_units) return false;
       if (st === "overloaded" && f.current_units <= f.max_units) return false;
+      if (p && normalizeProgram(f.program) !== normalizeProgram(p)) return false;
       return true;
     });
     renderFacultyTable(filtered);
@@ -692,6 +695,7 @@ function initTableFilters() {
 
   sFaculty?.addEventListener("input", debounce(applyFacultyFilter, 300));
   fFacultyStatus?.addEventListener("change", applyFacultyFilter);
+  fFacultyProg?.addEventListener("change", applyFacultyFilter);
 
   // Sections Filter
   const sSections = document.getElementById("search-sections");
@@ -705,7 +709,7 @@ function initTableFilters() {
 
     const filtered = masterDataCache.sections.filter((sec) => {
       if (q && !sec.name.toLowerCase().includes(q)) return false;
-      if (p && sec.program !== p) return false;
+      if (p && normalizeProgram(sec.program) !== normalizeProgram(p)) return false;
       if (y && String(sec.year_level) !== y) return false;
       return true;
     });
@@ -721,16 +725,22 @@ function initTableFilters() {
   const sSubjects = document.getElementById("search-subjects");
   const fSubjType = document.getElementById("filter-subject-type");
   const fSubjUnits = document.getElementById("filter-subject-units");
+  const fSubjProg = document.getElementById("filter-subject-prog");
+  const fSubjYear = document.getElementById("filter-subject-year");
 
   function applySubjectsFilter() {
     const q = (sSubjects?.value || "").toLowerCase().trim();
     const t = fSubjType?.value || "";
     const u = fSubjUnits?.value || "";
+    const p = fSubjProg?.value || "";
+    const y = fSubjYear?.value || "";
 
     const filtered = masterDataCache.subjects.filter((sub) => {
       if (q && !sub.code.toLowerCase().includes(q) && !sub.title.toLowerCase().includes(q)) return false;
       if (t && sub.subject_type !== t) return false;
       if (u && String(sub.units) !== u) return false;
+      if (p && normalizeProgram(sub.program) !== normalizeProgram(p)) return false;
+      if (y && String(sub.year_level) !== y) return false;
       return true;
     });
     renderSubjectsTable(filtered);
@@ -740,6 +750,18 @@ function initTableFilters() {
   sSubjects?.addEventListener("input", debounce(applySubjectsFilter, 300));
   fSubjType?.addEventListener("change", applySubjectsFilter);
   fSubjUnits?.addEventListener("change", applySubjectsFilter);
+  fSubjProg?.addEventListener("change", applySubjectsFilter);
+  fSubjYear?.addEventListener("change", applySubjectsFilter);
+}
+
+function normalizeProgram(prog) {
+  if (!prog) return "";
+  const p = prog.trim().toUpperCase();
+  if (p === "BSCE" || p === "CE") return "CE";
+  if (p === "BSEE" || p === "BSECE" || p === "ECE" || p === "BSCpE" || p === "CPE") return "ECE";
+  if (p === "BSME" || p === "MEE" || p === "ME") return "MEE";
+  if (p === "BSMFE" || p === "MFE") return "MFE";
+  return p;
 }
 
 // -------------------------------------------------------------

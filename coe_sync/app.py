@@ -236,6 +236,7 @@ def create_app(config_name=None):
         )
 
     @app.route("/api/faculty", methods=["GET"])
+    @app.route("/api/master/faculty", methods=["GET"])
     def list_faculty():
         """List all faculty members and their unit workloads with optional filtering."""
         query = Faculty.query
@@ -268,6 +269,7 @@ def create_app(config_name=None):
         )
 
     @app.route("/api/sections", methods=["GET"])
+    @app.route("/api/master/sections", methods=["GET"])
     def list_sections():
         """List academic cohort sections with optional filtering."""
         query = Section.query
@@ -297,6 +299,7 @@ def create_app(config_name=None):
         )
 
     @app.route("/api/subjects", methods=["GET"])
+    @app.route("/api/master/subjects", methods=["GET"])
     def list_subjects():
         """List course subjects with optional filtering."""
         query = Subject.query
@@ -335,6 +338,7 @@ def create_app(config_name=None):
         )
 
     @app.route("/api/rooms", methods=["GET"])
+    @app.route("/api/master/rooms", methods=["GET"])
     def list_rooms():
         """List physical rooms and laboratories with optional filtering."""
         query = Room.query
