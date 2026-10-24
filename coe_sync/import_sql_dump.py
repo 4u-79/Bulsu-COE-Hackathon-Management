@@ -176,6 +176,129 @@ def match_faculty_for_user(uname: str, faculty_list: List[Dict[str, Any]], user_
     return None
 
 
+SECTION_CLASS_MAYORS = {
+    1: "Marc Andrei Santos",
+    2: "Angelo Christian Reyes",
+    3: "Patricia Mae Cruz",
+    4: "Joshua David Mendoza",
+    5: "Alyssa Marie Garcia",
+    6: "John Carlo Ramos",
+    7: "Gabriel Paolo Bautista",
+    8: "Bea Bianca Fernandez",
+    9: "Kenneth Roy Morales",
+    10: "Justin Kyle Dela Cruz",
+    11: "Christine Joy Villanueva",
+    12: "Rafael Luis Soriano",
+    13: "Nathaniel Clark Rivera",
+    14: "Samantha Nicole Gomez",
+    15: "Ethan James Aquino",
+    16: "Chloe Danielle Castro",
+    17: "Mark Anthony Salazar",
+    18: "Princess Dianne Mercado",
+    19: "Vincent Paul Tolentino",
+    20: "Jasmine Rose Navarro",
+    21: "Adrian Miguel Valenzuela",
+    22: "Hannah Camille Pineda",
+    23: "Christian Dave Manalo",
+    24: "Elijah Kyle Ocampo",
+    25: "Nicole Anne Cortez",
+    26: "Dominic Rafael Domingo",
+    27: "Kevin Carl Pascual",
+    28: "Angelica Faith Lim",
+    29: "Timothy John Estrada",
+    30: "Maria Cristina Roxas",
+    31: "Daniel Joseph Serrano",
+    32: "Erica Louise Magat",
+    33: "Aaron Philip Guzman",
+    34: "Stephanie Jane Dizon",
+    35: "Patrick Lance Bulaong",
+    36: "Bryan Lester Galang",
+    37: "Andrea Sophia Fabian",
+    38: "Jerico Vince Quizon",
+    39: "Kyle Matthew David",
+    40: "Katrina Isabelle Tan",
+    41: "Sean Michael Bernardo",
+    42: "Rachel Anne Sioson",
+    43: "Neil Patrick Guinto",
+    44: "Clarisse Mae Mariano",
+    45: "Lance Gabriel Dionisio",
+    46: "Matthew Ryan Carpio",
+    47: "Danielle Marie Tanjutco",
+    48: "Paolo Miguel Sevilla",
+    49: "Carlo James Alcantara",
+    50: "Hazel Grace Mallari",
+    51: "Ryan Christian Dimagiba",
+    52: "Mary Grace Concepcion",
+    53: "John Paul Hernandez",
+    54: "Kimberly Rose Espino",
+    55: "Miguel Angelo Cordova",
+    56: "Denise Valerie Santos",
+    57: "Tristan Jay Vergara",
+    58: "Rochelle Ann Palad",
+    59: "Francis Eric Agulto",
+    60: "Janelle Marie Trinidad",
+    61: "Cedric Vance Maclang",
+    62: "Shaira Mae Perez",
+    63: "Kurt Russel Alcaraz",
+    64: "Joanna Marie Centeno",
+    65: "Lester Troy Valencia",
+    66: "Kimberly Joyce Adriano",
+    67: "Renz Marion Santiago",
+    68: "Chelsea Nicole Cruz",
+    69: "Rommel Dave San Diego",
+    70: "Patricia Ann Nicolas",
+    71: "Aldrin James Bartolome",
+    72: "Kyla Maureen Enriquez",
+    73: "Christian Paul Lazaro",
+    74: "Joanna Rose Maningas",
+    75: "Earl Justine Silverio",
+    76: "Camille Denise Roxas",
+    77: "Renzo Miguel Angeles",
+    78: "Kristine Joy Beltran",
+    79: "Dave Michael Catu",
+    80: "Alyssa Bianca Valerio",
+    81: "Ian M. De Jesus",
+    82: "Patricia Ysabel Castro",
+    83: "Justine Carl Mendoza",
+    84: "Ralph Lauren Panganiban",
+    85: "Kimberly Anne Del Rosario",
+    86: "John Vincent Tolentino",
+    87: "Sophia Danielle Garcia",
+    88: "Paul Andrei Santos",
+    89: "Mark Laurence Bulaon",
+    90: "Andrea Nicole Ramos",
+}
+
+SECTION_ID_BY_NAME = {
+    "CE-1A": 1, "CE-1B": 2, "CE-1C": 3, "CE-2A": 4, "CE-2B": 5, "CE-2C": 6,
+    "CE-3A": 7, "CE-3B": 8, "CE-3C": 9, "CE-4A": 10, "CE-4B": 11, "CE-4C": 12,
+    "CPE-1A": 13, "CPE-1B": 14, "CPE-1C": 15, "CPE-1D": 16, "CPE-2A": 17, "CPE-2B": 18, "CPE-2C": 19, "CPE-2D": 20,
+    "CPE-3A": 21, "CPE-3B": 22, "CPE-3C": 23, "CPE-4A": 24, "CPE-4B": 25, "CPE-4C": 26,
+    "EE-1A": 27, "EE-1B": 28, "EE-1C": 29, "EE-2A": 30, "EE-2B": 31, "EE-2C": 32,
+    "EE-3A": 33, "EE-3B": 34, "EE-3C": 35, "EE-4A": 36, "EE-4B": 37, "EE-4C": 38,
+    "ECE-1A": 39, "ECE-1B": 40, "ECE-2A": 41, "ECE-2B": 42, "ECE-3A": 43, "ECE-3B": 44, "ECE-3C": 45, "ECE-4A": 46, "ECE-4B": 47, "ECE-4C": 48,
+    "IE-1A": 49, "IE-1B": 50, "IE-1C": 51, "IE-2A": 52, "IE-2B": 53, "IE-2C": 54,
+    "IE-3A": 55, "IE-3B": 56, "IE-3C": 57, "IE-4A": 58, "IE-4B": 59, "IE-4C": 60,
+    "MFGE-1A": 61, "MFGE-1B": 62, "MFGE-2A": 63, "MFGE-2B": 64, "MFGE-3A": 65, "MFGE-3B": 66, "MFGE-4A": 67, "MFGE-4B": 68,
+    "ME-1A": 69, "ME-1B": 70, "ME-1C": 71, "ME-2A": 72, "ME-2B": 73, "ME-2C": 74,
+    "ME-3A": 75, "ME-3B": 76, "ME-3C": 77, "ME-4A": 78, "ME-4B": 79, "ME-4C": 80,
+    "MEE-1A": 81, "MEE-1B": 82, "MEE-1C": 83, "MEE-2A": 84, "MEE-2B": 85, "MEE-2C": 86,
+    "MEE-3A": 87, "MEE-3B": 88, "MEE-4A": 89, "MEE-4B": 90,
+}
+
+
+def get_default_mayor_for_section(section_id: int = None, section_name: str = None) -> str:
+    """Retrieve the authoritative default class mayor for a cohort section."""
+    if section_id and section_id in SECTION_CLASS_MAYORS:
+        return SECTION_CLASS_MAYORS[section_id]
+    if section_name:
+        clean = section_name.replace(" ", "").upper()
+        sid = SECTION_ID_BY_NAME.get(clean)
+        if sid and sid in SECTION_CLASS_MAYORS:
+            return SECTION_CLASS_MAYORS[sid]
+    return "Student Class Mayor"
+
+
 def load_and_clean_data_final_sql(sql_file_path: Path = None) -> Dict[str, Any]:
     """
     Parse and clean data-final.sql (Authoritative Primary SQL Dump for NEXUS 2.0).
@@ -240,6 +363,7 @@ def load_and_clean_data_final_sql(sql_file_path: Path = None) -> Dict[str, Any]:
             "program": prog,
             "year_level": yr,
             "student_count": 40,
+            "class_mayor": get_default_mayor_for_section(row_id, sec_name),
         })
 
     # Find MEE - 1A section id for student mayor

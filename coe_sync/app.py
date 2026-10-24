@@ -300,7 +300,12 @@ def create_app(config_name=None):
             query = query.filter(Section.id.in_(sec_ids))
 
         if search:
-            query = query.filter(Section.name.ilike(f"%{search}%"))
+            query = query.filter(
+                db.or_(
+                    Section.name.ilike(f"%{search}%"),
+                    Section.class_mayor.ilike(f"%{search}%"),
+                )
+            )
         if program and program.upper() != "ALL":
             prog_clean = program.strip().upper()
             query = query.filter(Section.program == prog_clean)

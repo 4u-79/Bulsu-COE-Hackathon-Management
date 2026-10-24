@@ -373,11 +373,14 @@ def create_section():
         except (ValueError, TypeError):
             pass
 
+    class_mayor = str(data.get("class_mayor", "")).strip() or None
+
     section = Section(
         name=name,
         program=program,
         year_level=year_level,
         student_count=sc_val,
+        class_mayor=class_mayor,
     )
     db.session.add(section)
     db.session.flush()
@@ -422,6 +425,10 @@ def update_section(section_id: int):
             section.year_level = yl
         except (ValueError, TypeError):
             return jsonify({"error": "Year level must be a positive integer."}), 400
+
+    if "class_mayor" in data:
+        raw_cm = str(data["class_mayor"]).strip() if data["class_mayor"] else ""
+        section.class_mayor = raw_cm if raw_cm else None
 
     if "student_count" in data:
         raw_sc = data["student_count"]

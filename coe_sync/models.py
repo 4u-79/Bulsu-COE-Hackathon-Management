@@ -172,6 +172,7 @@ class Section(db.Model):
     program = db.Column(db.String(50), nullable=True, index=True)
     year_level = db.Column(db.Integer, nullable=True)
     student_count = db.Column(db.Integer, nullable=True, default=None)
+    class_mayor = db.Column(db.String(100), nullable=True, default=None)
 
     # Relationships
     schedules = db.relationship(
@@ -182,6 +183,17 @@ class Section(db.Model):
         passive_deletes=True,
     )
 
+    @property
+    def mayor_name(self) -> str:
+        """Retrieve assigned class mayor or default mapping."""
+        if self.class_mayor:
+            return self.class_mayor
+        try:
+            from import_sql_dump import get_default_mayor_for_section
+            return get_default_mayor_for_section(self.id, self.name)
+        except Exception:
+            return "Student Class Mayor"
+
     def to_dict(self) -> dict:
         """Serialize Section to dictionary."""
         return {
@@ -190,10 +202,11 @@ class Section(db.Model):
             "program": self.program,
             "year_level": self.year_level,
             "student_count": getattr(self, "student_count", None),
+            "class_mayor": self.mayor_name,
         }
 
     def __repr__(self) -> str:
-        return f"<Section id={self.id} name='{self.name}' program='{self.program}' count={self.student_count}>"
+        return f"<Section id={self.id} name='{self.name}' program='{self.program}' mayor='{self.mayor_name}'>"
 
 
 class Subject(db.Model):

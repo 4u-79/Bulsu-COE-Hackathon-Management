@@ -530,7 +530,7 @@ function renderSectionsTable(sections) {
   if (!tbody) return;
 
   if (sections.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-muted); padding: 24px;">No cohort sections found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted); padding: 24px;">No cohort sections found.</td></tr>`;
     return;
   }
 
@@ -541,6 +541,12 @@ function renderSectionsTable(sections) {
       <td><strong>${escapeHtml(s.name)}</strong></td>
       <td>${escapeHtml(s.program)}</td>
       <td>Year ${s.year_level}</td>
+      <td>
+        <div style="display:inline-flex; align-items:center; gap:6px; font-weight:500; color:var(--text-dark, #1e293b); background:#f8fafc; padding:4px 10px; border-radius:6px; font-size:12.5px; border:1px solid #e2e8f0;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>${escapeHtml(s.class_mayor || "Unassigned")}</span>
+        </div>
+      </td>
       <td>
         <div class="table-actions">
           <a href="/schedules?section=${s.id}" class="btn btn-secondary btn-sm" style="display:inline-flex; align-items:center; gap:4px; text-decoration:none;" title="View Section Timetable">
@@ -762,6 +768,10 @@ function buildModalForm(entity, data = null) {
           <option value="3" ${data && data.year_level === 3 ? "selected" : ""}>Year 3</option>
           <option value="4" ${data && data.year_level === 4 ? "selected" : ""}>Year 4</option>
         </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label" for="inp-class-mayor">Class Mayor</label>
+        <input class="form-input" id="inp-class-mayor" name="class_mayor" placeholder="e.g. Juan Dela Cruz" value="${data && data.class_mayor ? escapeHtml(data.class_mayor) : ""}">
       </div>
     `;
   } else if (entity === "subjects") {
@@ -995,7 +1005,12 @@ function initTableFilters() {
     const y = fSecYear?.value || "";
 
     const filtered = masterDataCache.sections.filter((sec) => {
-      if (q && !sec.name.toLowerCase().includes(q)) return false;
+      if (
+        q &&
+        !sec.name.toLowerCase().includes(q) &&
+        !(sec.class_mayor && sec.class_mayor.toLowerCase().includes(q))
+      )
+        return false;
       if (p && normalizeProgram(sec.program) !== normalizeProgram(p)) return false;
       if (y && String(sec.year_level) !== y) return false;
       return true;

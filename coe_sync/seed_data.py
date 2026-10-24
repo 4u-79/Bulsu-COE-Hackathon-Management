@@ -90,6 +90,7 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                     program=s["program"],
                     year_level=s["year_level"],
                     student_count=s.get("student_count", 40),
+                    class_mayor=s.get("class_mayor"),
                 )
             )
         db.session.add_all(sections)
