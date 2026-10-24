@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}COE SYNC 2026 | BulSU College of Engineering{% endblock %}</title>
+
+  <!-- Centralized Design Tokens & Modular Stylesheet (Zero CDN Dependencies) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body class="{% if session.get('role') == 'STUDENT' or active_role == 'STUDENT' %}student-portal non-student-omitted{% endif %}">
+
+  <div class="app-shell">
+    <!-- Persistent Sidebar (Deep Maroon Palette from Wireframes 1 & 2) -->
+    <aside class="sidebar" aria-label="Main Navigation">
+      <div class="sidebar-brand">
+        <div class="sidebar-title">[COE SYNC 2026]</div>
+        <div class="sidebar-subtitle">BulSU College of Engineering</div>
+      </div>
+
+      <nav class="sidebar-nav">
+        {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
+        <a href="/" class="sidebar-link non-student {% if active_page == 'dashboard' %}active{% endif %}" id="nav-dashboard">
+          <span>Dashboard</span>
+        </a>
+        {% endif %}
+        <a href="/schedules" class="sidebar-link {% if active_page == 'schedules' %}active{% endif %}" id="nav-schedules">
+          <span>Schedules</span>
+        </a>
+        {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+        <a href="/schedules/create" class="sidebar-link admin-only {% if active_page == 'create_schedule' %}active{% endif %}" id="nav-create-schedule">
+          <span>+ Create Schedule</span>
+        </a>
+        {% endif %}
+        {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
+        <a href="/manage?tab=rooms" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'rooms' %}active{% endif %}" id="nav-rooms">
+          <span>Rooms</span>
+        </a>
+        <a href="/manage?tab=faculty" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'faculty' %}active{% endif %}" id="nav-faculty">
+          <span>Faculty</span>
+        </a>
+        <a href="/manage?tab=sections" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'sections' %}active{% endif %}" id="nav-sections">
+          <span>Sections</span>
+        </a>
+        <a href="/manage?tab=subjects" class="sidebar-link non-student {% if active_page == 'manage' and request.args.get('tab') == 'subjects' %}active{% endif %}" id="nav-subjects">
+          <span>Subjects</span>
+        </a>
+        <a href="/reports" class="sidebar-link non-student {% if active_page == 'reports' %}active{% endif %}" id="nav-reports">
+          <span>Reports</span>
+        </a>
+        <a href="/schedules?radar=open" class="sidebar-link non-student" id="nav-conflict-radar">
+          <span>Conflict Radar</span>
+        </a>
+        {% endif %}
+      </nav>
+
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-footer">
+        <a href="#" class="sidebar-link" id="btn-sidebar-settings" onclick="openCredentialsModal(); return false;">
+          <span>Settings</span>
+        </a>
+        <a href="/logout" class="sidebar-link" id="btn-sidebar-logout">
+          <span>Logout</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="main-wrapper">
+      <!-- Sticky Top Bar with "View As" Role Impersonator -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <div id="health-badge" class="health-badge" style="display: none;">
+            <span class="health-pulse"></span>
+            <span id="health-text">Connecting...</span>
+          </div>
+
+          {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
+          <!-- Program Chair Active Status Widget (Visible only to Chair/Admin and Faculty; hidden from Students) -->
+          <div id="chair-status-widget" class="chair-status-container" style="display:none;">
+            <!-- Chair/Admin Toggle Switcher -->
+            {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+            <button id="chair-status-toggle-btn" class="chair-status-toggle admin-only" title="Toggle Program Chair active availability status">
+              <span class="status-dot active" id="chair-status-dot"></span>
+              <span id="chair-status-label">Chair: Active</span>
+            </button>
+            {% endif %}
+            <!-- Faculty View-Only Badge -->
+            <div id="faculty-chair-badge" class="chair-status-pill" style="display:none;" title="Current Program Chair Availability Status">
+              <span class="status-dot active" id="fac-status-dot"></span>
+              <span>Chair Status: <strong id="fac-status-val">Active</strong></span>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="top-bar-right">
+          <!-- 2-Tier Reschedule Pipeline Button & Counter Badge -->
+          <button id="btn-header-reschedules" class="btn btn-secondary btn-sm" title="Student Reschedule Requests Pipeline">
+            <span>📋 Reschedules</span>
+            <span id="reschedule-count-badge" class="badge-count" style="display:none;">0</span>
+          </button>
+
+          <!-- Sticky "View As" Role Impersonator Dropdown (Strictly CHAIR or ADMIN only) -->
+          {% if session.get('role') in ['CHAIR', 'ADMIN'] %}
+          <div class="view-as-container" id="view-as-container" title="Presentation Pitch Bar: Instantly swap view context and UI permissions">
+            <span class="view-as-label">View As:</span>
+            <select id="view-as-select" class="view-as-select">
+              <option value="CHAIR" {% if active_role == 'CHAIR' %}selected{% endif %}>Program Chair</option>
+              <option value="FACULTY" {% if active_role == 'FACULTY' %}selected{% endif %}>Faculty (Prof. Santos)</option>
+              <option value="STUDENT" {% if active_role == 'STUDENT' %}selected{% endif %}>Student (CpE 2A)</option>
+            </select>
+          </div>
+          {% endif %}
+
+          {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+          <button id="global-seed-btn" class="btn btn-secondary btn-sm admin-only" title="Wipe & Reset baseline mock data">
+            Reset DB
+          </button>
+          {% endif %}
+
+          <!-- User Credentials & Logout Controls -->
+          <button id="btn-user-credentials" class="btn btn-secondary btn-sm" title="Credentials & Security Management">
+            <span>🔑 Credentials</span>
+          </button>
+          <a href="/logout" id="btn-header-logout" class="btn btn-secondary btn-sm" title="Sign Out of COE SYNC">
+            <span>Sign Out</span>
+          </a>
+        </div>
+      </header>
+
+      <!-- Page Content Block -->
+      <main class="page-container">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <!-- Reusable Modal Container (Injected by manage.js and schedules.js) -->
+  <div id="manage-modal-backdrop" class="modal-backdrop">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modal-title" class="modal-title">Action Dialog</h3>
+        <button id="modal-close-btn" class="modal-close-btn" type="button" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="manage-modal-form">
+        <div class="modal-body" id="modal-fields-container">
+          <!-- Dynamic form inputs injected here -->
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="modal-cancel-btn" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="modal-save-btn" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2-Tier Reschedule Request & Governance Modal Container -->
+  <div id="reschedule-modal-backdrop" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" id="reschedule-modal-title">Class Reschedule Requests</h3>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 0 0;">
+            2-Tier Governance Pipeline: Student Proposal &rarr; Faculty Endorsement &rarr; Program Chair Final Decision
+          </p>
+        </div>
+        <button id="reschedule-modal-close-btn" class="modal-close-btn" type="button" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px;">
+        <!-- Tabs Bar -->
+        <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-light); padding-bottom: 10px; margin-bottom: 14px;">
+          <button id="reschedule-tab-pending" class="btn btn-sm btn-secondary active">Pending Action</button>
+          <button id="reschedule-tab-all" class="btn btn-sm btn-secondary">All &amp; Status Tracker</button>
+          <button id="reschedule-tab-new" class="btn btn-sm btn-primary" style="display:none;">+ Request Reschedule</button>
+        </div>
+
+        <!-- Requests List Container -->
+        <div id="reschedule-list-container" class="reschedule-list">
+          <div style="text-align: center; color: var(--text-muted); padding: 24px;">Loading requests...</div>
+        </div>
+
+        <!-- New Request Form Container (Visible when + Request Reschedule is clicked) -->
+        <form id="reschedule-new-form" style="display: none; flex-direction: column; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label" for="resched-select-schedule">Select Class to Reschedule</label>
+            <select id="resched-select-schedule" class="form-input" required>
+              <option value="">-- Choose scheduled class --</option>
+            </select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+            <div class="form-group">
+              <label class="form-label" for="resched-day">Proposed Day</label>
+              <select id="resched-day" class="form-input" required>
+                <option value="MON">Monday</option>
+                <option value="TUE">Tuesday</option>
+                <option value="WED">Wednesday</option>
+                <option value="THU">Thursday</option>
+                <option value="FRI">Friday</option>
+                <option value="SAT">Saturday</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="resched-start">Start Time</label>
+              <input type="time" id="resched-start" class="form-input" required value="13:00">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="resched-end">End Time</label>
+              <input type="time" id="resched-end" class="form-input" required value="14:30">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="resched-reason">Justification / Reason for Reschedule</label>
+            <textarea id="resched-reason" class="form-input" rows="3" placeholder="Provide clear educational reason (e.g., student organization general assembly, lab conflict)..." required></textarea>
+          </div>
+
+          <div id="resched-feedback-banner" style="display:none; padding: 8px 12px; border-radius: var(--radius-xs); font-size: 12px;"></div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+            <button type="button" id="btn-cancel-resched-form" class="btn btn-secondary">Back to List</button>
+            <button type="submit" id="btn-submit-resched-request" class="btn btn-primary">Submit to Faculty</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  <!-- Credentials Management Modal Container -->
+  <div id="credentials-modal-backdrop" class="modal-backdrop">
+    <div class="modal-dialog" style="max-width: 460px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Credentials Management</h3>
+          <p style="font-size: 12px; color: var(--text-muted); margin: 2px 0 0 0;">
+            Update your Program Chair username and password
+          </p>
+        </div>
+        <button id="credentials-modal-close-btn" class="modal-close-btn" type="button" aria-label="Close dialog">&times;</button>
+      </div>
+      <form id="form-manage-credentials" style="padding: 16px 20px;">
+        <div id="credentials-feedback-banner" style="display:none; padding: 10px 14px; border-radius: var(--radius-xs); font-size: 13px; margin-bottom: 14px;"></div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label" for="inp-modal-current-pw">Current Password *</label>
+          <input type="password" id="inp-modal-current-pw" class="form-input" required placeholder="Enter current password">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label" for="inp-modal-new-username">New Username *</label>
+          <input type="text" id="inp-modal-new-username" class="form-input" required value="{{ current_username or session.get('username') or 'chair_cpe' }}">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label" for="inp-modal-new-pw">New Password * (min. 6 chars)</label>
+          <input type="password" id="inp-modal-new-pw" class="form-input" required placeholder="At least 6 characters" minlength="6">
+        </div>
+
+        <div class="form-group" style="margin-bottom: 18px;">
+          <label class="form-label" for="inp-modal-confirm-pw">Confirm New Password *</label>
+          <input type="password" id="inp-modal-confirm-pw" class="form-input" required placeholder="Re-type new password" minlength="6">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+          <button type="button" id="btn-cancel-credentials" class="btn btn-secondary">Cancel</button>
+          <button type="submit" id="btn-submit-credentials" class="btn btn-primary">Update Credentials</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Global Toast Notification Container -->
+  <div id="app-toast" class="toast-msg"></div>
+
+  <!-- Core Scripts (Zero CDN Dependencies) -->
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

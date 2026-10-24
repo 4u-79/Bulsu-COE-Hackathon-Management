@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COE SYNC 2026 | College of Engineering Schedule &amp; Conflict Management</title>
+  <!-- Zero External CDN Dependencies: Pure Local Static Assets -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Header Bar with Brand, Impersonator & Actions -->
+    <header class="header-bar">
+      <div class="brand-wrapper">
+        <div class="brand-logo-badge">COE</div>
+        <div>
+          <h1 class="brand-title">COE SYNC 2026</h1>
+          <p class="brand-subtitle">BulSU College of Engineering &bull; Schedule &amp; Academic Management</p>
+        </div>
+      </div>
+
+      <!-- Live Presentation Pitch Bar: Instant Role Impersonation -->
+      <div class="pitch-bar" aria-label="Pitch Impersonator Controls">
+        <span class="pitch-label">VIEW AS:</span>
+        <button class="impersonate-btn active" data-role="CHAIR" title="View with Department Chair administrative privileges">
+          Chair
+        </button>
+        <button class="impersonate-btn" data-role="FACULTY" title="View as Prof. Juan Santos with faculty workload view">
+          Faculty
+        </button>
+        <button class="impersonate-btn" data-role="STUDENT" title="View as Section CpE 2A with student timetable view">
+          Student
+        </button>
+      </div>
+
+      <div class="header-actions">
+        <div id="health-badge" class="health-badge" style="display: none;">
+          <span class="health-pulse"></span>
+          <span id="health-text">Connecting to API...</span>
+        </div>
+        <button id="seed-btn" class="btn-primary" title="Wipe and populate Phase 1 baseline data">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          Reset &amp; Seed DB
+        </button>
+      </div>
+    </header>
+
+    <!-- Top Stats Counter -->
+    <section class="stats-grid" aria-label="System Overview Statistics">
+      <div class="stat-card">
+        <div class="stat-label">Scheduled Classes</div>
+        <div class="stat-value" id="stat-schedules">0</div>
+        <div class="stat-caption">Active Timetable Slots</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Room Utilization</div>
+        <div class="stat-value" id="stat-utilization">0%</div>
+        <div class="stat-caption">Academic Capacity (7am-7pm)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Quality Score</div>
+        <div class="stat-value" id="stat-quality">100</div>
+        <div class="stat-caption">Soft Constraint Rating</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Unresolved Conflicts</div>
+        <div class="stat-value" id="stat-conflicts">0</div>
+        <div class="stat-caption" id="stat-conflicts-caption">Clean Timetable</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Role</div>
+        <div class="stat-value" id="stat-role" style="font-size: 20px; color: var(--accent-gold);">CHAIR</div>
+        <div class="stat-caption" id="stat-role-desc">Full Admin Access</div>
+      </div>
+    </section>
+
+    <!-- Main Navigation & Data Surface -->
+    <main class="main-surface">
+      <!-- Tabs -->
+      <nav class="tab-navigation" aria-label="Module Tabs">
+        <button class="tab-btn active" data-tab="tab-schedules">
+          Schedules &amp; Timetable
+          <span class="tab-badge" id="badge-schedules">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-conflicts">
+          Conflict Checker
+          <span class="tab-badge" id="badge-checker">Live</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-analytics">
+          Analytics &amp; Workload
+        </button>
+        <button class="tab-btn" data-tab="tab-faculty">
+          Faculty
+          <span class="tab-badge" id="badge-faculty">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-sections">
+          Sections
+          <span class="tab-badge" id="badge-sections">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-rooms">
+          Rooms &amp; Labs
+          <span class="tab-badge" id="badge-rooms">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-subjects">
+          Subjects
+          <span class="tab-badge" id="badge-subjects">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-users">
+          Users &amp; Roles
+          <span class="tab-badge" id="badge-users">0</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-audit">
+          Audit Logs
+          <span class="tab-badge" id="badge-logs">0</span>
+        </button>
+      </nav>
+
+      <!-- Tab Content Area -->
+      <div class="tab-content">
+
+        <!-- 1. Schedules & Timetable Panel -->
+        <div id="tab-schedules" class="tab-panel active">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Active Timetable Schedules</h2>
+              <p class="panel-desc" id="schedules-view-desc">Role-filtered view of assigned engineering classes.</p>
+            </div>
+            <div id="schedule-action-container">
+              <button class="btn-primary" id="open-new-schedule-btn">
+                + Create Schedule Slot
+              </button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Course</th>
+                  <th>Section</th>
+                  <th>Instructor</th>
+                  <th>Room</th>
+                  <th>Day &amp; Time</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-schedules-body">
+                <tr><td colspan="8" style="text-align:center;">Loading timetable schedules...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 2. Conflict Engine Sandbox Panel -->
+        <div id="tab-conflicts" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Pre-Flight Conflict Detection Sandbox</h2>
+              <p class="panel-desc">Test prospective timetable assignments against Hard Constraints (HC1–HC6) with instant 3-step recommendation suggestions.</p>
+            </div>
+          </div>
+
+          <div class="sandbox-container">
+            <form id="conflict-check-form" class="sandbox-form">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="check-subject">Subject</label>
+                  <select id="check-subject" required></select>
+                </div>
+                <div class="form-group">
+                  <label for="check-section">Section</label>
+                  <select id="check-section" required></select>
+                </div>
+                <div class="form-group">
+                  <label for="check-faculty">Faculty</label>
+                  <select id="check-faculty" required></select>
+                </div>
+                <div class="form-group">
+                  <label for="check-room">Room / Lab</label>
+                  <select id="check-room" required></select>
+                </div>
+                <div class="form-group">
+                  <label for="check-day">Day of Week</label>
+                  <select id="check-day" required>
+                    <option value="MON">Monday</option>
+                    <option value="TUE">Tuesday</option>
+                    <option value="WED">Wednesday</option>
+                    <option value="THU">Thursday</option>
+                    <option value="FRI">Friday</option>
+                    <option value="SAT">Saturday</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="check-start">Start Time</label>
+                  <input type="time" id="check-start" value="08:00" required>
+                </div>
+                <div class="form-group">
+                  <label for="check-end">End Time</label>
+                  <input type="time" id="check-end" value="10:00" required>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="button" id="btn-preflight-check" class="btn-primary">
+                  Evaluate Hard Constraints
+                </button>
+                <button type="button" id="btn-book-slot" class="btn-secondary">
+                  Book Slot to Timetable
+                </button>
+              </div>
+            </form>
+
+            <!-- Results & Alternatives Box -->
+            <div id="conflict-results-box" class="results-box" style="display: none;">
+              <div id="conflict-status-badge"></div>
+              <div id="conflict-messages-list"></div>
+              <div id="suggestions-container" style="display: none;">
+                <h4 style="margin: 14px 0 8px; color: var(--accent-gold); font-size: 14px;">
+                  Actionable Recommendation Heuristics:
+                </h4>
+                <div id="suggestions-list" class="suggestions-grid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Analytics & Workload Panel -->
+        <div id="tab-analytics" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Facility Utilization &amp; Faculty Workloads</h2>
+              <p class="panel-desc">Weekly room utilization metrics, soft constraint penalty evaluation, and teaching load caps.</p>
+            </div>
+          </div>
+
+          <h3 style="font-size: 15px; margin-bottom: 12px; color: var(--accent-gold-light);">Faculty Workload Distribution</h3>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Faculty Member</th>
+                  <th>Email</th>
+                  <th>Assigned Units</th>
+                  <th>Max Allowed</th>
+                  <th>Load Capacity</th>
+                  <th>Overload Status</th>
+                </tr>
+              </thead>
+              <tbody id="table-workloads-body">
+                <tr><td colspan="6" style="text-align:center;">Loading workload analytics...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 4. Faculty Panel -->
+        <div id="tab-faculty" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Faculty Roster &amp; Workload Capacity</h2>
+              <p class="panel-desc">Teaching faculty members, unit assignments, and workload limits.</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Faculty Name</th>
+                  <th>Official Email</th>
+                  <th>Max Load</th>
+                  <th>Current Units</th>
+                </tr>
+              </thead>
+              <tbody id="table-faculty-body">
+                <tr><td colspan="5" style="text-align:center;">Loading faculty records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="panel-header" style="margin-top: 32px;">
+            <div>
+              <h3 class="panel-title" style="font-size: 16px;">Faculty Availability Constraints</h3>
+              <p class="panel-desc">Time blackout slots and preferred teaching windows.</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Faculty</th>
+                  <th>Day</th>
+                  <th>Time Slot</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="table-avail-body">
+                <tr><td colspan="4" style="text-align:center;">Loading availability records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 5. Sections Panel -->
+        <div id="tab-sections" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Class Cohort Sections</h2>
+              <p class="panel-desc">Computer Engineering student cohorts by curriculum year level.</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Section Identifier</th>
+                  <th>Degree Program</th>
+                  <th>Year Level</th>
+                  <th>Enrolled Students</th>
+                </tr>
+              </thead>
+              <tbody id="table-sections-body">
+                <tr><td colspan="5" style="text-align:center;">Loading sections...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 6. Rooms Panel -->
+        <div id="tab-rooms" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Physical Rooms &amp; Computer Laboratories</h2>
+              <p class="panel-desc">Facility capacity ratings and suitability constraints for lecture vs. lab sessions.</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Room Code</th>
+                  <th>Facility Type</th>
+                  <th>Seating Capacity</th>
+                  <th>Availability Status</th>
+                </tr>
+              </thead>
+              <tbody id="table-rooms-body">
+                <tr><td colspan="4" style="text-align:center;">Loading room data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 7. Subjects Panel -->
+        <div id="tab-subjects" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Curricular Subjects &amp; Laboratory Courses</h2>
+              <p class="panel-desc">Curriculum catalog courses including unit credits and contact hours.</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Course Code</th>
+                  <th>Descriptive Title</th>
+                  <th>Credit Units</th>
+                  <th>Delivery Type</th>
+                  <th>Contact Hours</th>
+                </tr>
+              </thead>
+              <tbody id="table-subjects-body">
+                <tr><td colspan="5" style="text-align:center;">Loading course subjects...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 8. Users Panel -->
+        <div id="tab-users" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">User Accounts &amp; Role-Based Security</h2>
+              <p class="panel-desc">Configured system accounts with security roles and polymorphic reference associations.</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Account ID</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Reference Entity</th>
+                  <th>Created Date</th>
+                </tr>
+              </thead>
+              <tbody id="table-users-body">
+                <tr><td colspan="5" style="text-align:center;">Loading user accounts...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 9. Audit Logs Panel -->
+        <div id="tab-audit" class="tab-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">System Audit Trails</h2>
+              <p class="panel-desc">Chronological logs of administrative changes, schedule updates, and system initializations.</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Initiator</th>
+                  <th>Action</th>
+                  <th>Log Details</th>
+                </tr>
+              </thead>
+              <tbody id="table-logs-body">
+                <tr><td colspan="4" style="text-align:center;">Loading audit trails...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p><strong>COE SYNC 2026</strong> &mdash; College of Engineering Academic Management and Schedule Conflict Management System.</p>
+      <p style="margin-top: 4px; font-size: 12px;">BulSU College of Engineering &bull; Phase 2: Conflict Engine &bull; Recommendation Heuristics &bull; RBAC</p>
+    </footer>
+  </div>
+
+  <!-- Zero External CDN Dependencies: Pure Local JavaScript -->
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+/**
+ * COE SYNC 2026 - Centralized Design Tokens (theme.css)
+ * Easily customized & swappable variables for layout, typography, and palette.
+ */
+
+:root {
+  /* ==========================================================
+     Sidebar Palette (BulSU College of Engineering Maroon)
+     ========================================================== */
+  --sidebar-bg: #4A1521;
+  --sidebar-bg-dark: #3B111A;
+  --sidebar-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-text: #E5E7EB;
+  --sidebar-text-muted: #D1D5DB;
+  --sidebar-width: 250px;
+
+  /* Active Navigation Pill (Warm Gold / Amber) */
+  --nav-pill-bg: #F5C26B;
+  --nav-pill-bg-hover: #E8A948;
+  --nav-pill-text: #260A10;
+
+  /* ==========================================================
+     Main Application Surface (Warm Light Gray & Crisp White)
+     ========================================================== */
+  --bg-page: #F9F9F8;
+  --bg-surface: #FFFFFF;
+  --bg-surface-alt: #F3F4F6;
+  --bg-hover: #F8FAFC;
+
+  /* Text & Typography */
+  --text-main: #111827;
+  --text-secondary: #4B5563;
+  --text-muted: #6B7280;
+  --text-light: #9CA3AF;
+
+  /* Borders & Dividers */
+  --border-light: #E5E7EB;
+  --border-subtle: #F3F4F6;
+  --border-focus: #F5C26B;
+
+  /* ==========================================================
+     Hero Banner & Vibrant Accents
+     ========================================================== */
+  --hero-gradient: linear-gradient(135deg, #8A2518 0%, #B84725 45%, #D96E2E 80%, #E89848 100%);
+  --hero-text: #FFFFFF;
+
+  /* ==========================================================
+     Status & Event Card Colors (Wireframe 2 Color Codes)
+     ========================================================== */
+  /* Scheduled Event (Mint / Soft Teal) */
+  --event-scheduled-bg: #D1FAE5;
+  --event-scheduled-text: #065F46;
+  --event-scheduled-border: #A7F3D0;
+  --event-scheduled-indicator: #059669;
+
+  /* Alternate Program (Soft Rose / Pink) */
+  --event-alt-bg: #FFE4E6;
+  --event-alt-text: #9F1239;
+  --event-alt-border: #FECDD3;
+  --event-alt-indicator: #E11D48;
+
+  /* Conflict State (Warm Amber with Strong Orange Border) */
+  --event-conflict-bg: #FEF3C7;
+  --event-conflict-text: #92400E;
+  --event-conflict-border: #D97706;
+  --event-conflict-indicator: #D97706;
+
+  /* KPI Card Conflict Highlight */
+  --kpi-conflict-bg: #FEF3C7;
+  --kpi-conflict-border: #F5C26B;
+  --kpi-conflict-text: #92400E;
+
+  /* Badges */
+  --badge-lecture-bg: #E0E7FF;
+  --badge-lecture-text: #3730A3;
+  --badge-lab-bg: #FCE7F3;
+  --badge-lab-text: #9D174D;
+
+  /* ==========================================================
+     Dimensions, Radii & Elevations
+     ========================================================== */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Fonts */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Utility Classes */
+.hidden {
+  display: none !important;
+}
+

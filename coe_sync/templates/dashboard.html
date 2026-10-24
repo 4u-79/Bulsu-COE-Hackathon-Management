@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | COE SYNC 2026{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Dashboard</h1>
+  <p class="page-subtitle">Overview of schedules, resources and clashes.</p>
+</div>
+
+<!-- Hero Banner Container (BulSU Campus Photo as Background) -->
+<div class="hero-banner-container rounded-2xl overflow-hidden relative shadow-sm border border-neutral-200" style="background-image: url('{{ url_for('static', filename='img/bulsu_building.jpg') }}'); background-size: cover; background-position: center; min-height: 200px;">
+  <div class="hero-overlay absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-6 text-white">
+    <h2 class="text-xl font-bold tracking-tight">Bulacan State University — College of Engineering</h2>
+    <p class="text-xs text-neutral-200">COE SYNC Master Timetable &amp; Conflict Engine</p>
+  </div>
+</div>
+
+<!-- 4 KPI Summary Cards (Visual Reference 1) -->
+<section class="kpi-grid" aria-label="Key Performance Indicators">
+  <div class="kpi-card">
+    <div class="kpi-label">Schedules</div>
+    <div class="kpi-value" id="kpi-schedules">0</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Rooms</div>
+    <div class="kpi-value" id="kpi-rooms">0</div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-label">Faculty</div>
+    <div class="kpi-value" id="kpi-faculty">0</div>
+  </div>
+
+  <div class="kpi-card kpi-card-conflict" id="kpi-card-conflicts">
+    <div class="kpi-label">Conflicts &bull; needs review</div>
+    <div class="kpi-value" id="kpi-conflicts">0</div>
+  </div>
+</section>
+
+<!-- Conflict Radar Summary Table (Visual Reference 1) -->
+<section class="card-section" aria-label="Conflict Radar">
+  <div class="card-header-flex">
+    <h3 class="card-title">Conflict Radar</h3>
+    <a href="/schedules?radar=open" class="card-action-link" id="radar-count-link">View all</a>
+  </div>
+
+  <div class="radar-list" id="radar-list">
+    <div class="radar-row">
+      <div class="radar-title">
+        <span class="radar-dot"></span>
+        <span>Loading conflict radar indicators...</span>
+      </div>
+      <div class="radar-meta">System Sync</div>
+    </div>
+  </div>
+</section>
+
+<!-- Timetable & Schedules Surface (Workflow 6) -->
+<section class="card-section" style="margin-top: 24px;" aria-label="Academic Schedule Browser">
+  <div class="card-header-flex" style="flex-wrap: wrap; gap: 12px;">
+    <div>
+      <h3 class="card-title" style="margin-bottom: 2px;">Academic Schedule Overview</h3>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+        Quality Score: <strong id="dash-quality-score" style="color: #059669;">100 / 100</strong> &bull; Utilization: <strong id="dash-room-util">0%</strong>
+      </p>
+    </div>
+
+    <!-- Actions toolbar: Export, Print, Generate -->
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+      <button id="btn-dash-gen" class="btn btn-secondary btn-sm admin-only" title="Heuristic solver generates draft slots for unassigned offerings">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        Generate Drafts
+      </button>
+      <button id="btn-dash-pub" class="btn btn-secondary btn-sm admin-only" title="Validate zero conflicts and publish all draft schedules">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Publish All
+      </button>
+      {% endif %}
+      <button id="btn-dash-export" class="btn btn-secondary btn-sm" title="Export schedules to standard CSV file">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export CSV
+      </button>
+      <button id="btn-dash-print" class="btn btn-secondary btn-sm" title="Print or Save Schedule as PDF">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print / PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- Filter & View Toggle Bar -->
+  <div class="manage-filter-bar" style="margin-top: 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <select id="dash-filter-prog" class="manage-filter-select" title="Filter by Program">
+        <option value="">All Programs</option>
+        <option value="BSCpE">BSCpE</option>
+        <option value="BSME">BSME</option>
+        <option value="BSEE">BSEE</option>
+        <option value="BSCE">BSCE</option>
+        <option value="BSIE">BSIE</option>
+      </select>
+      <select id="dash-filter-sec" class="manage-filter-select" title="Filter by Section">
+        <option value="">All Sections</option>
+      </select>
+      <select id="dash-filter-room" class="manage-filter-select" title="Filter by Room">
+        <option value="">All Rooms</option>
+      </select>
+    </div>
+
+    <!-- Toggle between Table View and Grid View -->
+    <div style="display: flex; align-items: center; gap: 4px; background: var(--bg-main); padding: 3px; border-radius: var(--radius-sm); border: 1px solid var(--border-light);">
+      <button id="btn-view-table" class="btn btn-sm btn-secondary active" style="padding: 4px 10px !important; font-size: 11.5px !important;">
+        Table View
+      </button>
+      <button id="btn-view-grid" class="btn btn-sm btn-secondary" style="padding: 4px 10px !important; font-size: 11.5px !important;">
+        Timetable Grid
+      </button>
+    </div>
+  </div>
+
+  <!-- Table View Container -->
+  <div id="dash-table-container" style="margin-top: 14px; overflow-x: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
+    <table class="master-table">
+      <thead>
+        <tr>
+          <th>Day</th>
+          <th>Time</th>
+          <th>Course</th>
+          <th>Section</th>
+          <th>Faculty</th>
+          <th>Room</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="dash-table-body">
+        <tr><td colspan="7" style="text-align:center; padding: 20px;">Loading schedule records…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Grid View Container -->
+  <div id="dash-grid-container" style="display: none; margin-top: 14px; text-align: center; padding: 32px 16px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-sm);">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: var(--sidebar-bg); opacity: 0.8; margin-bottom: 12px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <h4 style="font-size: 15px; font-weight: 700; margin-bottom: 6px;">Interactive Weekly Timetable Grid</h4>
+    <p style="font-size: 13px; color: var(--text-secondary); max-width: 480px; margin: 0 auto 16px;">
+      Explore the drag-and-drop weekly timetable matrix with 30-minute interval columns, side-by-side collision handling, and the live Conflict Radar drawer.
+    </p>
+    <a href="/schedules" class="btn btn-primary btn-sm" style="display: inline-flex;">
+      Open Full Interactive Grid &rarr;
+    </a>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

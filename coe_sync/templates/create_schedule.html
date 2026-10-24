@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Create Schedule | COE SYNC 2026{% endblock %}
+
+{% block content %}
+<div class="create-schedule-page">
+  <!-- Top Header with Dual-Mode Segmented Switcher -->
+  <div class="create-header-row">
+    <div>
+      <h1 class="page-title">Create Schedule</h1>
+      <p class="page-subtitle">Assign course offerings using automated AI smart generation or manual slot configuration.</p>
+    </div>
+
+    <!-- Segmented Tab Switcher -->
+    <div class="segmented-control" role="tablist" aria-label="Scheduling Mode">
+      <button class="segmented-btn" id="tab-btn-manual" data-tab="manual" role="tab" aria-selected="false">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Manual Scheduling
+      </button>
+      <button class="segmented-btn active" id="tab-btn-smart" data-tab="smart" role="tab" aria-selected="true">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Smart Generate
+      </button>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════════════════════════════ -->
+  <!-- PANEL A: SMART GENERATE MODE (Two-Column Layout)               -->
+  <!-- ═════════════════════════════════════════════════════════════ -->
+  <div id="panel-smart-generate" class="scheduling-panel active">
+    <div class="generator-layout">
+      <!-- Left Column: Configuration Form -->
+      <div class="card config-card">
+        <div class="card-header-clean">
+          <div>
+            <h2 class="section-title">Schedule Parameters</h2>
+            <p class="section-subtitle">Configure cohort scope, target physical rooms, and soft constraints.</p>
+          </div>
+          <span class="badge-role">AI Solver Heuristics</span>
+        </div>
+
+        <form id="form-smart-generate">
+          <!-- Program & Year Level -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label" for="sg-program">Degree Program</label>
+              <select id="sg-program" class="form-select">
+                <option value="ALL">All Degree Programs</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="sg-year-level">Year Level</label>
+              <select id="sg-year-level" class="form-select">
+                <option value="ALL">All Year Levels</option>
+                <option value="1">1st Year</option>
+                <option value="2" selected>2nd Year</option>
+                <option value="3">3rd Year</option>
+                <option value="4">4th Year</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Cohort Sections Multi-Select Pills -->
+          <div class="form-group">
+            <div class="label-row">
+              <label class="form-label">Target Cohort Sections *</label>
+              <div class="label-actions">
+                <button type="button" class="btn-text-action" id="btn-sec-select-all">Select All</button>
+                <span class="sep">•</span>
+                <button type="button" class="btn-text-action" id="btn-sec-clear-all">Clear</button>
+              </div>
+            </div>
+            <div id="sg-sections-container" class="section-pills-wrap">
+              <span class="loading-hint">Loading sections...</span>
+            </div>
+            <span class="field-help">Click pills to include or exclude specific cohorts from this generation batch.</span>
+          </div>
+
+          <!-- Available Rooms Selector (Multi-Checkbox Grid) -->
+          <div class="form-group">
+            <div class="label-row">
+              <label class="form-label">Available Rooms &amp; Laboratories *</label>
+              <div class="label-actions">
+                <button type="button" class="btn-text-action" id="btn-room-select-all">Select All Rooms</button>
+              </div>
+            </div>
+            <div id="sg-rooms-container" class="room-checkbox-grid">
+              <span class="loading-hint">Loading physical rooms...</span>
+            </div>
+          </div>
+
+          <!-- Faculty Pool Selection -->
+          <div class="form-group">
+            <label class="form-label" for="sg-faculty">Available Faculty Pool</label>
+            <select id="sg-faculty" class="form-select">
+              <option value="all" selected>All Department Faculty (Recommended for Global Load Balancing)</option>
+            </select>
+            <span class="field-help">The solver respects blackout windows and max teaching load limits (21 units).</span>
+          </div>
+
+          <!-- Additional Soft Constraint Preferences -->
+          <div class="form-group">
+            <label class="form-label">Optimization Preferences (Soft Constraints)</label>
+            <div class="preferences-box">
+              <label class="checkbox-option">
+                <input type="checkbox" id="pref-minimize-gaps" checked>
+                <div class="checkbox-label-wrap">
+                  <strong>Minimize Student Idle Gaps (SC1)</strong>
+                  <span>Clusters daily classes consecutively; avoids gap windows &gt; 2 hours between courses.</span>
+                </div>
+              </label>
+              <label class="checkbox-option">
+                <input type="checkbox" id="pref-balance-workload" checked>
+                <div class="checkbox-label-wrap">
+                  <strong>Balance Faculty Workload (SC3)</strong>
+                  <span>Equitably distributes teaching hours across instructors without exceeding 21 units.</span>
+                </div>
+              </label>
+              <label class="checkbox-option">
+                <input type="checkbox" id="pref-optimize-utilization" checked>
+                <div class="checkbox-label-wrap">
+                  <strong>Optimize Room Utilization (SC2)</strong>
+                  <span>Matches section enrollment tightly to facility capacity to minimize wasted vacant seats.</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Action Button -->
+          <div class="form-actions-bar">
+            <button type="submit" id="btn-smart-generate" class="btn btn-primary btn-lg" style="width: 100%;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>⚡ Generate Smart Schedule</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Right Column: Live Generation Visualizer -->
+      <div class="card visualizer-card" id="visualizer-container">
+        <!-- State 1: Idle Placeholder -->
+        <div id="vis-idle-state" class="vis-state active">
+          <div class="vis-graphic-wrap">
+            <div class="pulsing-calendar-circle">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="var(--sidebar-bg)" stroke-width="1.75">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+                <circle cx="8" cy="15" r="1.5" fill="var(--nav-pill-bg)"/>
+                <circle cx="12" cy="15" r="1.5" fill="var(--sidebar-bg)"/>
+                <circle cx="16" cy="15" r="1.5" fill="var(--nav-pill-bg)"/>
+              </svg>
+            </div>
+          </div>
+          <h3 class="vis-title">Ready to Generate Optimal Timetable</h3>
+          <p class="vis-desc">
+            Configure your cohort sections, physical facilities, and optimization preferences on the left.
+            The heuristic engine will synthesize conflict-free timetable drafts satisfying all 6 Hard Constraints.
+          </p>
+          <div class="vis-feature-tags">
+            <span class="vis-tag">Zero Room Collisions</span>
+            <span class="vis-tag">Faculty Blackouts Protected</span>
+            <span class="vis-tag">Lab Facility Match</span>
+          </div>
+        </div>
+
+        <!-- State 2: Running / Live Solver Progress -->
+        <div id="vis-running-state" class="vis-state" style="display:none;">
+          <div class="vis-spinner-wrap">
+            <div class="solver-spinner"></div>
+            <div class="solver-spinner-core">⚡</div>
+          </div>
+          <h3 class="vis-title">COE SYNC is generating the optimal schedule...</h3>
+          <p class="vis-desc">Evaluating timetable permutations against Hard &amp; Soft constraints.</p>
+
+          <!-- Animated Step-by-Step Checklist -->
+          <div class="checklist-container">
+            <div class="checklist-step" id="step-analyze">
+              <span class="step-icon">○</span>
+              <span class="step-text">Analyzing classes &amp; curricular requirements...</span>
+            </div>
+            <div class="checklist-step" id="step-rooms">
+              <span class="step-icon">○</span>
+              <span class="step-text">Checking room availability &amp; capacity constraints...</span>
+            </div>
+            <div class="checklist-step" id="step-faculty">
+              <span class="step-icon">○</span>
+              <span class="step-text">Checking faculty availability &amp; blackout windows...</span>
+            </div>
+            <div class="checklist-step" id="step-conflicts">
+              <span class="step-icon">○</span>
+              <span class="step-text">Resolving hard conflicts (HC1–HC6)...</span>
+            </div>
+            <div class="checklist-step" id="step-optimize">
+              <span class="step-icon">○</span>
+              <span class="step-text">Optimizing resources &amp; workload balance...</span>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="progress-wrap">
+            <div class="progress-track">
+              <div id="vis-progress-fill" class="progress-fill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-label-row">
+              <span id="vis-progress-status">Initializing engine...</span>
+              <span id="vis-progress-percent">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- State 3: Completed Results Summary -->
+        <div id="vis-completed-state" class="vis-state" style="display:none;">
+          <div class="vis-success-badge">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <h3 class="vis-title" style="color: #065F46;">Optimal Schedule Generated!</h3>
+          <p class="vis-desc">All candidate courses have been evaluated and staged as conflict-free drafts.</p>
+
+          <!-- Metrics Summary Cards -->
+          <div class="metrics-summary-grid">
+            <div class="metric-box">
+              <div class="metric-val" id="res-classes-scheduled">0</div>
+              <div class="metric-lbl">Classes Placed</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-val" style="color:#059669;">0</div>
+              <div class="metric-lbl">Hard Conflicts</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-val" id="res-quality-score" style="color:#D97706;">95</div>
+              <div class="metric-lbl">Quality Score</div>
+            </div>
+          </div>
+
+          <!-- Unplaced Items Alert (if any) -->
+          <div id="res-unplaced-container" style="display:none; margin: 16px 0; text-align: left;">
+            <div style="font-size: 12px; font-weight: 700; color: #B91C1C; margin-bottom: 6px;">Unplaced Offerings:</div>
+            <ul id="res-unplaced-list" style="margin: 0; padding-left: 20px; font-size: 12px; color: #7F1D1D;"></ul>
+          </div>
+
+          <!-- Completion Action Buttons -->
+          <div class="vis-actions-row">
+            <a href="/schedules" class="btn btn-primary btn-lg" style="flex: 1; text-align: center; text-decoration: none;">
+              Review Timetable on Grid &rarr;
+            </a>
+            <button type="button" id="btn-generate-again" class="btn btn-secondary">
+              Generate Again
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════════════════════════════ -->
+  <!-- PANEL B: MANUAL SCHEDULING MODE                                -->
+  <!-- ═════════════════════════════════════════════════════════════ -->
+  <div id="panel-manual-scheduling" class="scheduling-panel">
+    <div class="manual-layout">
+      <div class="card manual-form-card">
+        <div class="card-header-clean">
+          <div>
+            <h2 class="section-title">Schedule Single Course Slot</h2>
+            <p class="section-subtitle">Manually assign a subject offering with instant pre-flight collision verification.</p>
+          </div>
+          <span class="badge-role">Real-Time HC Validation</span>
+        </div>
+
+        <form id="form-manual-schedule">
+          <div class="form-row-2">
+            <!-- Subject Selection -->
+            <div class="form-group">
+              <label class="form-label" for="manual-subject">Subject Offering *</label>
+              <select id="manual-subject" class="form-select" required>
+                <option value="">-- Choose Subject --</option>
+              </select>
+              <div id="manual-subject-meta" class="meta-preview-box" style="display:none;"></div>
+            </div>
+
+            <!-- Section Selection -->
+            <div class="form-group">
+              <label class="form-label" for="manual-section">Cohort Section *</label>
+              <select id="manual-section" class="form-select" required>
+                <option value="">-- Choose Section --</option>
+              </select>
+              <div id="manual-section-meta" class="meta-preview-box" style="display:none;"></div>
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <!-- Faculty Selection -->
+            <div class="form-group">
+              <label class="form-label" for="manual-faculty">Instructor / Faculty *</label>
+              <select id="manual-faculty" class="form-select" required>
+                <option value="">-- Choose Faculty Member --</option>
+              </select>
+            </div>
+
+            <!-- Room Selection -->
+            <div class="form-group">
+              <label class="form-label" for="manual-room">Classroom / Laboratory *</label>
+              <select id="manual-room" class="form-select" required>
+                <option value="">-- Choose Physical Room --</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <!-- Day of Week -->
+            <div class="form-group">
+              <label class="form-label" for="manual-day">Day of Week *</label>
+              <select id="manual-day" class="form-select" required>
+                <option value="MON">Monday</option>
+                <option value="TUE">Tuesday</option>
+                <option value="WED">Wednesday</option>
+                <option value="THU">Thursday</option>
+                <option value="FRI">Friday</option>
+                <option value="SAT">Saturday</option>
+              </select>
+            </div>
+
+            <!-- Start Time -->
+            <div class="form-group">
+              <label class="form-label" for="manual-start-time">Start Time *</label>
+              <input type="time" id="manual-start-time" class="form-input" required value="08:00" step="1800">
+            </div>
+
+            <!-- End Time -->
+            <div class="form-group">
+              <label class="form-label" for="manual-end-time">End Time *</label>
+              <input type="time" id="manual-end-time" class="form-input" required value="09:30" step="1800">
+            </div>
+          </div>
+
+          <!-- Real-Time Pre-Flight Conflict Check Banner -->
+          <div id="manual-conflict-banner" class="validation-banner" style="display:none;">
+            <!-- Dynamic validation result injected via JavaScript -->
+          </div>
+
+          <!-- Submit Button -->
+          <div class="form-actions-bar" style="margin-top: 24px;">
+            <button type="submit" id="btn-save-manual-slot" class="btn btn-primary btn-lg" style="width: 100%;">
+              <span>Save Schedule Slot &rarr;</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/create_schedule.js') }}"></script>
+{% endblock %}

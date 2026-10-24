@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Schedules Timetable | COE SYNC 2026{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/timetable.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="sched-page">
+
+  <!-- ── Page Header ── -->
+  <div class="sched-page-header">
+    <div>
+      <h1 class="page-title">Schedules</h1>
+      <p class="page-subtitle">Interactive weekly timetable · real-time conflict detection</p>
+    </div>
+    <div class="sched-header-actions">
+      <button id="btn-print-schedule" class="btn btn-secondary" title="Print Timetable or Save to PDF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print / PDF
+      </button>
+      {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+      <button id="btn-publish-all" class="btn btn-secondary admin-only" title="Lock all conflict-free draft schedules to PUBLISHED">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Publish All
+      </button>
+      {% endif %}
+      {% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
+      <button id="btn-conflict-radar" class="btn-radar" title="Open Conflict Radar">
+        <span class="radar-dot" id="radar-dot"></span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Conflict Radar
+        <span class="radar-badge" id="radar-badge" style="display:none;">0</span>
+      </button>
+      {% endif %}
+      {% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+      <a href="/schedules/create" class="btn btn-primary admin-only" id="btn-create-schedule-cta" style="display:inline-flex; align-items:center; gap:6px; text-decoration:none;" title="Open Dual-Mode Schedule Creator">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        + Create Schedule
+      </a>
+      <button id="btn-add-schedule" class="btn btn-secondary admin-only">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Quick Slot
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Faculty Portal: Teaching Load Progress Bar ── -->
+  <div id="faculty-teaching-load-bar" class="faculty-teaching-load-banner" style="display:none;">
+    <div class="faculty-load-info">
+      <div class="faculty-load-title">
+        <span>👨‍🏫 Teaching Load:</span>
+        <span id="fac-load-name" style="color: var(--text-main);">Faculty Member</span>
+      </div>
+      <div class="faculty-load-meter-wrap">
+        <div class="faculty-meter-track">
+          <div id="fac-load-meter-fill" class="faculty-meter-fill" style="width: 0%;"></div>
+        </div>
+        <span id="fac-load-numbers" style="font-size: 13px; font-weight: 700; color: #78350F;">0 / 21 Units</span>
+      </div>
+      <span id="fac-load-badge" class="status-badge mint">NORMAL LOAD</span>
+    </div>
+    <button id="btn-faculty-review-reschedules" class="btn btn-sm btn-secondary" title="Review pending reschedule requests from students">
+      Review Student Reschedules <span id="fac-resched-badge" class="badge-count" style="display:none;">0</span>
+    </button>
+  </div>
+
+  <!-- ── Student Portal Banner ── -->
+  <div id="student-portal-banner" class="student-portal-banner" style="display:none;">
+    <div class="student-portal-title">
+      <span>🎓 Student Timetable Portal</span>
+      <span style="font-weight: normal; color: #3B82F6;">&bull;</span>
+      <span id="student-portal-section-label" style="font-weight: 700;">Official Published Schedule</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button id="btn-student-submit-resched" class="btn btn-sm btn-primary">
+        + Request Class Reschedule
+      </button>
+      <button id="btn-student-track-reschedules" class="btn btn-sm btn-secondary">
+        My Requests <span id="student-resched-badge" class="badge-count" style="display:none;">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Toolbar: Nav + Filters ── -->
+  <div class="sched-toolbar">
+    <div class="sched-week-nav">
+      <button class="week-nav-btn" id="btn-prev-week" aria-label="Previous week">&#8249;</button>
+      <button class="week-today-btn" id="btn-today">Today</button>
+      <button class="week-nav-btn" id="btn-next-week" aria-label="Next week">&#8250;</button>
+      <span class="week-label" id="week-label">Loading…</span>
+    </div>
+
+    <div class="sched-filters">
+      <select class="filter-select" id="filter-program" title="Filter by Degree Program">
+        <option value="">All Programs</option>
+        <option value="BSCpE">BS Computer Engineering</option>
+        <option value="BSME">BS Mechanical Engineering</option>
+        <option value="BSEE">BS Electrical Engineering</option>
+        <option value="BSCE">BS Civil Engineering</option>
+        <option value="BSIE">BS Industrial Engineering</option>
+      </select>
+      <select class="filter-select" id="filter-year" title="Filter by Year Level">
+        <option value="">All Year Levels</option>
+        <option value="1">1st Year</option>
+        <option value="2">2nd Year</option>
+        <option value="3">3rd Year</option>
+        <option value="4">4th Year</option>
+      </select>
+      <select class="filter-select" id="filter-section" title="Filter by Cohort Section">
+        <option value="">All Sections</option>
+      </select>
+      <select class="filter-select" id="filter-faculty" title="Filter by Instructor">
+        <option value="">All Faculty</option>
+      </select>
+      <select class="filter-select" id="filter-room" title="Filter by Facility / Room">
+        <option value="">All Rooms</option>
+      </select>
+      <select class="filter-select" id="filter-status" title="Filter by Schedule Status">
+        <option value="">All Statuses</option>
+        <option value="PUBLISHED">Scheduled (Published)</option>
+        <option value="DRAFT">Draft</option>
+        <option value="CONFLICT">Conflicts Only</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── Timetable Wrapper ── -->
+  <div class="timetable-shell">
+
+    <!-- Day Header Row -->
+    <div class="timetable-header" id="timetable-header">
+      <div class="th-gutter"></div>
+      <!-- Filled dynamically by JS with Mon–Sun + date numbers -->
+    </div>
+
+    <!-- Scrollable Grid Body -->
+    <div class="timetable-body" id="timetable-body">
+      <!-- Time gutter column -->
+      <div class="timetable-gutter" id="timetable-gutter">
+        <!-- 7:00 – 19:30 half-hour rows filled by JS -->
+      </div>
+      <!-- Day columns (Mon–Sun) filled by JS -->
+      <div class="timetable-columns" id="timetable-columns">
+        <!-- event cards rendered here -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Legend ── -->
+  <div class="timetable-legend">
+    <div class="legend-item">
+      <span class="legend-dot dot-scheduled"></span> Scheduled
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot dot-alt"></span> Alternate Program
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot dot-conflict"></span> Conflict
+    </div>
+    <div class="legend-item">
+      <span class="legend-dot dot-draft"></span> Draft
+    </div>
+  </div>
+
+</div><!-- /.sched-page -->
+
+
+{% if session.get('role') != 'STUDENT' and active_role != 'STUDENT' %}
+<!-- ══════════════════════════════════════════
+     CONFLICT RADAR SLIDE-OUT DRAWER
+══════════════════════════════════════════ -->
+<div class="radar-overlay" id="radar-overlay"></div>
+<aside class="radar-drawer" id="radar-drawer" aria-label="Conflict Radar Panel">
+  <div class="radar-drawer-header">
+    <div>
+      <h2 class="radar-title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Conflict Radar
+      </h2>
+      <p class="radar-subtitle">Live hard-constraint violations</p>
+    </div>
+    <button class="radar-close-btn" id="radar-close-btn" aria-label="Close conflict radar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <div class="radar-scan-bar">
+    <div class="radar-scan-fill" id="radar-scan-fill"></div>
+  </div>
+
+  <div class="radar-category-nav" id="radar-category-nav">
+    <button class="radar-cat-btn active" data-category="ALL">All (<span id="cat-count-all">0</span>)</button>
+    <button class="radar-cat-btn" data-category="ROOM">Room (<span id="cat-count-room">0</span>)</button>
+    <button class="radar-cat-btn" data-category="FACULTY">Faculty (<span id="cat-count-faculty">0</span>)</button>
+    <button class="radar-cat-btn" data-category="SECTION">Section (<span id="cat-count-section">0</span>)</button>
+    <button class="radar-cat-btn" data-category="CAPACITY">Capacity (<span id="cat-count-capacity">0</span>)</button>
+  </div>
+
+  <div class="radar-body" id="radar-body">
+    <div class="radar-empty" id="radar-empty">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <p>No conflicts detected</p>
+      <span>All schedules pass hard constraints</span>
+    </div>
+    <div id="radar-conflict-list" class="radar-conflict-list" style="display:none;"></div>
+  </div>
+
+  <div class="radar-footer">
+    <button class="btn btn-secondary btn-sm" id="radar-refresh-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Re-scan
+    </button>
+    <span class="radar-last-scan" id="radar-last-scan">Not yet scanned</span>
+  </div>
+</aside>
+{% endif %}
+
+
+{% if session.get('role') in ['CHAIR', 'ADMIN'] and active_role in ['CHAIR', 'ADMIN'] %}
+<!-- ══════════════════════════════════════════
+     ADD / EDIT SCHEDULE MODAL
+══════════════════════════════════════════ -->
+<div class="sched-modal-backdrop" id="sched-modal-backdrop">
+  <div class="sched-modal" id="sched-modal" role="dialog" aria-modal="true" aria-labelledby="sched-modal-title">
+    <div class="sched-modal-header">
+      <h3 id="sched-modal-title">Add New Schedule</h3>
+      <button class="sched-modal-close" id="sched-modal-close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <form id="sched-modal-form" novalidate>
+      <input type="hidden" id="sched-edit-id" value="">
+
+      <!-- Pre-flight conflict status banner -->
+      <div id="preflight-banner" class="preflight-banner" style="display:none;"></div>
+
+      <div class="sched-modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="m-subject">Subject <span class="req">*</span></label>
+            <select id="m-subject" name="subject_id" required>
+              <option value="">Select subject…</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="m-section">Section <span class="req">*</span></label>
+            <select id="m-section" name="section_id" required>
+              <option value="">Select section…</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="m-faculty">Faculty <span class="req">*</span></label>
+            <select id="m-faculty" name="faculty_id" required>
+              <option value="">Select faculty…</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="m-room">Room <span class="req">*</span></label>
+            <select id="m-room" name="room_id" required>
+              <option value="">Select room…</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="m-day">Day <span class="req">*</span></label>
+            <select id="m-day" name="day_of_week" required>
+              <option value="">Select day…</option>
+              <option value="MON">Monday</option>
+              <option value="TUE">Tuesday</option>
+              <option value="WED">Wednesday</option>
+              <option value="THU">Thursday</option>
+              <option value="FRI">Friday</option>
+              <option value="SAT">Saturday</option>
+              <option value="SUN">Sunday</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="m-status">Status</label>
+            <select id="m-status" name="status">
+              <option value="DRAFT">Draft</option>
+              <option value="PUBLISHED">Published</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="m-start">Start Time <span class="req">*</span></label>
+            <select id="m-start" name="start_time" required>
+              <option value="">Select time…</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="m-end">End Time <span class="req">*</span></label>
+            <select id="m-end" name="end_time" required>
+              <option value="">Select time…</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Suggestions panel (1-Click Apply Alternative) -->
+        <div id="suggestions-panel" class="suggestions-panel" style="display:none;">
+          <div class="suggestions-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Conflict detected · suggested alternatives:
+          </div>
+          <div id="suggestions-list" class="suggestions-list"></div>
+        </div>
+      </div>
+
+      <div class="sched-modal-footer">
+        <button type="button" class="btn btn-secondary" id="sched-modal-cancel">Cancel</button>
+        <button type="button" class="btn btn-outline" id="btn-preflight">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c0-4.97-4.03-9-9-9S3 7.03 3 12s4.03 9 9 9 9-4.03 9-9z"/></svg>
+          Check Conflicts
+        </button>
+        <button type="submit" class="btn btn-primary" id="sched-modal-save">Save Schedule</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/schedules_view.js') }}"></script>
+{% endblock %}

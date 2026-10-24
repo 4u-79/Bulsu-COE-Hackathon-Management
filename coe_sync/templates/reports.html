@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Institutional Analytics & Reports | COE SYNC 2026{% endblock %}
+
+{% block content %}
+<div class="reports-container">
+
+  <!-- Header & Export Action Bar -->
+  <div class="reports-header-row">
+    <div>
+      <h1 class="reports-title">Institutional Analytics & Reports</h1>
+      <p class="reports-subtitle">BulSU College of Engineering • Academic Term Capacity & Faculty Allocation Intelligence</p>
+    </div>
+    <div class="reports-action-bar">
+      <button id="btn-export-reports" class="btn btn-secondary" title="Export utilization and faculty workload data as CSV">
+        Export CSV
+      </button>
+      <button id="btn-print-reports" class="btn btn-primary" title="Print formal institutional utilization report">
+        Print / PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI Metric Overview Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Average Room Utilization</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" id="kpi-room-utilization">--%</span>
+      </div>
+      <div class="kpi-subtext">Benchmark: 72 available hrs/wk (Mon–Sat 7am–7pm)</div>
+    </div>
+
+    <div class="kpi-card" id="kpi-card-overload">
+      <div class="kpi-label">Faculty Overload Status</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" id="kpi-overload-count">0</span>
+      </div>
+      <div class="kpi-subtext">Instructors exceeding 21-unit policy threshold</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Schedule Quality Score</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" id="kpi-quality-score">--/100</span>
+      </div>
+      <div class="kpi-subtext">Evaluates section idle gaps (&gt;2h) and seat waste (&gt;50)</div>
+    </div>
+
+    <div class="kpi-card">
+      <div class="kpi-label">Total Scheduled Classes</div>
+      <div class="kpi-value-row">
+        <span class="kpi-value" id="kpi-total-classes">--</span>
+      </div>
+      <div class="kpi-subtext">Active course offerings across all degree programs</div>
+    </div>
+  </div>
+
+  <!-- Filters & Scope Toolbar -->
+  <div class="reports-filter-panel">
+    <div class="reports-filter-group">
+      <div class="reports-filter-item">
+        <label for="filter-term" class="reports-filter-label">Academic Term</label>
+        <select id="filter-term" class="reports-filter-select">
+          <option value="current" selected>1st Semester AY 2026–2027</option>
+          <option value="preview">2nd Semester AY 2026–2027 (Draft)</option>
+        </select>
+      </div>
+
+      <div class="reports-filter-item">
+        <label for="filter-section-scope" class="reports-filter-label">Section Scope</label>
+        <select id="filter-section-scope" class="reports-filter-select">
+          <option value="ALL">All Sections</option>
+          <!-- Injected dynamically -->
+        </select>
+      </div>
+
+      <div class="reports-filter-item">
+        <label for="filter-room-type" class="reports-filter-label">Room Type</label>
+        <select id="filter-room-type" class="reports-filter-select">
+          <option value="ALL">All Room Types</option>
+          <option value="LECTURE">Lecture Rooms Only</option>
+          <option value="LAB">Laboratories Only</option>
+        </select>
+      </div>
+
+      <div class="reports-filter-item">
+        <label for="filter-util-threshold" class="reports-filter-label">Room Utilization Threshold</label>
+        <select id="filter-util-threshold" class="reports-filter-select">
+          <option value="ALL">All Utilization Levels</option>
+          <option value="HIGH">&gt; 75% High Utilization</option>
+          <option value="MODERATE">50% – 75% Moderate</option>
+          <option value="LOW">25% – 50% Low</option>
+          <option value="UNDER">&lt; 25% Underutilized</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="reports-filter-item">
+      <span class="reports-filter-label">Data Status</span>
+      <span class="status-badge mint" id="report-sync-badge">Live System Sync</span>
+    </div>
+  </div>
+
+  <!-- Visual Analytics Section: CSS/SVG Visual Meters (Zero CDN Dependencies) -->
+  <div class="reports-charts-grid">
+    <!-- Chart Card 1: Room Utilization Rate -->
+    <div class="report-chart-card">
+      <div class="report-chart-header">
+        <div>
+          <h2 class="report-chart-title">Room Utilization &amp; Facility Load</h2>
+          <p class="report-chart-subtitle">Weekly scheduled hours against 72-hour operating capacity (Mon–Sat 7:00 AM – 7:00 PM)</p>
+        </div>
+        <div class="report-chart-legend">
+          <span class="legend-item"><span class="legend-dot" style="background: #3B82F6;"></span> &lt; 50% Safe</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #F59E0B;"></span> 50–75% Moderate</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #8B5CF6;"></span> &gt; 75% Peak</span>
+        </div>
+      </div>
+      <div class="meter-list" id="room-meters-container">
+        <div style="text-align: center; color: var(--text-muted); padding: 20px;">Loading room utilization data...</div>
+      </div>
+    </div>
+
+    <!-- Chart Card 2: Faculty Workload Allocation -->
+    <div class="report-chart-card">
+      <div class="report-chart-header">
+        <div>
+          <h2 class="report-chart-title">Faculty Workload Distribution</h2>
+          <p class="report-chart-subtitle">Assigned teaching units against the College of Engineering 21-unit maximum limit</p>
+        </div>
+        <div class="report-chart-legend">
+          <span class="legend-item"><span class="legend-dot" style="background: #10B981;"></span> &le; 18 Normal</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #F59E0B;"></span> 19–21 Near Max</span>
+          <span class="legend-item"><span class="legend-dot" style="background: #EF4444;"></span> &gt; 21 Overload</span>
+        </div>
+      </div>
+      <div class="meter-list" id="faculty-meters-container">
+        <div style="text-align: center; color: var(--text-muted); padding: 20px;">Loading faculty workload data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quality Score Itemized Deductions Breakdown -->
+  <div class="table-card" id="quality-score-deductions-card" style="display:none;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-light); background: #FFFBEB;">
+      <div>
+        <h3 style="font-size: 16px; font-weight: 700; color: #78350F; margin: 0;">Schedule Quality Score Itemized Deductions</h3>
+        <p style="font-size: 12px; color: #92400E; margin: 2px 0 0 0;">
+          Deduction Rules: -5 pts for section idle gaps &gt; 2h, -5 pts for room overcapacity mismatch (unassigned seats &gt; 30)
+        </p>
+      </div>
+      <span class="status-badge amber" id="quality-penalty-badge">0 Points Deducted</span>
+    </div>
+    <div class="table-responsive">
+      <table class="master-table">
+        <thead>
+          <tr>
+            <th style="width: 120px;">Penalty</th>
+            <th style="width: 240px;">Category</th>
+            <th>Detailed Violation Diagnostic</th>
+          </tr>
+        </thead>
+        <tbody id="quality-deductions-tbody">
+          <tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 16px;">Zero penalties! Perfect 100/100 schedule quality.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Detailed Data Breakdown Tables -->
+  <div class="table-card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-light);">
+      <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Room Capacity &amp; Hours Matrix</h3>
+      <span style="font-size: 12px; color: var(--text-muted);">Standard: 12 hrs/day &times; 6 days = 72.0 available hours</span>
+    </div>
+    <div class="table-responsive">
+      <table class="master-table" id="rooms-report-table">
+        <thead>
+          <tr>
+            <th>Room Code</th>
+            <th>Type</th>
+            <th>Capacity</th>
+            <th>Scheduled Hours</th>
+            <th>Weekly Max</th>
+            <th>Utilization %</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="rooms-report-tbody">
+          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Loading room records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border-light);">
+      <h3 style="font-size: 16px; font-weight: 700; margin: 0;">Faculty Workload &amp; Teaching Hours Matrix</h3>
+      <span style="font-size: 12px; color: var(--text-muted);">Max Threshold: 21 Academic Units</span>
+    </div>
+    <div class="table-responsive">
+      <table class="master-table" id="faculty-report-table">
+        <thead>
+          <tr>
+            <th>Faculty Member</th>
+            <th>Email</th>
+            <th>Teaching Hours</th>
+            <th>Assigned Units</th>
+            <th>Max Unit Limit</th>
+            <th>Load Utilization</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="faculty-report-tbody">
+          <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Loading faculty records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+{% endblock %}

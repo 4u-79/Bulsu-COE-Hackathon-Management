@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Master Data Management | COE SYNC 2026{% endblock %}
+
+{% block content %}
+<div class="manage-header-row">
+  <div class="page-header" style="margin-bottom: 0;">
+    <h1 class="page-title">Master Data Management</h1>
+    <p class="page-subtitle">Configure physical facilities, teaching faculty, student cohorts, and course catalogs.</p>
+  </div>
+
+  <div class="admin-only">
+    <button id="btn-add-entity" class="btn btn-primary" data-target-modal="modal-add-rooms">
+      + Add Room
+    </button>
+  </div>
+</div>
+
+<!-- Horizontal Tab Bar with Count Indicators -->
+<nav class="manage-tabs" aria-label="Master Data Entities">
+  <button class="tab-btn manage-tab-btn active" data-tab="rooms">
+    Rooms <span class="manage-tab-count" id="count-rooms">0</span>
+  </button>
+  <button class="tab-btn manage-tab-btn" data-tab="faculty">
+    Faculty <span class="manage-tab-count" id="count-faculty">0</span>
+  </button>
+  <button class="tab-btn manage-tab-btn" data-tab="sections">
+    Sections <span class="manage-tab-count" id="count-sections">0</span>
+  </button>
+  <button class="tab-btn manage-tab-btn" data-tab="subjects">
+    Subjects <span class="manage-tab-count" id="count-subjects">0</span>
+  </button>
+</nav>
+
+<!-- Tab 1: Rooms Table Panel -->
+<div id="tab-panel-rooms" class="tab-panel manage-panel active">
+  <div class="table-card">
+    <div class="manage-filter-bar">
+      <div class="manage-search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-rooms" class="manage-search-input" placeholder="Search room code (e.g. Eng-104)...">
+      </div>
+      <div class="manage-filter-group">
+        <select id="filter-room-type" class="manage-filter-select">
+          <option value="">All Types</option>
+          <option value="LECTURE">Lecture Hall</option>
+          <option value="LAB">Laboratory</option>
+        </select>
+        <select id="filter-room-status" class="manage-filter-select">
+          <option value="">All Statuses</option>
+          <option value="true">Available</option>
+          <option value="false">Under Maintenance</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="master-table">
+        <thead>
+          <tr>
+            <th>Room Code</th>
+            <th>Type</th>
+            <th>Capacity</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="table-rooms-body">
+          <tr><td colspan="5" style="text-align:center; padding: 24px;">Loading rooms...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 2: Faculty Table Panel -->
+<div id="tab-panel-faculty" class="tab-panel manage-panel hidden">
+  <div class="table-card">
+    <div class="manage-filter-bar">
+      <div class="manage-search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-faculty" class="manage-search-input" placeholder="Search faculty name or email...">
+      </div>
+      <div class="manage-filter-group">
+        <select id="filter-faculty-status" class="manage-filter-select">
+          <option value="">All Workloads</option>
+          <option value="normal">Normal Load (≤ 21 units)</option>
+          <option value="overloaded">Overloaded (> 21 units)</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="master-table">
+        <thead>
+          <tr>
+            <th>Faculty Name</th>
+            <th>Official Email</th>
+            <th>Max Units</th>
+            <th>Current Load</th>
+            <th>Availability</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="table-faculty-body">
+          <tr><td colspan="6" style="text-align:center; padding: 24px;">Loading faculty records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 3: Sections Table Panel -->
+<div id="tab-panel-sections" class="tab-panel manage-panel hidden">
+  <div class="table-card">
+    <div class="manage-filter-bar">
+      <div class="manage-search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-sections" class="manage-search-input" placeholder="Search section name (e.g. CpE 2A)...">
+      </div>
+      <div class="manage-filter-group">
+        <select id="filter-section-prog" class="manage-filter-select">
+          <option value="">All Programs</option>
+          <option value="BSCpE">BS Computer Engineering</option>
+          <option value="BSME">BS Mechanical Engineering</option>
+          <option value="BSEE">BS Electrical Engineering</option>
+          <option value="BSCE">BS Civil Engineering</option>
+          <option value="BSIE">BS Industrial Engineering</option>
+        </select>
+        <select id="filter-section-year" class="manage-filter-select">
+          <option value="">All Years</option>
+          <option value="1">1st Year</option>
+          <option value="2">2nd Year</option>
+          <option value="3">3rd Year</option>
+          <option value="4">4th Year</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="master-table">
+        <thead>
+          <tr>
+            <th>Section Name</th>
+            <th>Degree Program</th>
+            <th>Year Level</th>
+            <th>Student Count</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="table-sections-body">
+          <tr><td colspan="5" style="text-align:center; padding: 24px;">Loading sections...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Tab 4: Subjects Table Panel -->
+<div id="tab-panel-subjects" class="tab-panel manage-panel hidden">
+  <div class="table-card">
+    <div class="manage-filter-bar">
+      <div class="manage-search-wrap">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search-subjects" class="manage-search-input" placeholder="Search course code or title (e.g. CPE 211)...">
+      </div>
+      <div class="manage-filter-group">
+        <select id="filter-subject-type" class="manage-filter-select">
+          <option value="">All Types</option>
+          <option value="LECTURE">Lecture</option>
+          <option value="LAB">Lab</option>
+        </select>
+        <select id="filter-subject-units" class="manage-filter-select">
+          <option value="">All Units</option>
+          <option value="1">1 Unit</option>
+          <option value="2">2 Units</option>
+          <option value="3">3 Units</option>
+          <option value="4">4 Units</option>
+          <option value="5">5 Units</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="master-table">
+        <thead>
+          <tr>
+            <th>Course Code</th>
+            <th>Course Title</th>
+            <th>Units</th>
+            <th>Delivery Type</th>
+            <th>Hours / Week</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="table-subjects-body">
+          <tr><td colspan="6" style="text-align:center; padding: 24px;">Loading subjects...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/manage.js') }}"></script>
+{% endblock %}

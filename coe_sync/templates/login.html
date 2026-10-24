@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login Gateway | COE SYNC 2026</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <style>
+    body.login-body {
+      min-height: 100vh;
+      margin: 0;
+      background: radial-gradient(circle at 15% 20%, #681C2E 0%, #3B111A 45%, #20080E 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 460px;
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(245, 194, 107, 0.25);
+      overflow: hidden;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-header {
+      background: linear-gradient(135deg, var(--sidebar-bg) 0%, var(--sidebar-bg-dark) 100%);
+      padding: 28px 24px;
+      text-align: center;
+      color: #FFFFFF;
+      border-bottom: 3px solid var(--nav-pill-bg);
+    }
+
+    .login-brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(245, 194, 107, 0.15);
+      border: 1px solid rgba(245, 194, 107, 0.4);
+      color: var(--nav-pill-bg);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      margin-bottom: 10px;
+    }
+
+    .login-title {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0 0 6px 0;
+      letter-spacing: -0.02em;
+      color: #FFFFFF;
+    }
+
+    .login-subtitle {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.85);
+      margin: 0;
+    }
+
+    .login-body-content {
+      padding: 28px 24px;
+    }
+
+    /* Default Credentials Notice Callout */
+    .credentials-callout {
+      background: #FEF3C7;
+      border: 1px solid #F5C26B;
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      margin-bottom: 22px;
+      font-size: 13px;
+    }
+
+    .credentials-callout-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .credentials-callout-title {
+      font-weight: 700;
+      color: #92400E;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .credentials-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: rgba(146, 64, 14, 0.1);
+      color: #92400E;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .credentials-list {
+      margin: 0 0 10px 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: #78350F;
+    }
+
+    .credentials-list li {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+    }
+
+    .credentials-list strong {
+      font-family: var(--font-mono);
+      color: #451A03;
+    }
+
+    .btn-autofill {
+      background: #E8A948;
+      color: #260A10;
+      border: none;
+      border-radius: var(--radius-xs);
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      text-align: center;
+      transition: background 0.15s ease;
+    }
+
+    .btn-autofill:hover {
+      background: #F5C26B;
+    }
+
+    /* Role Quick Selector Pills */
+    .role-pills-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-role-pill {
+      background: #FFFFFF;
+      border: 1px solid #D97706;
+      color: #92400E;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-role-pill:hover {
+      background: #D97706;
+      color: #FFFFFF;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .login-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-family: inherit;
+      box-sizing: border-box;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .login-input:focus {
+      outline: none;
+      border-color: var(--sidebar-bg);
+      box-shadow: 0 0 0 3px rgba(74, 21, 33, 0.12);
+    }
+
+    .btn-toggle-pw {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 4px;
+    }
+
+    .btn-login-submit {
+      width: 100%;
+      background: var(--sidebar-bg);
+      color: #FFFFFF;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.05s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-login-submit:hover {
+      background: var(--sidebar-bg-dark);
+    }
+
+    .btn-login-submit:active {
+      transform: scale(0.99);
+    }
+
+    .login-alert {
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      margin-bottom: 18px;
+      display: none;
+    }
+
+    .login-alert.error {
+      display: block;
+      background: #FEE2E2;
+      border: 1px solid #F87171;
+      color: #B91C1C;
+    }
+
+    .login-alert.success {
+      display: block;
+      background: #DCFCE7;
+      border: 1px solid #86EFAC;
+      color: #15803D;
+    }
+
+    /* Modal / Change Credentials Overlay */
+    .change-cred-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+      backdrop-filter: blur(4px);
+    }
+
+    .change-cred-overlay.open {
+      display: flex;
+    }
+
+    .change-cred-modal {
+      width: 100%;
+      max-width: 440px;
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-modal);
+      overflow: hidden;
+      animation: modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modalPop {
+      from { transform: scale(0.92); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .change-cred-header {
+      background: var(--sidebar-bg);
+      color: #FFFFFF;
+      padding: 20px 24px;
+      border-bottom: 2px solid var(--nav-pill-bg);
+    }
+
+    .change-cred-title {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .change-cred-desc {
+      margin: 0;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    .change-cred-body {
+      padding: 24px;
+    }
+  </style>
+</head>
+<body class="login-body">
+  <div class="login-container">
+    <div class="login-header">
+      <div class="login-brand-badge">⚡ COE SYNC 2026 • Security Gateway</div>
+      <h1 class="login-title">BulSU Engineering</h1>
+      <p class="login-subtitle">Academic Timetable & Schedule Conflict System</p>
+    </div>
+
+    <div class="login-body-content">
+      <!-- Default Credentials Notice Banner (Controlled by Feature Flag SHOW_DEMO_CREDENTIALS) -->
+      {% if show_demo_credentials %}
+      <div id="demo-credentials-badge" class="credentials-callout">
+        <div class="credentials-callout-header" id="demo-callout-toggle" style="cursor: pointer;" title="Click to collapse or expand demo credentials">
+          <span class="credentials-callout-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Active Demo Credentials
+          </span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="credentials-tag" id="demo-status-tag">Live Database</span>
+            <span id="demo-collapse-icon" style="font-size: 11px; color: #92400E; user-select: none;">▾</span>
+          </div>
+        </div>
+        <div id="demo-callout-content">
+          <ul class="credentials-list">
+            <li><span>Role:</span> <strong>Program Chair (CHAIR)</strong></li>
+            <li><span>Username:</span> <strong id="demo-chair-user">chair_cpe</strong></li>
+            <li><span>Password:</span> <strong id="demo-chair-pw">chair123</strong></li>
+          </ul>
+          <button type="button" id="btn-autofill-chair" class="btn-autofill">
+            ⚡ 1-Click Auto-Fill Chair Credentials
+          </button>
+
+          <div style="margin-top: 10px; font-size: 11px; color: #92400E;">Other Demo Accounts:</div>
+          <div class="role-pills-row" id="demo-role-pills">
+            <button type="button" class="btn-role-pill" data-role="admin" data-user="admin" data-pw="admin123">Admin</button>
+            <button type="button" class="btn-role-pill" data-role="faculty" data-user="prof_santos" data-pw="faculty123">Faculty</button>
+            <button type="button" class="btn-role-pill" data-role="student" data-user="student_cpe2a" data-pw="student123">Student</button>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Feedback Alert -->
+      <div id="login-alert" class="login-alert"></div>
+
+      <!-- Login Form -->
+      <form id="form-login">
+        <div class="form-group">
+          <label class="form-label" for="inp-username">Username or ID</label>
+          <div class="input-wrap">
+            <input type="text" id="inp-username" class="login-input" placeholder="e.g. chair_cpe" required autocomplete="username">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="inp-password">Password</label>
+          <div class="input-wrap">
+            <input type="password" id="inp-password" class="login-input" placeholder="Enter password" required autocomplete="current-password">
+            <button type="button" id="btn-toggle-pw" class="btn-toggle-pw" aria-label="Toggle password visibility">Show</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btn-submit-login" class="btn-login-submit">
+          <span>Authenticate &amp; Enter Gateway</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Mandatory / First-Time Change Credentials Gateway Overlay -->
+  <div id="modal-change-credentials" class="change-cred-overlay">
+    <div class="change-cred-modal">
+      <div class="change-cred-header">
+        <h2 class="change-cred-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Credentials Management
+        </h2>
+        <p class="change-cred-desc">Update your Program Chair security credentials before accessing the timetable.</p>
+      </div>
+
+      <div class="change-cred-body">
+        <div id="change-cred-alert" class="login-alert"></div>
+
+        <form id="form-change-credentials">
+          <div class="form-group">
+            <label class="form-label" for="inp-current-password">Current Password *</label>
+            <input type="password" id="inp-current-password" class="login-input" required placeholder="Default: chair123">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inp-new-username">New Username (or keep current) *</label>
+            <input type="text" id="inp-new-username" class="login-input" required placeholder="e.g. chair_cpe">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inp-new-password">New Password * (min. 6 characters)</label>
+            <input type="password" id="inp-new-password" class="login-input" required placeholder="At least 6 characters" minlength="6">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="inp-confirm-password">Confirm New Password *</label>
+            <input type="password" id="inp-confirm-password" class="login-input" required placeholder="Re-type new password" minlength="6">
+          </div>
+
+          <button type="submit" id="btn-save-credentials" class="btn-login-submit" style="background:#059669;">
+            <span>Save &amp; Continue to Dashboard &rarr;</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const formLogin = document.getElementById("form-login");
+      const inpUser = document.getElementById("inp-username");
+      const inpPw = document.getElementById("inp-password");
+      const alertBox = document.getElementById("login-alert");
+      const btnTogglePw = document.getElementById("btn-toggle-pw");
+      const btnAutofill = document.getElementById("btn-autofill-chair");
+      const modalChangeCred = document.getElementById("modal-change-credentials");
+      const formChangeCred = document.getElementById("form-change-credentials");
+      const changeAlert = document.getElementById("change-cred-alert");
+
+      // Collapsible demo credentials card
+      const demoToggle = document.getElementById("demo-callout-toggle");
+      const demoContent = document.getElementById("demo-callout-content");
+      const demoIcon = document.getElementById("demo-collapse-icon");
+      if (demoToggle && demoContent) {
+        demoToggle.addEventListener("click", () => {
+          const isCollapsed = demoContent.style.display === "none";
+          demoContent.style.display = isCollapsed ? "block" : "none";
+          if (demoIcon) demoIcon.textContent = isCollapsed ? "▾" : "▸";
+        });
+      }
+
+      // Dynamic demo accounts state synchronized directly with MySQL / SQLite
+      let activeDemoAccounts = {
+        chair: { username: "chair_cpe", password: "chair123" },
+        admin: { username: "admin", password: "admin123" },
+        faculty: { username: "prof_santos", password: "faculty123" },
+        student: { username: "student_cpe2a", password: "student123" }
+      };
+
+      async function syncDemoCredentialsFromDB() {
+        try {
+          const res = await fetch("/api/auth/demo-credentials");
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data && data.chair) {
+            activeDemoAccounts = data;
+            const chairUserEl = document.getElementById("demo-chair-user");
+            const chairPwEl = document.getElementById("demo-chair-pw");
+            if (chairUserEl) chairUserEl.textContent = data.chair.username;
+            if (chairPwEl) chairPwEl.textContent = data.chair.password;
+
+            document.querySelectorAll(".btn-role-pill").forEach(btn => {
+              const rKey = btn.dataset.role;
+              if (rKey && data[rKey]) {
+                btn.dataset.user = data[rKey].username;
+                btn.dataset.pw = data[rKey].password;
+              }
+            });
+          }
+        } catch (err) {
+          console.warn("Could not sync demo credentials from DB:", err);
+        }
+      }
+      syncDemoCredentialsFromDB();
+
+      // Password toggle
+      if (btnTogglePw) {
+        btnTogglePw.addEventListener("click", () => {
+          const isPw = inpPw.type === "password";
+          inpPw.type = isPw ? "text" : "password";
+          btnTogglePw.textContent = isPw ? "Hide" : "Show";
+        });
+      }
+
+      // Autofill Program Chair with live DB credentials
+      if (btnAutofill) {
+        btnAutofill.addEventListener("click", () => {
+          inpUser.value = activeDemoAccounts.chair.username;
+          inpPw.value = activeDemoAccounts.chair.password;
+          inpPw.type = "password";
+          if (btnTogglePw) btnTogglePw.textContent = "Show";
+        });
+      }
+
+      // Quick-fill other demo accounts with live DB credentials
+      document.querySelectorAll(".btn-role-pill").forEach(btn => {
+        btn.addEventListener("click", () => {
+          inpUser.value = btn.dataset.user;
+          inpPw.value = btn.dataset.pw;
+        });
+      });
+
+      // Submit Login
+      formLogin.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        alertBox.className = "login-alert";
+        alertBox.style.display = "none";
+
+        const username = inpUser.value.trim();
+        const password = inpPw.value;
+
+        try {
+          const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            alertBox.textContent = data.error || "Login failed. Please check your credentials.";
+            alertBox.className = "login-alert error";
+            alertBox.style.display = "block";
+            return;
+          }
+
+          // Check if credentials change is mandatory
+          if (data.must_change_credentials) {
+            document.getElementById("inp-current-password").value = password;
+            document.getElementById("inp-new-username").value = username;
+            modalChangeCred.classList.add("open");
+            return;
+          }
+
+          // Successful login -> Redirect to dashboard
+          window.location.href = "/";
+        } catch (err) {
+          alertBox.textContent = "Network or server error during authentication.";
+          alertBox.className = "login-alert error";
+          alertBox.style.display = "block";
+        }
+      });
+
+      // Change Credentials Submission
+      formChangeCred.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        changeAlert.className = "login-alert";
+        changeAlert.style.display = "none";
+
+        const currentPassword = document.getElementById("inp-current-password").value;
+        const newUsername = document.getElementById("inp-new-username").value.trim();
+        const newPassword = document.getElementById("inp-new-password").value;
+        const confirmPassword = document.getElementById("inp-confirm-password").value;
+
+        if (newPassword !== confirmPassword) {
+          changeAlert.textContent = "New passwords do not match.";
+          changeAlert.className = "login-alert error";
+          changeAlert.style.display = "block";
+          return;
+        }
+
+        try {
+          const res = await fetch("/api/auth/change-credentials", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              current_password: currentPassword,
+              new_username: newUsername,
+              new_password: newPassword
+            })
+          });
+          const data = await res.json();
+
+          if (!res.ok) {
+            changeAlert.textContent = data.error || "Failed to update credentials.";
+            changeAlert.className = "login-alert error";
+            changeAlert.style.display = "block";
+            return;
+          }
+
+          changeAlert.textContent = "Credentials updated successfully! Entering dashboard...";
+          changeAlert.className = "login-alert success";
+          changeAlert.style.display = "block";
+
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 800);
+        } catch (err) {
+          changeAlert.textContent = "Error saving credentials.";
+          changeAlert.className = "login-alert error";
+          changeAlert.style.display = "block";
+        }
+      });
+    });
+  </script>
+</body>
+</html>
