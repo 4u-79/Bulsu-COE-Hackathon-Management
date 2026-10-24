@@ -266,7 +266,7 @@ def find_alternatives(
             Room.room_type == subject.subject_type,
             Room.is_available == True,
         )
-        .order_by(Room.capacity.asc())
+        .order_by(Room.room_code.asc())
         .all()
     )
 

@@ -212,7 +212,6 @@ function renderRoomsTable(rooms) {
       <td><strong>${escapeHtml(r.room_code)}</strong></td>
       <td>${escapeHtml(r.building || 'COE Building')}</td>
       <td><span class="badge badge-${r.room_type}">${r.room_type}</span></td>
-      <td>${r.capacity} seats</td>
       <td>
         <span class="${r.is_available ? "status-dot-active" : "status-dot-inactive"}">
           ${r.is_available ? "Available" : "Maintenance"}
@@ -719,11 +718,6 @@ function buildModalForm(entity, data = null) {
         </select>
       </div>
       <div class="form-field">
-        <label class="form-label" for="inp-capacity">Seating Capacity *</label>
-        <input class="form-input" type="number" id="inp-capacity" name="capacity" min="1" max="500" required placeholder="e.g. 45" value="${data ? data.capacity : "40"}">
-        <span class="form-error" id="err-capacity"></span>
-      </div>
-      <div class="form-field">
         <label class="form-label" for="inp-available">Availability Status</label>
         <select class="form-select" id="inp-available" name="is_available">
           <option value="true" ${!data || data.is_available ? "selected" : ""}>Available</option>
@@ -822,11 +816,6 @@ async function handleModalSubmit() {
   if (currentModalEntity === "rooms") {
     if (!payload.room_code || !payload.room_code.trim()) {
       showFieldError("room_code", "Room code is required.");
-      hasError = true;
-    }
-    const cap = parseInt(payload.capacity);
-    if (isNaN(cap) || cap <= 0) {
-      showFieldError("capacity", "Capacity must be greater than 0.");
       hasError = true;
     }
     payload.is_available = payload.is_available === "true";
@@ -1495,7 +1484,7 @@ function updateRoomAvailabilityBoard() {
                 </div>
                 <span style="background:#EF4444; color:#FFFFFF; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:9999px; text-transform:uppercase;">Occupied</span>
               </div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:4px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:4px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)}</div>
               ${room.booked_by_label ? `<div style="font-size:11.5px; color:#B45309; font-weight:700; margin-bottom:4px;">🏷️ Requested by: ${escapeHtml(room.booked_by_label)}</div>` : ''}
               <div style="font-size:12.5px; font-weight:600; color:var(--sidebar-bg); margin-bottom:8px;">${escapeHtml(s.section_name || 'Section')} • ${escapeHtml(s.faculty_name || 'Faculty')}</div>
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid rgba(0,0,0,0.06); padding-top:6px;">
@@ -1539,7 +1528,7 @@ function updateRoomAvailabilityBoard() {
                 </div>
                 <span style="background:#86EFAC; color:#14532D; font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:9999px; text-transform:uppercase;">AVAILABLE</span>
               </div>
-              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)} • Cap: ${room.capacity}</div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:6px;">${escapeHtml(room.building || 'COE Building')} - ${escapeHtml(room.room_type)}</div>
               ${room.booked_by_label ? `<div style="font-size:11.5px; color:#B45309; font-weight:700; margin-bottom:6px;">🏷️ Requested by: ${escapeHtml(room.booked_by_label)}</div>` : ''}
               <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--text-muted); border-top:1px solid rgba(0,0,0,0.06); padding-top:6px;">
                 <span>${nextBookingText}</span>

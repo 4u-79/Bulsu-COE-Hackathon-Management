@@ -41,12 +41,14 @@ def create_room():
         return jsonify({"error": "Room code is required."}), 400
     if room_type not in {"LECTURE", "LAB"}:
         return jsonify({"error": "Room type must be LECTURE or LAB."}), 400
-    try:
-        capacity = int(capacity)
-        if capacity <= 0:
-            raise ValueError()
-    except (ValueError, TypeError):
-        return jsonify({"error": "Capacity must be an integer greater than 0."}), 400
+    cap_val = 40
+    if capacity is not None and str(capacity).strip() != "":
+        try:
+            parsed_c = int(capacity)
+            if parsed_c > 0:
+                cap_val = parsed_c
+        except (ValueError, TypeError):
+            cap_val = 40
 
     # Check uniqueness
     if Room.query.filter_by(room_code=room_code).first():
@@ -57,7 +59,7 @@ def create_room():
     room = Room(
         room_code=room_code,
         room_type=room_type,
-        capacity=capacity,
+        capacity=cap_val,
         is_available=is_available,
         department=department,
     )

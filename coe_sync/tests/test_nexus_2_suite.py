@@ -160,7 +160,7 @@ class TestNexus2Suite(unittest.TestCase):
                 source_department="MEE",
                 target_department=room.department or "ECE",
                 room_id=room.id,
-                reason="All MEE labs at capacity during TUE morning block.",
+                reason="All MEE labs fully booked during TUE morning block.",
                 alternative_recommendations="['WED 13:00-16:00 Room 204', 'THU 08:00-11:00 Room 202']",
                 status="PENDING_APPROVAL"
             )

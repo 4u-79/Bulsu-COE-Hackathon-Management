@@ -579,11 +579,10 @@ window.renderInterdeptCards = async function () {
 
             <div class="reschedule-details-row" style="margin-top: 6px;">
               <div><strong>Requested Slot:</strong> ${r.day_of_week || 'MON'} ${r.start_time ? r.start_time.slice(0,5) : ''}&ndash;${r.end_time ? r.end_time.slice(0,5) : ''}</div>
-              <div><strong>Capacity Needed:</strong> ${r.capacity_needed || 40} seats</div>
             </div>
 
             <div style="font-size: 12px; background: #F1F5F9; padding: 8px 12px; border-radius: var(--radius-xs); margin-top: 6px;">
-              <strong>Justification:</strong> ${escapeHtml(r.reason || 'Department room overflow capacity')}
+              <strong>Justification:</strong> ${escapeHtml(r.reason || 'Department room allocation overflow')}
             </div>
 
             <!-- AI / Algorithmic Alternative Recommendations -->

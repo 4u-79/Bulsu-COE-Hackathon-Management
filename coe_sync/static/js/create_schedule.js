@@ -298,7 +298,6 @@ document.addEventListener("DOMContentLoaded", () => {
           <span class="room-name">${escapeHtml(roomName)}</span>
           <span class="room-meta">
             <span class="room-type-tag ${isLab ? 'laboratory' : 'lecture'}">${isLab ? 'LAB' : 'LECTURE'}</span>
-            <span>Cap: ${r.capacity}</span>
           </span>
         </div>
       `;
@@ -605,7 +604,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const opt = document.createElement("option");
       opt.value = r.id;
       const tag = isMatch ? " ★ Recommended" : "";
-      opt.textContent = `${r.room_code} (${isLab ? 'Lab' : 'Lecture'} - Cap: ${r.capacity})${tag}`;
+      opt.textContent = `${r.room_code} (${isLab ? 'Lab' : 'Lecture'})${tag}`;
       manualRoom.appendChild(opt);
     });
 
@@ -818,7 +817,7 @@ document.addEventListener("DOMContentLoaded", () => {
      ========================================================================= */
   const steps = [
     { id: "step-analyze", label: "Analyzing classes & curricular requirements...", pct: 20 },
-    { id: "step-rooms", label: "Checking room availability & capacity constraints...", pct: 40 },
+    { id: "step-rooms", label: "Checking room availability & departmental allocation...", pct: 40 },
     { id: "step-faculty", label: "Checking faculty availability & blackout windows...", pct: 60 },
     { id: "step-conflicts", label: "Resolving hard conflicts (HC1–HC6)...", pct: 80 },
     { id: "step-optimize", label: "Optimizing resources & workload balance...", pct: 100 },

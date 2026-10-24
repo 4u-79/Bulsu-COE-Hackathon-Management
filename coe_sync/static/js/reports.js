@@ -271,7 +271,6 @@ document.addEventListener("DOMContentLoaded", () => {
               <span class="meter-name">
                 <span>${this.escapeHtml(r.name)}</span>
                 <span class="badge ${r.room_type === 'LAB' ? 'badge-lab' : 'badge-lecture'}">${r.room_type}</span>
-                <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">(Cap: ${r.capacity})</span>
               </span>
               <span class="meter-detail">
                 <strong>${r.scheduled_hours}h</strong> / ${r.available_hours}h (${r.utilization_rate}%)
@@ -363,7 +362,6 @@ document.addEventListener("DOMContentLoaded", () => {
           <tr>
             <td><strong>${this.escapeHtml(r.name)}</strong></td>
             <td><span class="badge ${r.room_type === 'LAB' ? 'badge-lab' : 'badge-lecture'}">${r.room_type}</span></td>
-            <td>${r.capacity} seats</td>
             <td>${r.scheduled_hours} hrs</td>
             <td>${r.available_hours} hrs</td>
             <td><strong>${r.utilization_rate}%</strong></td>
@@ -418,9 +416,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // 2. Room Utilization Section
       csvContent += "ROOM UTILIZATION MATRIX (Operating Hours: Mon-Sat 7:00 AM - 7:00 PM = 72.0 Hours Max)\n";
-      csvContent += "Room Code,Type,Capacity,Scheduled Hours,Weekly Max Hours,Utilization Rate (%),Classes Count\n";
+      csvContent += "Room Code,Type,Scheduled Hours,Weekly Max Hours,Utilization Rate (%),Classes Count\n";
       this.roomsData.forEach(r => {
-        csvContent += `"${r.name}","${r.room_type}",${r.capacity},${r.scheduled_hours},${r.available_hours},${r.utilization_rate}%,${r.schedule_count}\n`;
+        csvContent += `"${r.name}","${r.room_type}",${r.scheduled_hours},${r.available_hours},${r.utilization_rate}%,${r.schedule_count}\n`;
       });
 
       csvContent += "\n";

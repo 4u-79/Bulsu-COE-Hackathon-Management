@@ -29,8 +29,7 @@ let _activeViewMode  = "WEEK";  // "WEEK" | "DAY"
 let _activeDayIndex  = 3;       // Default Thursday (index 3) to match reference preview
 let _schedules       = [];      // raw API data
 let _editingId       = null;    // null = create, number = update
-let _masterData      = { sections:[], faculty:[], rooms:[], subjects:[] };
-let _radarCategory   = "ALL";   // "ALL" | "ROOM" | "FACULTY" | "SECTION" | "CAPACITY"
+let _radarCategory   = "ALL";   // "ALL" | "ROOM" | "FACULTY" | "SECTION"
 let _allConflicts    = [];      // current detected conflicts
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -442,7 +441,7 @@ function populateModalSelects() {
 
   if (mRoom) mRoom.innerHTML = `<option value="">Select room…</option>` +
     _masterData.rooms.map(r =>
-      `<option value="${r.id}">${escapeHtml(r.room_code)} (cap ${r.capacity})</option>`
+      `<option value="${r.id}">${escapeHtml(r.room_code)} (${escapeHtml(r.room_type)})</option>`
     ).join("");
 }
 
@@ -1246,18 +1245,15 @@ async function runRadarScan() {
       ROOM: conflicts.filter(c => c.type === "room").length,
       FACULTY: conflicts.filter(c => c.type === "faculty").length,
       SECTION: conflicts.filter(c => c.type === "section").length,
-      CAPACITY: conflicts.filter(c => c.type === "capacity").length,
     };
     const cAll = document.getElementById("cat-count-all");
     const cRoom = document.getElementById("cat-count-room");
     const cFac = document.getElementById("cat-count-faculty");
     const cSec = document.getElementById("cat-count-section");
-    const cCap = document.getElementById("cat-count-capacity");
     if (cAll) cAll.textContent = catCounts.ALL;
     if (cRoom) cRoom.textContent = catCounts.ROOM;
     if (cFac) cFac.textContent = catCounts.FACULTY;
     if (cSec) cSec.textContent = catCounts.SECTION;
-    if (cCap) cCap.textContent = catCounts.CAPACITY;
 
     // Filter by active category
     const filtered = _radarCategory === "ALL"
@@ -1334,48 +1330,18 @@ function buildConflictCard(c) {
     room: "🏫",
     faculty: "👨‍🏫",
     section: "🎓",
-    capacity: "👥",
   };
   const typeLabels = {
     room: "Room Double-Booking",
     faculty: "Faculty Overlap",
     section: "Section Collision",
-    capacity: "Capacity Overflow",
   };
 
   const typeIcon  = typeIcons[c.type] || "⚠️";
   const typeLabel = typeLabels[c.type] || "Constraint Violation";
   const isAdmin   = window.CURRENT_ROLE === "CHAIR" || window.CURRENT_ROLE === "ADMIN";
 
-  if (c.type === "capacity") {
-    return `
-      <div class="conflict-card">
-        <div class="conflict-type">
-          <span>${typeIcon} ${typeLabel}</span>
-          <span class="conflict-resource">${escapeHtml(c.resource || "")}</span>
-        </div>
-        <div class="conflict-pair">
-          <div class="conflict-entry" style="flex:1;">
-            <strong>${escapeHtml(c.schedA.subject_code)}</strong>
-            <span>${escapeHtml(c.schedA.section_name)} · ${escapeHtml(c.schedA.faculty_name)} · Room ${escapeHtml(c.schedA.room_code)}</span>
-            <span class="conflict-time">${c.schedA.day_of_week} ${formatTimeTo12(c.schedA.start_time)}–${formatTimeTo12(c.schedA.end_time)}</span>
-          </div>
-        </div>
-        <div class="conflict-actions">
-          ${isAdmin ? `
-            <button class="btn btn-sm btn-outline" onclick="openModal(${c.schedA.id})">Edit #${c.schedA.id}</button>
-            <button class="btn btn-sm btn-conflict-alt alt-apply-btn"
-              data-sched-id="${c.schedA.id}"
-              data-alt="${escapeAttr(JSON.stringify({ subject_id: c.schedA.subject_id, section_id: c.schedA.section_id, faculty_id: c.schedA.faculty_id, room_id: c.schedA.room_id, day_of_week: c.schedA.day_of_week, start_time: c.schedA.start_time, end_time: c.schedA.end_time }))}">
-              🔁 Find Larger Room
-            </button>
-          ` : `
-            <span style="font-size:11px; color:var(--text-muted); font-style:italic;">Read-only (Chair access required to resolve)</span>
-          `}
-        </div>
-      </div>
-    `;
-  }
+
 
   return `
     <div class="conflict-card">
