@@ -151,7 +151,7 @@ def test_minor_subjects_cannot_be_assigned_to_faculty(client):
 
 
 def test_multi_subject_assignment_with_split_and_unassigned_room(client):
-    """Test assigning multiple subjects as teaching qualifications without automatic timetable slots."""
+    """Test assigning multiple subjects with 1.5-hr / 3-hr split preferences to faculty (Part 1 Decoupled)."""
     from models import Section, Room, Schedule, FacultySubject
 
     fac = Faculty(name="Engr. Elena Reyes", email="ereyes@bulsu.edu.ph", program="MEE", max_units=21)
@@ -169,14 +169,15 @@ def test_multi_subject_assignment_with_split_and_unassigned_room(client):
         sess["role"] = "ADMIN"
         sess["active_role"] = "ADMIN"
 
-    # Multi-subject payload assigns subjects faculty can handle (without forcing default schedule date/time/section)
+    # Multi-subject payload with split preference and room_id='none'
     res = client.post(
         f"/api/faculty/{fac.id}/assign-subject",
         json={
             "subjects": [
                 {"subject_id": s_coe.id, "split_preference": "1.5_HOUR_SPLIT"},
                 {"subject_id": s_mee3.id, "split_preference": "3_HOUR_BLOCK"},
-            ]
+            ],
+            "room_id": "none",
         },
     )
     assert res.status_code == 201
@@ -184,15 +185,17 @@ def test_multi_subject_assignment_with_split_and_unassigned_room(client):
     assert body["status"] == "success"
     assert len(body["data"]["assigned_subjects"]) == 2
 
-    # Verify FacultySubject records created and faculty units updated
+    # Verify that assignment does NOT create arbitrary schedule slots (Decoupled Part 1)
+    scheds = Schedule.query.filter_by(faculty_id=fac.id).all()
+    assert len(scheds) == 0
+
+    # Verify FacultySubject records were created
     fs_records = FacultySubject.query.filter_by(faculty_id=fac.id).all()
     assert len(fs_records) == 2
     assigned_sub_ids = {fs.subject_id for fs in fs_records}
-    assert assigned_sub_ids == {s_coe.id, s_mee3.id}
+    assert s_coe.id in assigned_sub_ids
+    assert s_mee3.id in assigned_sub_ids
 
-    # Verify that assigning subjects does NOT automatically create a date schedule/slot by default
-    scheds = Schedule.query.filter_by(faculty_id=fac.id).all()
-    assert len(scheds) == 0
 
 
 def test_lab_subgroup_g1_g2_dual_schedules_and_concurrency(client):
@@ -252,5 +255,147 @@ def test_lab_subgroup_g1_g2_dual_schedules_and_concurrency(client):
     s_g2 = Schedule.query.filter_by(section_id=sec.id, sub_group="G2").first()
     check_result = validate_schedule_slot(g2_candidate, exclude_schedule_id=s_g2.id)
     assert check_result["valid"] is True, f"Expected valid, got conflicts: {check_result.get('conflicts')}"
+
+
+def test_smart_scheduler_sets_tba_for_unassigned_and_retains_assigned_faculty(client):
+    """Part 2 Test: Smart Schedule schedules subjects without assigned professors as TBA (faculty_id=None)."""
+    from services.scheduler import run_smart_scheduler
+    from models import Section, Room, Schedule, FacultySubject
+
+    sec = Section(name="TEST-SEC-1", program="CE", year_level=1)
+    rm = Room(room_code="RM-TEST-1", room_type="LECTURE", capacity=40, is_available=True)
+    fac = Faculty(name="Engr. Preassigned Prof", email="preassigned@bulsu.edu.ph", program="CE", max_units=21)
+
+    s_pre = Subject(code="CE 101", title="Civil Eng 101", program="CE", year_level=1, semester=1, units=3, hours_per_week=3, subject_type="LECTURE")
+    s_unassigned = Subject(code="CE 102", title="Civil Eng 102", program="CE", year_level=1, semester=1, units=3, hours_per_week=3, subject_type="LECTURE")
+
+    db.session.add_all([sec, rm, fac, s_pre, s_unassigned])
+    db.session.commit()
+
+    # Pre-assign fac to s_pre via FacultySubject
+    fs = FacultySubject(faculty_id=fac.id, subject_id=s_pre.id)
+    s_pre.assigned_faculty_id = fac.id
+    db.session.add(fs)
+    db.session.commit()
+
+    # Run smart scheduler for this section and rooms
+    config = {
+        "program": "CE",
+        "semester": 1,
+        "academic_year": "2026-2027",
+        "section_ids": [sec.id],
+        "room_ids": [rm.id],
+    }
+    result = run_smart_scheduler(config)
+    assert result.get("placed_count", 0) >= 2 or result.get("metrics", {}).get("classes_scheduled", 0) >= 2
+
+    # Verify s_pre has faculty_id == fac.id
+    sched_pre = Schedule.query.filter_by(section_id=sec.id, subject_id=s_pre.id).first()
+    assert sched_pre is not None
+    assert sched_pre.faculty_id == fac.id
+    assert sched_pre.is_tba is False
+
+    # Verify s_unassigned has faculty_id == None (TBA)
+    sched_unassigned = Schedule.query.filter_by(section_id=sec.id, subject_id=s_unassigned.id).first()
+    assert sched_unassigned is not None
+    assert sched_unassigned.faculty_id is None
+    assert sched_unassigned.is_tba is True
+    assert sched_unassigned.to_dict()["instructor_name"] == "TBA"
+
+
+def test_quick_assign_faculty_to_tba_schedule(client):
+    """Part 2 Test: Quick Assign professor to a TBA schedule via POST /api/schedules/<id>/assign-faculty."""
+    import datetime
+    from models import Section, Room, Schedule
+
+    sec = Section(name="TEST-SEC-2", program="EE", year_level=1)
+    rm = Room(room_code="RM-EE-1", room_type="LECTURE", capacity=40, is_available=True)
+    fac = Faculty(name="Engr. Quick Assignee", email="quickassign@bulsu.edu.ph", program="EE", max_units=21)
+    sub = Subject(code="EE 101", title="Electrical 101", program="EE", year_level=1, semester=1, units=3, hours_per_week=3, subject_type="LECTURE")
+    admin_user = User(username="admin_quick", role="ADMIN")
+    admin_user.set_password("Admin@123")
+
+    db.session.add_all([sec, rm, fac, sub, admin_user])
+    db.session.commit()
+
+    # Create a schedule with faculty_id = None (TBA)
+    tba_sched = Schedule(
+        section_id=sec.id,
+        room_id=rm.id,
+        subject_id=sub.id,
+        faculty_id=None,
+        day_of_week="MON",
+        start_time=datetime.time(9, 0),
+        end_time=datetime.time(12, 0),
+        academic_year="2026-2027",
+        semester=1,
+    )
+    db.session.add(tba_sched)
+    db.session.commit()
+    assert tba_sched.is_tba is True
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_user.id
+        sess["role"] = "ADMIN"
+        sess["active_role"] = "ADMIN"
+
+    res = client.post(
+        f"/api/schedules/{tba_sched.id}/assign-faculty",
+        json={"faculty_id": fac.id, "allow_override": False},
+    )
+    assert res.status_code == 200
+    data = res.get_json()["data"]
+    assert data["faculty_id"] == fac.id
+    assert data["faculty_name"] == fac.name
+    assert data["is_tba"] is False
+
+
+def test_academic_year_filtering_and_normalization(client):
+    """Part 3 Test: Academic Year filter handles both '2026-2027' and 'AY 2026-2027'."""
+    import datetime
+    from models import Section, Room, Schedule
+
+    sec = Section(name="TEST-SEC-AY", program="CPE", year_level=1)
+    rm = Room(room_code="RM-CPE-AY", room_type="LECTURE", capacity=40, is_available=True)
+    sub = Subject(code="CPE 101", title="Computer Eng 101", program="CPE", year_level=1, semester=1, units=3, hours_per_week=3, subject_type="LECTURE")
+    admin_user = User(username="admin_ay", role="ADMIN")
+    admin_user.set_password("Admin@123")
+
+    db.session.add_all([sec, rm, sub, admin_user])
+    db.session.commit()
+
+    sched = Schedule(
+        section_id=sec.id,
+        room_id=rm.id,
+        subject_id=sub.id,
+        faculty_id=None,
+        day_of_week="WED",
+        start_time=datetime.time(13, 0),
+        end_time=datetime.time(16, 0),
+        academic_year="2026-2027",
+        semester=1,
+    )
+    db.session.add(sched)
+    db.session.commit()
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_user.id
+        sess["role"] = "ADMIN"
+        sess["active_role"] = "ADMIN"
+
+    # 1. Query with exact canonical "2026-2027"
+    res1 = client.get(f"/api/schedules?academic_year=2026-2027&section_id={sec.id}")
+    assert res1.status_code == 200
+    data1 = res1.get_json()["data"]
+    assert len(data1) == 1
+    assert data1[0]["id"] == sched.id
+
+    # 2. Query with "AY 2026-2027"
+    res2 = client.get(f"/api/schedules?academic_year=AY 2026-2027&section_id={sec.id}")
+    assert res2.status_code == 200
+    data2 = res2.get_json()["data"]
+    assert len(data2) == 1
+    assert data2[0]["id"] == sched.id
+
 
 

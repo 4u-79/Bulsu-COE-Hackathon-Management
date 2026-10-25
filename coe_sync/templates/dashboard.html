@@ -59,6 +59,14 @@
 
 <!-- Conflict Radar Summary Table -->
 <section class="card-section" aria-label="Conflict Radar" style="margin-bottom: 24px;">
+  <!-- TBA Unassigned Instructors Alert Row -->
+  <div id="dash-tba-alert-row" style="display:none; margin-bottom: 16px; background: #FEF3C7; border: 1px solid #F59E0B; border-left: 4px solid #D97706; border-radius: 8px; padding: 10px 16px; font-size: 13px; color: #92400E;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <span>⚠️ <strong>Unassigned Instructors:</strong> <span id="dash-tba-count" style="font-weight:800;">0</span> scheduled classes currently have no assigned professor (TBA).</span>
+      <a href="/schedules" class="btn btn-sm" style="background:#D97706; color:#FFF; font-weight:700; text-decoration:none; padding:4px 12px; border-radius:6px; font-size:11.5px;">View / Assign in Schedules</a>
+    </div>
+  </div>
+
   <div class="card-header-flex">
     <div>
       <h3 class="card-title" style="margin-bottom: 2px;">Conflict Radar</h3>

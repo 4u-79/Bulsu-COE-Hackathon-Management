@@ -19,6 +19,7 @@ from models import (
     Room,
     FacultyAvailability,
     AuditLog,
+    FacultySubject,
 )
 from services.conflict_detector import (
     validate_schedule_slot,
@@ -177,19 +178,43 @@ def get_schedules():
                 (Subject.code.ilike(search_str)) | (Subject.title.ilike(search_str))
             )
 
-    semester = request.args.get("semester", type=int)
-    if semester:
-        query = query.filter(Schedule.subject.has(Subject.semester == semester))
+    # Academic Year filter (normalized canonical format e.g. '2026-2027')
+    raw_ay = request.args.get("academic_year")
+    if raw_ay and raw_ay.strip().upper() not in ("ALL", ""):
+        norm_ay = raw_ay.replace("AY", "").replace("–", "-").replace("—", "-").strip()
+        query = query.filter(
+            db.or_(
+                Schedule.academic_year == norm_ay,
+                Schedule.academic_year == f"AY {norm_ay}",
+                Schedule.academic_year == raw_ay.strip(),
+            )
+        )
+
+    semester = request.args.get("semester")
+    if semester and str(semester).strip().upper() not in ("ALL", ""):
+        try:
+            sem_int = int(semester)
+            query = query.filter(
+                db.or_(
+                    Schedule.semester == sem_int,
+                    Schedule.subject.has(Subject.semester == sem_int),
+                )
+            )
+        except (ValueError, TypeError):
+            pass
 
     schedules = query.order_by(
         Schedule.day_of_week.asc(), Schedule.start_time.asc()
     ).all()
+
+    tba_count = sum(1 for s in schedules if s.faculty_id is None)
 
     return (
         jsonify(
             {
                 "status": "success",
                 "count": len(schedules),
+                "tba_count": tba_count,
                 "data": [s.to_dict() for s in schedules],
             }
         ),
@@ -267,10 +292,11 @@ def create_schedule():
     POST /api/schedules
     Protected endpoint: CHAIR and ADMIN only.
     Validates Hard Constraints; returns HTTP 409 with alternatives on conflict.
+    Faculty is explicitly optional/nullable to allow TBA slots.
     """
     payload = request.get_json(silent=True) or {}
 
-    # Validate required parameters (room_id and faculty_id can be null/empty for unassigned / TBA)
+    # Validate required parameters (room_id and faculty_id are nullable)
     required_fields = [
         "subject_id",
         "section_id",
@@ -287,11 +313,23 @@ def create_schedule():
             400,
         )
 
-    # Normalize room_id and faculty_id
+    # Normalize faculty_id
+    raw_fac = payload.get("faculty_id")
+    faculty_id = None
+    if raw_fac is not None and str(raw_fac).strip() not in ("", "0", "none", "null", "None", "TBA", "undefined"):
+        try:
+            faculty_id = int(raw_fac)
+        except (ValueError, TypeError):
+            faculty_id = None
+
+    # Normalize room_id
     raw_room_id = payload.get("room_id")
     room_id = int(raw_room_id) if (raw_room_id is not None and str(raw_room_id).isdigit() and int(raw_room_id) > 0) else None
-    raw_fac_id = payload.get("faculty_id")
-    faculty_id = int(raw_fac_id) if (raw_fac_id is not None and str(raw_fac_id).isdigit() and int(raw_fac_id) > 0) else None
+
+    # Normalize academic year & semester
+    raw_ay = payload.get("academic_year") or "2026-2027"
+    sched_ay = str(raw_ay).replace("AY", "").replace("–", "-").replace("—", "-").strip() if raw_ay else "2026-2027"
+    sched_sem = int(payload.get("semester", 1)) if payload.get("semester") else 1
 
     # Validate temporal ordering
     try:
@@ -315,9 +353,12 @@ def create_schedule():
     sub_group = str(raw_sub_group).strip().upper() if raw_sub_group in ("G1", "G2") else None
 
     # Execute Hard Constraint validation
-    validation = validate_schedule_slot(payload)
+    validation_payload = dict(payload)
+    validation_payload["faculty_id"] = faculty_id
+    validation_payload["room_id"] = room_id
+    validation = validate_schedule_slot(validation_payload)
     if not validation["valid"]:
-        suggestions = find_alternatives(payload)
+        suggestions = find_alternatives(validation_payload)
         return (
             jsonify(
                 {
@@ -355,24 +396,27 @@ def create_schedule():
                 status=status_val,
                 split_preference=split_pref,
                 sub_group=grp,
+                academic_year=sched_ay,
+                semester=sched_sem,
             )
             db.session.add(new_schedule)
             created_schedules.append(new_schedule)
 
         db.session.flush()
 
-        # Update faculty current units if faculty was assigned
+        # Update faculty current units if faculty assigned
         if faculty_id:
             recalculate_faculty_units(faculty_id)
 
         # Audit Log
+        fac_name = created_schedules[0].faculty.name if created_schedules[0].faculty else "TBA"
         user_id = session.get("user_id")
         audit = AuditLog(
             user_id=user_id,
             action="SCHEDULE_CREATED",
             details=(
                 f"Created schedule(s) for {created_schedules[0].subject.code} "
-                f"({created_schedules[0].section.name}) with {created_schedules[0].faculty.name} "
+                f"({created_schedules[0].section.name}) with {fac_name} "
                 f"on {created_schedules[0].day_of_week} {st.strftime('%H:%M')}-{et.strftime('%H:%M')}."
             ),
         )
@@ -428,15 +472,27 @@ def update_schedule(schedule_id: int):
 
     payload = request.get_json(silent=True) or {}
 
+    raw_fac = payload.get("faculty_id", schedule.faculty_id)
+    new_faculty_id = None
+    if raw_fac is not None and str(raw_fac).strip() not in ("", "0", "none", "null", "None", "TBA", "undefined"):
+        try:
+            new_faculty_id = int(raw_fac)
+        except (ValueError, TypeError):
+            new_faculty_id = None
+
+    raw_room = payload.get("room_id", schedule.room_id)
+    new_room_id = int(raw_room) if (raw_room is not None and str(raw_room).isdigit() and int(raw_room) > 0) else None
+
     # Merge existing fields with incoming updates
     merged_data = {
         "subject_id": payload.get("subject_id", schedule.subject_id),
         "section_id": payload.get("section_id", schedule.section_id),
-        "faculty_id": payload.get("faculty_id", schedule.faculty_id),
-        "room_id": payload.get("room_id", schedule.room_id),
+        "faculty_id": new_faculty_id,
+        "room_id": new_room_id,
         "day_of_week": payload.get("day_of_week", schedule.day_of_week),
         "start_time": payload.get("start_time", schedule.start_time),
         "end_time": payload.get("end_time", schedule.end_time),
+        "sub_group": payload.get("sub_group", schedule.sub_group),
     }
 
     try:
@@ -481,13 +537,21 @@ def update_schedule(schedule_id: int):
     # Update attributes
     schedule.subject_id = int(merged_data["subject_id"])
     schedule.section_id = int(merged_data["section_id"])
-    raw_fac = merged_data.get("faculty_id")
-    schedule.faculty_id = int(raw_fac) if (raw_fac is not None and str(raw_fac).isdigit() and int(raw_fac) > 0) else None
-    raw_rm = merged_data.get("room_id")
-    schedule.room_id = int(raw_rm) if (raw_rm is not None and str(raw_rm).isdigit() and int(raw_rm) > 0) else None
+    schedule.faculty_id = new_faculty_id
+    schedule.room_id = new_room_id
     schedule.day_of_week = str(merged_data["day_of_week"]).strip().upper()
     schedule.start_time = st
     schedule.end_time = et
+
+    if "academic_year" in payload:
+        raw_ay = payload["academic_year"]
+        schedule.academic_year = str(raw_ay).replace("AY", "").replace("–", "-").replace("—", "-").strip() if raw_ay else "2026-2027"
+
+    if "semester" in payload and payload["semester"]:
+        try:
+            schedule.semester = int(payload["semester"])
+        except (ValueError, TypeError):
+            pass
 
     if "status" in payload:
         new_status = payload["status"].strip().upper()
@@ -526,6 +590,84 @@ def update_schedule(schedule_id: int):
         ),
         200,
     )
+
+
+@schedules_bp.route("/schedules/<int:schedule_id>/assign-faculty", methods=["POST"])
+@require_roles("CHAIR", "ADMIN")
+def assign_faculty_to_schedule(schedule_id: int):
+    """
+    POST /api/schedules/<id>/assign-faculty
+    Directly assigns a faculty member to a specific schedule slot (e.g. resolving a TBA slot).
+    Validates hard conflicts with the faculty member's existing commitments.
+    Syncs Subject capability (FacultySubject) if not already associated.
+    """
+    schedule = db.session.get(Schedule, schedule_id)
+    if not schedule:
+        return jsonify({"error": f"Schedule #{schedule_id} not found."}), 404
+
+    payload = request.get_json(silent=True) or {}
+    raw_faculty_id = payload.get("faculty_id")
+    if not raw_faculty_id:
+        return jsonify({"error": "faculty_id is required."}), 400
+
+    faculty = db.session.get(Faculty, int(raw_faculty_id))
+    if not faculty:
+        return jsonify({"error": f"Faculty #{raw_faculty_id} not found."}), 404
+
+    # Validate slot conflict for this faculty
+    candidate = {
+        "subject_id": schedule.subject_id,
+        "section_id": schedule.section_id,
+        "faculty_id": faculty.id,
+        "room_id": schedule.room_id,
+        "day_of_week": schedule.day_of_week,
+        "start_time": schedule.start_time.strftime("%H:%M:%S") if schedule.start_time else "08:00:00",
+        "end_time": schedule.end_time.strftime("%H:%M:%S") if schedule.end_time else "09:30:00",
+        "sub_group": schedule.sub_group,
+    }
+    validation = validate_schedule_slot(candidate, exclude_schedule_id=schedule.id)
+    if not validation["valid"]:
+        return jsonify({
+            "error": "Faculty schedule conflict detected.",
+            "conflicts": validation["conflicts"],
+            "suggestions": find_alternatives(candidate, exclude_schedule_id=schedule.id),
+        }), 409
+
+    old_fac_id = schedule.faculty_id
+    schedule.faculty_id = faculty.id
+
+    # Also link FacultySubject capability if not existing
+    fs = FacultySubject.query.filter_by(faculty_id=faculty.id, subject_id=schedule.subject_id).first()
+    if not fs:
+        db.session.add(FacultySubject(faculty_id=faculty.id, subject_id=schedule.subject_id))
+
+    # Also set Subject.assigned_faculty_id if empty
+    if schedule.subject and not schedule.subject.assigned_faculty_id:
+        schedule.subject.assigned_faculty_id = faculty.id
+
+    db.session.flush()
+
+    recalculate_faculty_units(faculty.id)
+    if old_fac_id and old_fac_id != faculty.id:
+        recalculate_faculty_units(old_fac_id)
+
+    # Count remaining TBA schedules
+    tba_count = Schedule.query.filter(Schedule.faculty_id == None).count()
+
+    audit = AuditLog(
+        user_id=session.get("user_id"),
+        action="SCHEDULE_FACULTY_ASSIGNED",
+        details=f"Assigned {faculty.name} to schedule #{schedule.id} ({schedule.subject.code}).",
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Successfully assigned {faculty.name} to {schedule.subject.code}.",
+        "data": schedule.to_dict(),
+        "tba_count": tba_count,
+    }), 200
 
 
 @schedules_bp.route("/schedules/<int:schedule_id>/drag-move", methods=["POST"])
@@ -849,29 +991,21 @@ def generate_draft_schedules():
                 })
                 continue
 
-            # Find candidate faculty with matching program and remaining unit capacity
-            valid_fac = [
-                f for f in faculty_list
-                if (
-                    not f.program
-                    or not sec.program
-                    or normalize_prog_code(f.program) == sec_p
-                    or normalize_prog_code(f.program) in ("GEN", "ALL", "COMMON", "COE")
-                )
-                and (faculty_units_map.get(f.id, 0) + sub.units <= f.max_units)
-            ]
-            if not valid_fac:
-                valid_fac = [
-                    f for f in faculty_list
-                    if (
-                        not f.program
-                        or not sec.program
-                        or normalize_prog_code(f.program) == sec_p
-                        or normalize_prog_code(f.program) in ("GEN", "ALL", "COMMON", "COE")
-                    )
-                ]
-            if not valid_fac:
-                valid_fac = faculty_list  # Fallback to avoid deadlocks
+            # Resolve Faculty assignment: pre-assigned faculty only, or None (TBA)
+            assigned_faculty_id = None
+            if sub.assigned_faculty_id:
+                assigned_faculty_id = sub.assigned_faculty_id
+            elif hasattr(sub, "subject_faculties") and sub.subject_faculties:
+                for sf in sub.subject_faculties:
+                    if sf.faculty_id:
+                        assigned_faculty_id = sf.faculty_id
+                        break
+            if not assigned_faculty_id:
+                fs_rec = FacultySubject.query.filter_by(subject_id=sub.id).first()
+                if fs_rec:
+                    assigned_faculty_id = fs_rec.faculty_id
+
+            assigned_fac = db.session.get(Faculty, assigned_faculty_id) if assigned_faculty_id else None
 
             slot_assigned = False
 
@@ -884,26 +1018,32 @@ def generate_draft_schedules():
                 if not free_room:
                     continue
 
-                free_fac = next((f for f in valid_fac if (f.id, day, idx) not in busy_faculty and (f.id, day, idx) not in blackout_faculty), None)
-                if not free_fac:
-                    continue
+                free_fac = None
+                if assigned_fac:
+                    if (assigned_fac.id, day, idx) not in busy_faculty and (assigned_fac.id, day, idx) not in blackout_faculty:
+                        free_fac = assigned_fac
+                    else:
+                        continue
 
                 new_sched = Schedule(
                     subject_id=sub.id,
                     section_id=sec.id,
-                    faculty_id=free_fac.id,
+                    faculty_id=free_fac.id if free_fac else None,
                     room_id=free_room.id,
                     day_of_week=day,
                     start_time=st,
                     end_time=et,
                     status="DRAFT",
+                    academic_year="2026-2027",
+                    semester=sub.semester or 1,
                 )
                 db.session.add(new_sched)
                 current_schedules.append(new_sched)
                 busy_sections.add((sec.id, day, idx))
                 busy_rooms.add((free_room.id, day, idx))
-                busy_faculty.add((free_fac.id, day, idx))
-                faculty_units_map[free_fac.id] = faculty_units_map.get(free_fac.id, 0) + sub.units
+                if free_fac:
+                    busy_faculty.add((free_fac.id, day, idx))
+                    faculty_units_map[free_fac.id] = faculty_units_map.get(free_fac.id, 0) + sub.units
                 placed.append(new_sched)
                 slot_assigned = True
                 break

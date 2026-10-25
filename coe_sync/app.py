@@ -24,6 +24,7 @@ from models import (
     AuditLog,
     Conflict,
     RescheduleRequest,
+    FacultySubject,
 )
 from routes.auth import (
     auth_bp,
@@ -90,12 +91,6 @@ def create_app(config_name=None):
         supports_credentials=True,
     )
     db.init_app(app)
-
-    with app.app_context():
-        try:
-            db.create_all()
-        except Exception:
-            pass
 
     # -------------------------------------------------------------
     # Register Modular Blueprints
@@ -490,7 +485,70 @@ def create_app(config_name=None):
             200,
         )
 
+    # Startup canonical data normalization
+    normalize_database_academic_years(app)
+
     return app
+
+
+def normalize_database_academic_years(app):
+    """
+    Startup data-normalization helper:
+    1. Ensures all tables (including faculty_subject) are created.
+    2. Strips leading 'AY ' from Schedule.academic_year (converting 'AY 2026-2027' -> '2026-2027').
+    3. Removes exact duplicate schedule rows cleanly.
+    4. Backfills FacultySubject records from any existing schedules.
+    """
+    with app.app_context():
+        try:
+            db.create_all()
+            schedules = Schedule.query.all()
+            seen_slots = set()
+            duplicates_to_delete = []
+
+            for s in schedules:
+                if s.academic_year and ("AY" in s.academic_year or "–" in s.academic_year or "—" in s.academic_year):
+                    cleaned_ay = s.academic_year.replace("AY", "").replace("–", "-").replace("—", "-").strip()
+                    s.academic_year = cleaned_ay or "2026-2027"
+                elif not s.academic_year:
+                    s.academic_year = "2026-2027"
+
+                if not s.semester:
+                    s.semester = 1
+
+                # Exact duplicate detection key
+                key = (
+                    s.subject_id,
+                    s.section_id,
+                    s.faculty_id,
+                    s.room_id,
+                    s.day_of_week,
+                    str(s.start_time),
+                    str(s.end_time),
+                    s.sub_group,
+                    s.academic_year,
+                    s.semester,
+                )
+                if key in seen_slots:
+                    duplicates_to_delete.append(s)
+                else:
+                    seen_slots.add(key)
+
+                # Backfill FacultySubject if schedule has faculty
+                if s.faculty_id and s.subject_id:
+                    exists = FacultySubject.query.filter_by(faculty_id=s.faculty_id, subject_id=s.subject_id).first()
+                    if not exists:
+                        db.session.add(FacultySubject(faculty_id=s.faculty_id, subject_id=s.subject_id))
+                    if s.subject and not s.subject.assigned_faculty_id:
+                        s.subject.assigned_faculty_id = s.faculty_id
+
+            for dup in duplicates_to_delete:
+                db.session.delete(dup)
+
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"[COE SYNC 2026] Warning during academic year normalization: {e}")
 
 
 # Application instance for WSGI servers / flask run

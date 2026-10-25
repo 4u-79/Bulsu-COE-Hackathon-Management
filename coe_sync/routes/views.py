@@ -78,17 +78,7 @@ def manage():
     )
 
 
-@views_bp.route("/settings")
-@login_required
-def settings():
-    """Render NEXUS Settings console."""
-    return render_template(
-        "settings.html",
-        active_page="settings",
-        active_role=get_effective_role(),
-        current_username=session.get("username") or "admin",
-        must_change_credentials=session.get("must_change_credentials", False),
-    )
+
 
 
 @views_bp.route("/rooms")

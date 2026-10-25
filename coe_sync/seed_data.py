@@ -266,6 +266,26 @@ def seed_database(app=None, stage_demo_schedules: bool = False):
                 )
             )
 
+        # Ingest rooms from data-final.sql if present
+        if "rooms" in dump_data and dump_data["rooms"]:
+            existing_room_codes = {r.room_code for r in rooms}
+            for rd in dump_data["rooms"]:
+                rcode = rd["room_code"]
+                if rcode not in existing_room_codes:
+                    existing_room_codes.add(rcode)
+                    rooms.append(
+                        Room(
+                            room_code=rcode,
+                            room_type=rd.get("room_type", "LECTURE"),
+                            capacity=rd.get("capacity", 45),
+                            building=rd.get("building", "College of Engineering"),
+                            equipment=rd.get("equipment", "Standard Classroom Amenities"),
+                            is_available=True,
+                            department=rd.get("department", "GEN"),
+                            booked_by_label=None,
+                        )
+                    )
+
         db.session.add_all(rooms)
         db.session.flush()
 

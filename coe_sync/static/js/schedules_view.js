@@ -537,7 +537,7 @@ function populateModalSelects() {
 
   if (mFac) {
     const prev = mFac.value;
-    mFac.innerHTML = `<option value="">TBA — No Professor Assigned</option>` +
+    mFac.innerHTML = `<option value="">Select faculty…</option>` +
       (_masterData.faculty || []).map(f =>
         `<option value="${f.id}">${escapeHtml(f.name || "")}</option>`
       ).join("");
@@ -677,6 +677,7 @@ async function fetchLiveUtilization() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchAndRender() {
   const params = {};
+  const ayVal    = document.getElementById("filter-academic-year")?.value || "2026-2027";
   const secVal   = document.getElementById("filter-section")?.value;
   const facVal   = document.getElementById("filter-faculty")?.value;
   const roomVal  = document.getElementById("filter-room")?.value;
@@ -685,12 +686,19 @@ async function fetchAndRender() {
   const statVal  = document.getElementById("filter-status")?.value;
   const termVal  = document.getElementById("filter-term")?.value || localStorage.getItem("coe_sync_active_term") || "1";
 
+  const normAy = ayVal ? String(ayVal).replace("AY", "").replace("–", "-").replace("—", "-").trim() : "2026-2027";
+  if (normAy)  params.academic_year = normAy;
   if (secVal)  params.section_id = secVal;
   if (facVal)  params.faculty_id = facVal;
   if (roomVal) params.room_id    = roomVal;
   if (progVal) params.program    = progVal;
   if (yearVal) params.year_level = yearVal;
   if (termVal) params.semester   = parseInt(termVal, 10);
+
+  const chairTermPill = document.getElementById("chair-term-display");
+  if (chairTermPill) {
+    chairTermPill.innerHTML = `AY ${normAy} · Term ${termVal} <span style="font-size: 10px; margin-left: 4px;">▾</span>`;
+  }
 
   if (window.CURRENT_ROLE === "STUDENT") {
     const studentSecId = window.CURRENT_REF_ID || secVal;
@@ -775,6 +783,7 @@ async function fetchAndRender() {
     renderEventCards(visible);
     updateRadarBadge(_schedules);
     updateRoleSpecificPortals(_schedules);
+    updateTbaBanner(_schedules);
   } catch (err) {
     console.warn("Schedule fetch error:", err);
   }
@@ -948,9 +957,11 @@ function buildEventCard(s) {
   const heightPx  = Math.max(28, durationMinutes * PIXELS_PER_MINUTE - 4);
 
   const isConflict = s.has_conflict;
+  const isTba      = !s.faculty_id || s.is_tba || s.faculty_name === "TBA";
   const catClass   = getSubjectCategoryClass(s);
   const isDraft    = (s.status || "").toUpperCase() === "DRAFT";
   const cardClass  = isConflict ? `event-card-v2 ev-conflict ${catClass}`
+                   : isTba ? `event-card-v2 ev-tba ${catClass}`
                    : isDraft ? `event-card-v2 ev-draft ${catClass}`
                    : `event-card-v2 ev-published ${catClass}`;
 
@@ -973,16 +984,18 @@ function buildEventCard(s) {
 
   card.innerHTML = `
     <div class="ev-body" style="position: relative; width: 100%; height: 100%;">
-      ${isDraft ? `<span class="ev-badge-draft">DRAFT</span>` : `<span class="ev-badge-published">✓</span>`}
+      ${isDraft ? `<span class="ev-badge-draft">DRAFT</span>` : isTba ? `<span class="ev-badge-tba">TBA</span>` : `<span class="ev-badge-published">✓</span>`}
       <div class="ev-title" style="padding-right: 32px; font-weight: 700; line-height: 1.2;">${escapeHtml(displayTitle)}</div>
       ${!isShort ? `
         <div class="ev-meta" style="font-weight: 600;">${escapeHtml(s.section_name || "—")}</div>
-        <div class="ev-meta ev-faculty" style="opacity: 0.9;">
-          ${(!s.faculty_id || s.faculty_name === "TBA" || s.has_no_faculty)
-            ? `<span class="badge-tba-alert" style="background: #FEF3C7; color: #92400E; font-weight: 800; padding: 1px 6px; border-radius: 4px; font-size: 9.5px; border: 1px solid #FCD34D; display: inline-flex; align-items: center; gap: 3px;">⚠️ TBA • No Prof Assigned</span>`
-            : escapeHtml(s.faculty_name || "—")
-          }
-        </div>
+        ${isTba ? `
+          <div class="ev-meta ev-faculty" style="color: #D97706; font-weight: 800; display: flex; align-items: center; justify-content: space-between; gap: 4px; flex-wrap: wrap;">
+            <span>Prof: TBA ⚠️ Unassigned</span>
+            ${isAdmin ? `<button type="button" class="btn-quick-assign-prof" onclick="event.stopPropagation(); openQuickAssignModal(${s.id});" style="background: #D97706; color: #FFF; border: none; border-radius: 4px; padding: 1px 6px; font-size: 9.5px; font-weight: 700; cursor: pointer;" title="Assign Instructor to this slot">+ Assign</button>` : ''}
+          </div>
+        ` : `
+          <div class="ev-meta ev-faculty" style="opacity: 0.9;">${escapeHtml(s.faculty_name || "—")}</div>
+        `}
         <div class="ev-meta" style="font-size: 9.5px; opacity: 0.85;">${escapeHtml(s.room_code || "—")}</div>
       ` : ""}
       ${isConflict ? `<div class="ev-conflict-badge">⚠ Conflict</div>` : ""}
@@ -1103,9 +1116,11 @@ function buildDayEventCard(s) {
   const heightPx  = Math.max(36, durationMinutes * PIXELS_PER_MINUTE - 4);
 
   const isConflict = s.has_conflict;
+  const isTba      = !s.faculty_id || s.is_tba || s.faculty_name === "TBA";
   const catClass   = getSubjectCategoryClass(s);
   const isDraft    = (s.status || "").toUpperCase() === "DRAFT";
   const cardClass  = isConflict ? `event-card-day ev-conflict ${catClass}`
+                   : isTba ? `event-card-day ev-tba ${catClass}`
                    : isDraft ? `event-card-day ev-draft ${catClass}`
                    : `event-card-day ev-published ${catClass}`;
 
@@ -1130,15 +1145,17 @@ function buildDayEventCard(s) {
   card.innerHTML = `
     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
       <div class="day-card-title" style="font-weight: 700;">${escapeHtml(displayTitle)}</div>
-      ${isDraft ? `<span class="ev-badge-draft">DRAFT</span>` : `<span class="ev-badge-published">✓ Published</span>`}
+      ${isDraft ? `<span class="ev-badge-draft">DRAFT</span>` : isTba ? `<span class="ev-badge-tba">TBA</span>` : `<span class="ev-badge-published">✓ Published</span>`}
     </div>
     <div class="day-card-section" style="font-weight: 600; margin-top: 2px;">${escapeHtml(s.section_name || "—")} · Room ${escapeHtml(s.room_code || "—")}</div>
-    <div class="day-card-faculty" style="opacity: 0.9; margin-top: 1px;">
-      ${(!s.faculty_id || s.faculty_name === "TBA" || s.has_no_faculty)
-        ? `<span class="badge-tba-alert" style="background: #FEF3C7; color: #92400E; font-weight: 800; padding: 2px 7px; border-radius: 4px; font-size: 10px; border: 1px solid #FCD34D; display: inline-flex; align-items: center; gap: 4px;">⚠️ TBA • No Prof Assigned</span>`
-        : escapeHtml(s.faculty_name || "—")
-      }
-    </div>
+    ${isTba ? `
+      <div class="day-card-faculty" style="color: #D97706; font-weight: 800; margin-top: 1px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+        <span>Prof: TBA ⚠️ Unassigned</span>
+        ${isAdmin ? `<button type="button" class="btn-quick-assign-prof" onclick="event.stopPropagation(); openQuickAssignModal(${s.id});" style="background: #D97706; color: #FFF; border: none; border-radius: 4px; padding: 2px 8px; font-size: 10px; font-weight: 700; cursor: pointer;" title="Assign Instructor to this slot">+ Assign</button>` : ''}
+      </div>
+    ` : `
+      <div class="day-card-faculty" style="opacity: 0.9; margin-top: 1px;">${escapeHtml(s.faculty_name || "—")}</div>
+    `}
     <div class="day-card-time" style="font-size: 11px; margin-top: 2px;">${formatTimeRange(s.start_time, s.end_time)}</div>
     ${isConflict ? `<div class="ev-conflict-badge" style="margin-top: 4px;">⚠ Conflict Detected</div>` : ""}
   `;
@@ -1569,13 +1586,13 @@ function detectConflictsLocally(schedules) {
       if (aStart >= bEnd || bStart >= aEnd) continue;
 
       // Check hard constraints
-      if (a.room_id && b.room_id && a.room_id === b.room_id) {
+      if (a.room_id === b.room_id) {
         conflicts.push({ type: "room", resource: a.room_code, schedA: a, schedB: b });
       }
-      if (a.faculty_id && b.faculty_id && a.faculty_id === b.faculty_id) {
+      if (a.faculty_id === b.faculty_id) {
         conflicts.push({ type: "faculty", resource: a.faculty_name, schedA: a, schedB: b });
       }
-      if (a.section_id && b.section_id && a.section_id === b.section_id) {
+      if (a.section_id === b.section_id) {
         conflicts.push({ type: "section", resource: a.section_name, schedA: a, schedB: b });
       }
     }
@@ -2130,6 +2147,7 @@ function bindEvents() {
     fetchAndRender();
   });
   [
+    "filter-academic-year",
     "filter-section",
     "filter-faculty",
     "filter-room",
@@ -2137,7 +2155,10 @@ function bindEvents() {
     "filter-subject",
     "filter-room-type-sched",
   ].forEach(id => {
-    document.getElementById(id)?.addEventListener("change", fetchAndRender);
+    document.getElementById(id)?.addEventListener("change", () => {
+      fetchAndRender();
+      fetchLiveUtilization();
+    });
   });
 
   // Radar Open/Close/Refresh
@@ -2398,4 +2419,146 @@ window.dismissRescheduleWarning = function() {
     banner.style.display = "none";
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. TBA Unassigned Professor Banner & Quick Assign Modal
+// ─────────────────────────────────────────────────────────────────────────────
+window.updateTbaBanner = function(schedules) {
+  const banner = document.getElementById("tba-warning-banner");
+  if (!banner) return;
+
+  const tbaList = (schedules || []).filter(s => !s.faculty_id || s.is_tba || s.faculty_name === "TBA");
+  const countBadge = document.getElementById("tba-count-badge");
+  const affectedList = document.getElementById("tba-affected-list");
+
+  if (tbaList.length === 0) {
+    banner.style.display = "none";
+    return;
+  }
+
+  banner.style.display = "block";
+  if (countBadge) countBadge.textContent = `${tbaList.length} TBA Classes`;
+
+  if (affectedList) {
+    const isAdmin = window.CURRENT_ROLE === "CHAIR" || window.CURRENT_ROLE === "ADMIN";
+    affectedList.innerHTML = tbaList.map(s => {
+      const subCode = escapeHtml(s.subject_code || s.code || "SUBJ");
+      const subTitle = escapeHtml(s.subject_title || s.subject_name || "");
+      const secName = escapeHtml(s.section_name || "—");
+      const dayTime = `${s.day_of_week || ''} ${formatTimeRange(s.start_time, s.end_time)}`;
+      const rm = escapeHtml(s.room_code || "No Room");
+      return `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 6px; border-bottom: 1px solid rgba(217,119,6,0.15); font-size: 11.5px; gap: 8px;">
+          <div>
+            <strong>${subCode}</strong> (${subTitle}) &bull; Cohort: <strong>${secName}</strong> &bull; ${dayTime} &bull; Room: ${rm}
+          </div>
+          ${isAdmin ? `
+            <button type="button" class="btn btn-sm" onclick="openQuickAssignModal(${s.id})" style="background: #D97706; color: #FFF; font-weight: 700; border: none; padding: 2px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; white-space: nowrap;">
+              Assign Prof
+            </button>
+          ` : ''}
+        </div>
+      `;
+    }).join("");
+  }
+};
+
+window.toggleTbaDetails = function() {
+  const container = document.getElementById("tba-affected-container");
+  if (container) {
+    container.style.display = container.style.display === "none" ? "block" : "none";
+  }
+};
+
+window.openQuickAssignModal = function(scheduleId) {
+  const s = _schedules.find(x => String(x.id) === String(scheduleId));
+  if (!s) return;
+
+  const modal = document.getElementById("modal-quick-assign-prof");
+  if (!modal) return;
+
+  document.getElementById("quick-assign-schedule-id").value = s.id;
+  document.getElementById("quick-assign-sub-code").textContent = s.subject_code || s.code || "Class Slot";
+  document.getElementById("quick-assign-sub-title").textContent = s.subject_title || s.subject_name || "";
+  document.getElementById("quick-assign-meta-sec").textContent = `Cohort: ${s.section_name || "—"}`;
+  document.getElementById("quick-assign-meta-slot").textContent = `${s.day_of_week} ${formatTimeRange(s.start_time, s.end_time)}`;
+  document.getElementById("quick-assign-meta-room").textContent = `@ Room ${s.room_code || "—"}`;
+
+  const alertBox = document.getElementById("quick-assign-conflict-alert");
+  if (alertBox) alertBox.style.display = "none";
+  const overrideCb = document.getElementById("quick-assign-override");
+  if (overrideCb) overrideCb.checked = false;
+
+  const select = document.getElementById("quick-assign-faculty-select");
+  if (select) {
+    select.innerHTML = `<option value="">-- Choose Professor --</option>` +
+      (_masterData.faculty || []).map(f => {
+        const dept = f.department || f.program || "COE";
+        const units = f.current_units !== undefined ? `(${f.current_units}/${f.max_units || 21}u)` : "";
+        return `<option value="${f.id}">${escapeHtml(f.name)} [${escapeHtml(dept)}] ${units}</option>`;
+      }).join("");
+  }
+
+  modal.style.display = "flex";
+};
+
+window.closeQuickAssignModal = function() {
+  const modal = document.getElementById("modal-quick-assign-prof");
+  if (modal) modal.style.display = "none";
+};
+
+window.submitQuickAssignProf = async function() {
+  const schedId = document.getElementById("quick-assign-schedule-id")?.value;
+  const facId = document.getElementById("quick-assign-faculty-select")?.value;
+  const allowOverride = document.getElementById("quick-assign-override")?.checked || false;
+
+  if (!facId) {
+    showToast("Please choose a faculty member.", true);
+    return;
+  }
+
+  const btn = document.getElementById("btn-submit-quick-assign");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Assigning...";
+  }
+
+  try {
+    const res = await API.post(`/api/schedules/${schedId}/assign-faculty`, {
+      faculty_id: parseInt(facId, 10),
+      allow_override: allowOverride
+    });
+
+    if (res.status === "success") {
+      showToast(res.message || "Professor assigned successfully!");
+      closeQuickAssignModal();
+
+      const idx = _schedules.findIndex(x => String(x.id) === String(schedId));
+      if (idx !== -1 && res.data) {
+        _schedules[idx] = { ..._schedules[idx], ...res.data };
+      }
+
+      renderEventCards(_schedules);
+      updateTbaBanner(_schedules);
+      if (typeof updateRadarBadge === "function") updateRadarBadge(_schedules);
+    }
+  } catch (err) {
+    const alertBox = document.getElementById("quick-assign-conflict-alert");
+    const msgBox = document.getElementById("quick-assign-conflict-msg");
+    if (alertBox && msgBox) {
+      alertBox.style.display = "block";
+      const conflictText = (err.conflicts && err.conflicts.length > 0)
+        ? err.conflicts.join("<br>&bull; ")
+        : (err.message || "Schedule collision detected.");
+      msgBox.innerHTML = conflictText;
+    }
+    showToast(err.message || "Failed to assign professor", true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Assign Instructor";
+    }
+  }
+};
+
 

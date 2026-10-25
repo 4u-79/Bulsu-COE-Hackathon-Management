@@ -427,6 +427,29 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
 }
 
+/* TBA unassigned professor cards: Amber warning border */
+.event-card-v2.ev-tba,
+.event-card-day.ev-tba {
+  border: 1.5px solid #F59E0B !important;
+  border-left: 4px solid #D97706 !important;
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.2) !important;
+}
+
+.ev-badge-tba {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  background: #D97706;
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
 .ev-badge-draft {
   position: absolute;
   top: 3px;

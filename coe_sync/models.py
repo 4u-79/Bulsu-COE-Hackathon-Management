@@ -132,7 +132,7 @@ class Faculty(db.Model):
         "Schedule",
         backref="faculty",
         lazy=True,
-        cascade="all, delete-orphan",
+        cascade="all",
         passive_deletes=True,
     )
     availabilities = db.relationship(
@@ -142,13 +142,17 @@ class Faculty(db.Model):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    handled_subjects = db.relationship(
-        "FacultySubject",
-        backref="faculty",
-        lazy=True,
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
+
+    @property
+    def assigned_subjects(self) -> list:
+        """Retrieve list of curricular subjects assigned to this faculty member."""
+        res = []
+        seen = set()
+        for fs in getattr(self, "faculty_subjects", []):
+            if fs.subject and fs.subject.id not in seen:
+                seen.add(fs.subject.id)
+                res.append(fs.to_dict())
+        return res
 
     def to_dict(self) -> dict:
         """Serialize Faculty to dictionary."""
@@ -161,7 +165,7 @@ class Faculty(db.Model):
             "max_units": self.max_units,
             "current_units": self.current_units,
             "preferred_session_type": self.preferred_session_type or "SPLIT",
-            "handled_subject_ids": [fs.subject_id for fs in self.handled_subjects] if hasattr(self, "handled_subjects") else [],
+            "assigned_subjects": self.assigned_subjects,
         }
 
     def __repr__(self) -> str:
@@ -233,7 +237,7 @@ class Subject(db.Model):
         db.Enum("LECTURE", "LAB", name="subject_type_enum"),
         nullable=False,
     )
-    hours_per_week = db.Column(db.Integer, nullable=False)
+    hours_per_week = db.Column(db.Integer, default=3, server_default="3", nullable=False)
     year_level = db.Column(db.Integer, nullable=True)
     semester = db.Column(db.Integer, nullable=True)
     split_preference = db.Column(
@@ -244,8 +248,19 @@ class Subject(db.Model):
     is_general = db.Column(db.Boolean, default=False, nullable=False)
     requires_grouping = db.Column(db.Boolean, default=False, nullable=False)
     preferred_session_type = db.Column(db.String(20), default="SPLIT", nullable=False)
+    assigned_faculty_id = db.Column(
+        db.Integer,
+        db.ForeignKey("faculty.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # Relationships
+    assigned_faculty = db.relationship(
+        "Faculty",
+        foreign_keys=[assigned_faculty_id],
+        lazy=True,
+    )
     schedules = db.relationship(
         "Schedule",
         backref="subject",
@@ -299,6 +314,12 @@ class Subject(db.Model):
 
     def to_dict(self) -> dict:
         """Serialize Subject to dictionary."""
+        assigned_name = None
+        if self.assigned_faculty:
+            assigned_name = self.assigned_faculty.name
+        elif hasattr(self, "subject_faculties") and self.subject_faculties and self.subject_faculties[0].faculty:
+            assigned_name = self.subject_faculties[0].faculty.name
+
         return {
             "id": self.id,
             "code": self.code,
@@ -315,6 +336,8 @@ class Subject(db.Model):
             "is_general": self.is_general,
             "requires_grouping": self.requires_grouping,
             "preferred_session_type": self.preferred_session_type or "SPLIT",
+            "assigned_faculty_id": self.assigned_faculty_id,
+            "assigned_faculty_name": assigned_name,
         }
 
     def __repr__(self) -> str:
@@ -475,11 +498,14 @@ class FacultyAvailability(db.Model):
 
 class FacultySubject(db.Model):
     """
-    Faculty Subject qualification & teaching assignment model.
-    Represents subjects a faculty member can handle or is assigned to teach.
+    Explicit Association entity mapping Faculty member capabilities/assignments
+    to course Subjects, completely decoupled from date/time Timetable Schedules.
     """
 
     __tablename__ = "faculty_subject"
+    __table_args__ = (
+        db.UniqueConstraint("faculty_id", "subject_id", name="uq_faculty_subject"),
+    )
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     faculty_id = db.Column(
@@ -496,33 +522,41 @@ class FacultySubject(db.Model):
     )
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-    subject = db.relationship("Subject", backref=db.backref("handling_faculty_links", cascade="all, delete-orphan", lazy=True))
-
-    __table_args__ = (
-        db.UniqueConstraint("faculty_id", "subject_id", name="uq_faculty_subject"),
+    # Relationships
+    faculty = db.relationship(
+        "Faculty",
+        backref=db.backref("faculty_subjects", cascade="all, delete-orphan", lazy=True),
+    )
+    subject = db.relationship(
+        "Subject",
+        backref=db.backref("subject_faculties", cascade="all, delete-orphan", lazy=True),
     )
 
     def to_dict(self) -> dict:
+        """Serialize FacultySubject to dictionary."""
         return {
             "id": self.id,
             "faculty_id": self.faculty_id,
+            "faculty_name": self.faculty.name if self.faculty else None,
             "subject_id": self.subject_id,
-            "code": self.subject.code if self.subject else None,
-            "title": self.subject.title if self.subject else None,
-            "units": self.subject.units if self.subject else None,
-            "subject_type": self.subject.subject_type if self.subject else None,
-            "classification": self.subject.classification if self.subject else None,
-            "program": self.subject.program if self.subject else None,
+            "subject_code": self.subject.code if self.subject else None,
+            "subject_title": self.subject.title if self.subject else None,
+            "units": self.subject.units if self.subject else 0,
+            "subject_type": self.subject.subject_type if self.subject else "LECTURE",
+            "hours_per_week": self.subject.hours_per_week if self.subject else 3,
+            "classification": self.subject.classification if self.subject else "MAJOR",
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
     def __repr__(self) -> str:
-        return f"<FacultySubject faculty_id={self.faculty_id} subject_id={self.subject_id}>"
+        return f"<FacultySubject id={self.id} faculty_id={self.faculty_id} subject_id={self.subject_id}>"
 
 
 class Schedule(db.Model):
     """
     Core timetable schedule entity binding subject, section, faculty, room,
     and assigned weekly day/time slot.
+    Faculty is explicitly nullable to allow TBA / unassigned professor slots.
     """
 
     __tablename__ = "schedule"
@@ -578,6 +612,12 @@ class Schedule(db.Model):
         default="1.5_HOUR_SPLIT",
         nullable=False,
     )
+    academic_year = db.Column(db.String(20), default="2026-2027", nullable=False)
+    semester = db.Column(db.Integer, default=1, nullable=True)
+
+    @property
+    def is_tba(self):
+        return self.faculty_id is None
 
     def to_dict(self) -> dict:
         """Serialize Schedule to dictionary, optionally resolving joined names."""
@@ -599,13 +639,16 @@ class Schedule(db.Model):
             "status": self.status,
             "split_preference": self.split_preference,
             "sub_group": self.sub_group,
+            "academic_year": self.academic_year or "2026-2027",
+            "semester": self.semester or 1,
             # Resolved display fields
             "subject_code": self.subject.code if self.subject else None,
             "subject_name": self.subject.title if self.subject else None,
             "subject_title": self.subject.title if self.subject else None,
             "section_name": f"{self.section.name} ({self.sub_group})" if (self.section and self.sub_group) else (self.section.name if self.section else None),
             "faculty_name": self.faculty.name if self.faculty else "TBA",
-            "has_no_faculty": self.faculty_id is None,
+            "instructor_name": self.faculty.name if self.faculty else "TBA",
+            "is_tba": self.faculty_id is None,
             "room_code": self.room.room_code if self.room else ("Unassigned" if not self.room_id else None),
             # Conflict flag — resolved at API layer; default False here
             "has_conflict": False,

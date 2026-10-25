@@ -284,12 +284,16 @@ def get_analytics_summary():
         )
     section_breakdown.sort(key=lambda x: x["name"])
 
+    unassigned_tba_classes = sum(1 for s in schedules if not s.faculty_id)
+
     return (
         jsonify(
             {
                 "status": "success",
                 "data": {
                     "total_classes": total_classes,
+                    "unassigned_tba_classes": unassigned_tba_classes,
+                    "tba_count": unassigned_tba_classes,
                     "room_utilization": room_utilization,
                     "overall_room_utilization_pct": room_utilization,
                     "unresolved_conflicts": unresolved_conflicts,

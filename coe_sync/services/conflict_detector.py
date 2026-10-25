@@ -83,8 +83,13 @@ def validate_schedule_slot(
     try:
         subject_id = int(candidate_data.get("subject_id", 0))
         section_id = int(candidate_data.get("section_id", 0))
-        raw_fac_id = candidate_data.get("faculty_id")
-        faculty_id = int(raw_fac_id) if (raw_fac_id is not None and str(raw_fac_id).isdigit() and int(raw_fac_id) > 0) else None
+        raw_faculty_id = candidate_data.get("faculty_id")
+        faculty_id = None
+        if raw_faculty_id is not None and str(raw_faculty_id).strip() not in ("", "0", "null", "None", "TBA", "undefined"):
+            try:
+                faculty_id = int(raw_faculty_id)
+            except (ValueError, TypeError):
+                faculty_id = None
         raw_room_id = candidate_data.get("room_id")
         room_id = int(raw_room_id) if (raw_room_id is not None and str(raw_room_id).isdigit() and int(raw_room_id) > 0) else None
         sub_group = candidate_data.get("sub_group")
@@ -251,7 +256,12 @@ def find_alternatives(
         subject_id = int(conflicted_data.get("subject_id", 0))
         section_id = int(conflicted_data.get("section_id", 0))
         raw_fac = conflicted_data.get("faculty_id")
-        faculty_id = int(raw_fac) if (raw_fac is not None and str(raw_fac).isdigit() and int(raw_fac) > 0) else None
+        faculty_id = None
+        if raw_fac is not None and str(raw_fac).strip() not in ("", "0", "null", "None", "TBA", "undefined"):
+            try:
+                faculty_id = int(raw_fac)
+            except (ValueError, TypeError):
+                faculty_id = None
         room_id = int(conflicted_data.get("room_id", 0))
         day_of_week = str(conflicted_data.get("day_of_week", "")).strip().upper()
         start_time = parse_time(conflicted_data.get("start_time"))
@@ -265,6 +275,8 @@ def find_alternatives(
     room = db.session.get(Room, room_id)
 
     if not (subject and section and room):
+        return suggestions
+    if faculty_id and not faculty:
         return suggestions
 
     start_m = time_to_minutes(start_time)
@@ -433,13 +445,28 @@ def validate_split_schedule_pair(
     conflicts: List[str] = []
 
     # Check same room, section, and instructor
-    if int(first_slot.get("room_id", 0)) != int(second_slot.get("room_id", 0)):
+    r1 = first_slot.get("room_id")
+    r2 = second_slot.get("room_id")
+    r1 = None if r1 in (None, "", "0", 0, "null") else int(r1)
+    r2 = None if r2 in (None, "", "0", 0, "null") else int(r2)
+    if r1 != r2:
         conflicts.append("Split sessions must be assigned to the same room.")
-    if int(first_slot.get("section_id", 0)) != int(second_slot.get("section_id", 0)):
+
+    s1 = int(first_slot.get("section_id", 0))
+    s2 = int(second_slot.get("section_id", 0))
+    if s1 != s2:
         conflicts.append("Split sessions must be assigned to the same section.")
-    if int(first_slot.get("faculty_id", 0)) != int(second_slot.get("faculty_id", 0)):
+
+    f1 = first_slot.get("faculty_id")
+    f2 = second_slot.get("faculty_id")
+    f1 = None if f1 in (None, "", "0", 0, "null", "None", "TBA") else int(f1)
+    f2 = None if f2 in (None, "", "0", 0, "null", "None", "TBA") else int(f2)
+    if f1 != f2:
         conflicts.append("Split sessions must be assigned to the same faculty instructor.")
-    if int(first_slot.get("subject_id", 0)) != int(second_slot.get("subject_id", 0)):
+
+    sub1 = int(first_slot.get("subject_id", 0))
+    sub2 = int(second_slot.get("subject_id", 0))
+    if sub1 != sub2:
         conflicts.append("Split sessions must refer to the same subject course.")
 
     # Check non-consecutive days

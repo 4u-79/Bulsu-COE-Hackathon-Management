@@ -207,46 +207,24 @@ def get_faculty_detail(faculty_id: int):
     if not faculty:
         return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
 
-    # Fetch assigned subjects from FacultySubject (subjects this faculty is qualified/assigned to teach)
-    handled = FacultySubject.query.filter_by(faculty_id=faculty_id).all()
-    subjects_dict = {}
-    total_units = 0
-
-    for fs in handled:
-        if fs.subject:
-            total_units += (fs.subject.units or 0)
-            subjects_dict[fs.subject.id] = {
-                "id": fs.subject.id,
-                "code": fs.subject.code,
-                "title": fs.subject.title,
-                "units": fs.subject.units,
-                "type": fs.subject.subject_type,
-                "faculty_subject_id": fs.id,
-                "sections": [],
-                "schedule_id": None,
-                "day_of_week": "",
-                "start_time": "",
-                "end_time": "",
-                "room_code": "",
-            }
-
-    # Fetch assigned schedules & merge details
+    # Fetch assigned schedules & subjects
     assigned_schedules = (
         Schedule.query.filter_by(faculty_id=faculty_id)
         .order_by(Schedule.day_of_week.asc(), Schedule.start_time.asc())
         .all()
     )
+    subjects_dict = {}
+    total_units = 0
     for s in assigned_schedules:
         if s.subject:
+            total_units += (s.subject.units or 0)
             if s.subject.id not in subjects_dict:
-                total_units += (s.subject.units or 0)
                 subjects_dict[s.subject.id] = {
                     "id": s.subject.id,
                     "code": s.subject.code,
                     "title": s.subject.title,
                     "units": s.subject.units,
                     "type": s.subject.subject_type,
-                    "faculty_subject_id": None,
                     "sections": [s.section.name] if s.section else [],
                     "schedule_id": s.id,
                     "day_of_week": s.day_of_week,
@@ -255,12 +233,6 @@ def get_faculty_detail(faculty_id: int):
                     "room_code": s.room.room_code if s.room else "",
                 }
             else:
-                if s.id and not subjects_dict[s.subject.id]["schedule_id"]:
-                    subjects_dict[s.subject.id]["schedule_id"] = s.id
-                    subjects_dict[s.subject.id]["day_of_week"] = s.day_of_week
-                    subjects_dict[s.subject.id]["start_time"] = s.start_time.strftime("%H:%M") if s.start_time else ""
-                    subjects_dict[s.subject.id]["end_time"] = s.end_time.strftime("%H:%M") if s.end_time else ""
-                    subjects_dict[s.subject.id]["room_code"] = s.room.room_code if s.room else ""
                 if s.section and s.section.name not in subjects_dict[s.subject.id]["sections"]:
                     subjects_dict[s.subject.id]["sections"].append(s.section.name)
 
@@ -799,13 +771,29 @@ def get_faculty_assignable_options(faculty_id: int):
     }), 200
 
 
+@master_data_bp.route("/faculty/<int:faculty_id>/subjects", methods=["GET"])
+@master_data_bp.route("/master/faculty/<int:faculty_id>/subjects", methods=["GET"])
+def get_faculty_subjects(faculty_id: int):
+    """Retrieve all subject offerings handled/assigned to this faculty member."""
+    faculty = db.session.get(Faculty, faculty_id)
+    if not faculty:
+        return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
+    return jsonify({
+        "status": "success",
+        "faculty_id": faculty.id,
+        "faculty_name": faculty.name,
+        "assigned_subjects": faculty.assigned_subjects,
+    }), 200
+
+
 @master_data_bp.route("/faculty/<int:faculty_id>/assign-subject", methods=["POST"])
 @master_data_bp.route("/master/faculty/<int:faculty_id>/assign-subject", methods=["POST"])
 @require_roles("CHAIR", "ADMIN")
 def assign_subject_to_faculty(faculty_id: int):
-    """Assign a curricular subject offering to a faculty member with conflict validation."""
-    from services.conflict_detector import validate_schedule_slot, parse_time
-
+    """
+    Assign curricular subject offerings to a faculty member (pure assignment).
+    Does NOT create a Schedule record with default day, time, room, or section.
+    """
     faculty = db.session.get(Faculty, faculty_id)
     if not faculty:
         return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
@@ -823,7 +811,6 @@ def assign_subject_to_faculty(faculty_id: int):
             }), 403
 
     data = request.get_json(silent=True) or {}
-    # Can receive single subject_id or list of subject_ids/subject objects
     raw_subjects = data.get("subjects") or []
     if not raw_subjects and data.get("subject_id"):
         raw_subjects = [{
@@ -836,7 +823,8 @@ def assign_subject_to_faculty(faculty_id: int):
     if not raw_subjects:
         return jsonify({"error": "At least one Subject Offering is required."}), 400
 
-    assigned_records = []
+    assigned_items = []
+    synced_schedules = []
 
     for item in raw_subjects:
         s_id = item.get("subject_id") if isinstance(item, dict) else item
@@ -857,25 +845,52 @@ def assign_subject_to_faculty(faculty_id: int):
         if item_split_pref in ("1.5_HOUR_SPLIT", "3_HOUR_BLOCK"):
             subject.split_preference = item_split_pref
 
-        # Assign subject to faculty pool / qualifications
+        # Assign subject to faculty in database
+        subject.assigned_faculty_id = faculty.id
+
+        # Record in FacultySubject table
         existing_fs = FacultySubject.query.filter_by(faculty_id=faculty.id, subject_id=subject.id).first()
         if not existing_fs:
-            fs_record = FacultySubject(faculty_id=faculty.id, subject_id=subject.id)
-            db.session.add(fs_record)
-        assigned_records.append(subject)
+            fs = FacultySubject(faculty_id=faculty.id, subject_id=subject.id)
+            db.session.add(fs)
+            db.session.flush()
+            assigned_items.append(fs)
+        else:
+            assigned_items.append(existing_fs)
 
-    db.session.flush()
+        # Synchronize any existing unassigned (TBA) schedules for this subject if conflict-free
+        unassigned_scheds = Schedule.query.filter_by(subject_id=subject.id, faculty_id=None).all()
+        for sched in unassigned_scheds:
+            from services.conflict_detector import validate_schedule_slot
+            candidate = {
+                "subject_id": sched.subject_id,
+                "section_id": sched.section_id,
+                "faculty_id": faculty.id,
+                "room_id": sched.room_id,
+                "day_of_week": sched.day_of_week,
+                "start_time": sched.start_time.strftime("%H:%M:%S"),
+                "end_time": sched.end_time.strftime("%H:%M:%S"),
+            }
+            res = validate_schedule_slot(candidate, exclude_schedule_id=sched.id)
+            if res["valid"]:
+                sched.faculty_id = faculty.id
+                synced_schedules.append(sched)
 
-    # Recalculate faculty current_units based on handled subjects + any assigned active schedules
-    all_fs = FacultySubject.query.filter_by(faculty_id=faculty.id).all()
-    fs_units = sum((fs.subject.units or 0) for fs in all_fs if fs.subject)
-    faculty.current_units = fs_units
+    # Recalculate faculty current_units from assigned subjects
+    unit_sum = (
+        db.session.query(db.func.sum(Subject.units))
+        .join(FacultySubject, FacultySubject.subject_id == Subject.id)
+        .filter(FacultySubject.faculty_id == faculty.id)
+        .scalar()
+        or 0
+    )
+    faculty.current_units = unit_sum
 
-    subj_codes = ", ".join([s.code for s in assigned_records if s])
+    subj_codes = ", ".join([fs.subject.code for fs in assigned_items if fs.subject])
     audit = AuditLog(
         user_id=session.get("user_id"),
         action="FACULTY_SUBJECT_ASSIGNED",
-        details=f"Assigned handled subjects {subj_codes} to {faculty.name} (no auto-schedule).",
+        details=f"Assigned subject(s) {subj_codes} to {faculty.name}.",
     )
     db.session.add(audit)
     db.session.commit()
@@ -884,8 +899,9 @@ def assign_subject_to_faculty(faculty_id: int):
         "status": "success",
         "message": f"Successfully assigned {subj_codes} to {faculty.name}.",
         "data": {
-            "assigned_subjects": [s.to_dict() for s in assigned_records],
             "faculty": faculty.to_dict(),
+            "assigned_subjects": faculty.assigned_subjects,
+            "synced_schedules": [s.to_dict() for s in synced_schedules],
         }
     }), 201
 
@@ -894,7 +910,10 @@ def assign_subject_to_faculty(faculty_id: int):
 @master_data_bp.route("/master/faculty/<int:faculty_id>/unassign-subject", methods=["POST"])
 @require_roles("CHAIR", "ADMIN")
 def unassign_subject_from_faculty(faculty_id: int):
-    """Unassign / remove a subject offering from a faculty member's handled subjects and schedules."""
+    """
+    Unassign / remove a subject offering from a faculty member.
+    Does NOT delete timetable schedules; instead reverts Schedule.faculty_id to None (TBA).
+    """
     faculty = db.session.get(Faculty, faculty_id)
     if not faculty:
         return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
@@ -915,46 +934,53 @@ def unassign_subject_from_faculty(faculty_id: int):
     schedule_id = data.get("schedule_id")
     subject_id = data.get("subject_id")
 
-    subj_code = "Subject"
-    if subject_id:
-        target_sub_id = int(subject_id)
-        # Remove from FacultySubject
-        fs_records = FacultySubject.query.filter_by(faculty_id=faculty_id, subject_id=target_sub_id).all()
-        for fs in fs_records:
-            if fs.subject:
-                subj_code = fs.subject.code
-            db.session.delete(fs)
-
-        # Unassign any active schedules holding this faculty and subject (turn them into TBA)
-        matching_scheds = Schedule.query.filter_by(faculty_id=faculty_id, subject_id=target_sub_id).all()
-        for ms in matching_scheds:
-            ms.faculty_id = None
-    elif schedule_id:
+    if not subject_id and schedule_id:
         sched = db.session.get(Schedule, int(schedule_id))
-        if not sched or sched.faculty_id != faculty.id:
-            return jsonify({"error": "Schedule assignment not found for this faculty member."}), 404
-        subj_code = sched.subject.code if sched.subject else "Subject"
-        sched.faculty_id = None
-    else:
-        return jsonify({"error": "schedule_id or subject_id is required."}), 400
+        if sched:
+            subject_id = sched.subject_id
+
+    if not subject_id:
+        return jsonify({"error": "subject_id or schedule_id is required."}), 400
+
+    subject = db.session.get(Subject, int(subject_id))
+    if not subject:
+        return jsonify({"error": f"Subject #{subject_id} not found."}), 404
+
+    # Remove from FacultySubject
+    FacultySubject.query.filter_by(faculty_id=faculty.id, subject_id=subject.id).delete()
+
+    # Clear assigned_faculty_id on Subject if set to this faculty
+    if subject.assigned_faculty_id == faculty.id:
+        subject.assigned_faculty_id = None
+
+    # Convert any schedules assigned to this faculty for this subject to TBA (faculty_id = None)
+    matching_scheds = Schedule.query.filter_by(faculty_id=faculty.id, subject_id=subject.id).all()
+    for s in matching_scheds:
+        s.faculty_id = None
 
     db.session.flush()
 
     # Recalculate faculty current_units
-    all_fs = FacultySubject.query.filter_by(faculty_id=faculty.id).all()
-    faculty.current_units = sum((fs.subject.units or 0) for fs in all_fs if fs.subject)
+    unit_sum = (
+        db.session.query(db.func.sum(Subject.units))
+        .join(FacultySubject, FacultySubject.subject_id == Subject.id)
+        .filter(FacultySubject.faculty_id == faculty.id)
+        .scalar()
+        or 0
+    )
+    faculty.current_units = unit_sum
 
     audit = AuditLog(
         user_id=session.get("user_id"),
         action="FACULTY_SUBJECT_UNASSIGNED",
-        details=f"Unassigned {subj_code} from {faculty.name}.",
+        details=f"Unassigned {subject.code} from {faculty.name}.",
     )
     db.session.add(audit)
     db.session.commit()
 
     return jsonify({
         "status": "success",
-        "message": f"Successfully unassigned {subj_code} from {faculty.name}.",
+        "message": f"Successfully unassigned {subject.code} from {faculty.name}.",
         "data": faculty.to_dict(),
     }), 200
 

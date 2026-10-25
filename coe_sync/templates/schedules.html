@@ -14,6 +14,10 @@
   <!-- ── Chair Action Row (Visible strictly to CHAIR / ADMIN / PROG_CHA) ── -->
   {% if session.get('role') in ['CHAIR', 'ADMIN', 'PROG_CHA'] and active_role in ['CHAIR', 'ADMIN', 'PROG_CHA'] %}
   <div class="chair-action-row admin-only" id="chair-action-row">
+    <div class="chair-action-pill term-selector-pill" id="chair-term-display">
+      AY 2026–2027 · Term 1 <span style="font-size: 10px; margin-left: 4px;">▾</span>
+    </div>
+
     <button id="btn-create-schedule-cta" class="chair-action-pill btn-gen-sched" title="Smart Schedule Generator">
       + Generate Schedule
     </button>
@@ -84,11 +88,18 @@
     <div class="sched-filter-left">
       <span class="sched-filter-prefix">Filter by:</span>
 
+      <!-- Academic Year Filter Pill -->
+      <div id="filter-wrap-academic-year" class="filter-wrap">
+        <select class="filter-pill-select" id="filter-academic-year" title="Select Academic Year">
+          <option value="2026-2027" selected>AY 2026–2027 ▾</option>
+        </select>
+      </div>
+
       <!-- Academic Term Filter Pill -->
       <div id="filter-wrap-term" class="filter-wrap">
         <select class="filter-pill-select" id="filter-term" title="Select Academic Term">
-          <option value="1" selected>1st Sem AY 2026–2027 ▾</option>
-          <option value="2">2nd Sem AY 2026–2027 ▾</option>
+          <option value="1" selected>1st Sem ▾</option>
+          <option value="2">2nd Sem ▾</option>
         </select>
       </div>
 
@@ -185,6 +196,35 @@
       <button id="btn-conflict-radar" style="display:none;"><span class="radar-dot" id="radar-dot"></span><span class="radar-badge" id="radar-badge">0</span></button>
       {% endif %}
       <span class="week-label" id="week-label" style="display:none;">Loading…</span>
+    </div>
+  </div>
+
+  <!-- TBA Unassigned Professor Persistent Alert Banner -->
+  <div id="tba-warning-banner" class="tba-warning-banner" style="display:none; margin-bottom: 14px; background: linear-gradient(135deg, rgba(254,243,199,0.98), rgba(255,237,213,0.95)); border: 1.5px solid #F59E0B; border-left: 6px solid #D97706; border-radius: 10px; padding: 14px 18px; box-shadow: 0 4px 14px rgba(217,119,6,0.14);">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 14px; flex-wrap:wrap;">
+      <div style="display:flex; gap: 12px; align-items:flex-start; flex: 1; min-width: 280px;">
+        <span style="font-size: 22px; line-height: 1; margin-top: 2px;">⚠️</span>
+        <div style="flex:1;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="font-size: 14px; font-weight: 800; color: #92400E;" id="tba-warning-title">
+              Unassigned Faculty Alert: Classes Pending Instructor
+            </span>
+            <span id="tba-count-badge" style="background: #D97706; color: #FFF; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 9999px;">0 TBA</span>
+          </div>
+          <div style="font-size: 12.5px; color: #78350F; margin-top: 4px; line-height: 1.45;" id="tba-warning-body">
+            There are scheduled classes with no assigned instructor (marked as <strong>TBA</strong>). Please assign qualified faculty to finalize offerings.
+          </div>
+          <!-- Affected classes list container -->
+          <div id="tba-affected-container" style="margin-top: 8px; max-height: 120px; overflow-y: auto; background: rgba(255,255,255,0.7); border: 1px solid rgba(217,119,6,0.25); border-radius: 6px; padding: 6px 10px; font-size: 11.5px; color: #92400E;">
+            <div id="tba-affected-list" style="display:flex; flex-direction:column; gap:4px;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap: 8px; align-items:center;">
+        <button type="button" class="btn btn-sm" onclick="toggleTbaDetails()" style="background: #FFFFFF; border: 1px solid #D1D5DB; color: #92400E; font-size: 11.5px; font-weight: 700; padding: 5px 12px; border-radius: 6px; cursor: pointer;">
+          Toggle Details
+        </button>
+      </div>
     </div>
   </div>
 
@@ -379,9 +419,9 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label for="m-faculty">Faculty <span style="font-size:11px; color:var(--text-muted);">(Optional / TBA)</span></label>
-            <select id="m-faculty" name="faculty_id">
-              <option value="">TBA — No Professor Assigned</option>
+            <label for="m-faculty">Faculty <span class="req">*</span></label>
+            <select id="m-faculty" name="faculty_id" required>
+              <option value="">Select faculty…</option>
             </select>
           </div>
           <div class="form-group">
@@ -529,6 +569,53 @@
     </div>
     <div class="sched-modal-footer">
       <button type="button" class="btn btn-secondary" id="modal-fac-avail-done">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Assign Professor Modal -->
+<div class="sched-modal-backdrop" id="modal-quick-assign-prof" style="display:none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 1050; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+  <div class="sched-modal" style="background: #FFFFFF; border-radius: 12px; width: 95%; max-width: 480px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); overflow: hidden; border: 1px solid rgba(0,0,0,0.1);">
+    <div class="sched-modal-header" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #E2E8F0; background: #F8FAFC;">
+      <h3 id="quick-assign-title" style="margin: 0; font-size: 15px; font-weight: 800; color: var(--bulsu-maroon);">Quick Assign Professor</h3>
+      <button class="sched-modal-close" id="modal-quick-assign-close" onclick="closeQuickAssignModal()" style="border: none; background: none; font-size: 20px; cursor: pointer; color: #64748B;">&times;</button>
+    </div>
+    <div class="sched-modal-body" style="padding: 16px 18px;">
+      <div id="quick-assign-info" style="margin-bottom: 14px; padding: 10px 14px; background: rgba(104,28,46,0.06); border: 1px solid rgba(104,28,46,0.15); border-radius: 8px;">
+        <div style="font-weight: 800; font-size: 14px; color: var(--bulsu-maroon);" id="quick-assign-sub-code">SUBJ 101</div>
+        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;" id="quick-assign-sub-title">Subject Title</div>
+        <div style="font-size: 11.5px; color: #475569; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px;" id="quick-assign-slot-meta">
+          <span id="quick-assign-meta-sec" style="font-weight: 700; color: #2563EB;">Section</span>
+          <span id="quick-assign-meta-slot">Day · Time</span>
+          <span id="quick-assign-meta-room" style="color: #059669;">Room</span>
+        </div>
+      </div>
+
+      <div id="quick-assign-conflict-alert" style="display: none; margin-bottom: 12px; padding: 10px 12px; background: #FEE2E2; border: 1px solid #F87171; border-radius: 6px; font-size: 12px; color: #991B1B;">
+        <div style="font-weight: 700;">⚠️ Conflict Warning</div>
+        <div id="quick-assign-conflict-msg" style="margin-top: 3px;">Selected instructor has a schedule collision.</div>
+      </div>
+
+      <input type="hidden" id="quick-assign-schedule-id">
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label style="font-size: 12px; font-weight: 700; color: var(--text-dark); margin-bottom: 6px; display: block;">
+          Select Faculty Member *
+        </label>
+        <select id="quick-assign-faculty-select" class="form-select" style="width: 100%; font-size: 13px; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-medium); background: #FFF;">
+          <option value="">-- Choose Professor --</option>
+        </select>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
+        <input type="checkbox" id="quick-assign-override" style="accent-color: var(--bulsu-maroon); cursor: pointer;">
+        <label for="quick-assign-override" style="font-size: 11.5px; color: var(--text-secondary); cursor: pointer; margin: 0;">
+          Allow Conflict Override (Chair Authorization)
+        </label>
+      </div>
+    </div>
+    <div class="sched-modal-footer" style="display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px; border-top: 1px solid #E2E8F0; background: #F8FAFC;">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeQuickAssignModal()" style="font-weight: 600; padding: 6px 14px; border-radius: 6px;">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-submit-quick-assign" onclick="submitQuickAssignProf()" style="font-weight: 700; background: var(--bulsu-maroon); color: #FFF; border: none; padding: 6px 16px; border-radius: 6px;">Assign Instructor</button>
     </div>
   </div>
 </div>

@@ -261,10 +261,26 @@ function renderFacultyTable(faculty) {
   tbody.innerHTML = faculty
     .map((f) => {
       const dept = f.department || normalizeProgram(f.program) || "MEE";
+      const assigned = f.assigned_subjects || [];
+      const assignedHtml = assigned.length > 0
+        ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:5px;">` +
+          assigned.map(s => `
+            <span style="background: rgba(104,28,46,0.08); color: var(--bulsu-maroon); font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(104,28,46,0.18);">
+              ${escapeHtml(s.subject_code || s.code)}
+              ${["ADMIN", "CHAIR", "PROG_CHA"].includes(window.CURRENT_ROLE) ? `
+                <button type="button" onclick="event.stopPropagation(); unassignSubjectFromFaculty(${f.id}, ${s.subject_id || s.id})" style="border:none; background:none; color:#DC2626; font-weight:800; cursor:pointer; padding:0 2px; font-size:12px; line-height:1;" title="Remove subject">&times;</button>
+              ` : ""}
+            </span>
+          `).join("") +
+          `</div>`
+        : `<div style="font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 3px;">No subjects assigned</div>`;
 
       return `
       <tr>
-        <td><strong style="color: var(--text-dark);">${escapeHtml(f.name)}</strong></td>
+        <td>
+          <strong style="color: var(--text-dark);">${escapeHtml(f.name)}</strong>
+          ${assignedHtml}
+        </td>
         <td><span style="font-weight: 600; color: var(--text-secondary);">${escapeHtml(dept)}</span></td>
         <td>
           <span style="background: #86EFAC; color: #14532D; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; text-transform: capitalize;">Active</span>
@@ -369,8 +385,8 @@ window.openFacultyDetailed = async function (facultyId) {
                   <div style="font-size: 12px; color: #475569; margin: 2px 0;">${escapeHtml(s.title || "")}</div>
                   <div style="font-size: 11px; font-weight: 700; color: var(--bulsu-maroon);">${s.units || 3} Units &bull; ${escapeHtml(s.subject_type || s.type || "Lecture")}</div>
                 </div>
-                ${(canAssign && (s.id || s.schedule_id)) ? `
-                  <button type="button" class="btn btn-sm" onclick="unassignSubjectFromFaculty(${f.id}, ${s.id || 'null'}, ${s.schedule_id || 'null'})" style="color: #DC2626; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; cursor:pointer;" title="Unassign subject from faculty">
+                ${(canAssign && (s.subject_id || s.id || s.schedule_id)) ? `
+                  <button type="button" class="btn btn-sm" onclick="unassignSubjectFromFaculty(${f.id}, ${s.subject_id || s.id || 'null'}, ${s.schedule_id || 'null'})" style="color: #DC2626; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; cursor:pointer;" title="Unassign subject from faculty">
                     Unassign
                   </button>
                 ` : ''}
@@ -1758,8 +1774,20 @@ window.openAssignSubjectModal = async function(facultyId) {
 
       // 1. Populate Subject Offering Multi-Select List (Exclude Minor Subjects)
       const majorSubjects = (res.data.subjects || []).filter(sub => (sub.classification || getSubjectClassification(sub)) === "MAJOR");
-      const alreadyHandledIds = new Set(f.handled_subject_ids || (f.assigned_subjects || []).map(as => as.id));
-      renderAssignSubjectMultiList(majorSubjects, alreadyHandledIds);
+      renderAssignSubjectMultiList(majorSubjects);
+
+      // 2. Populate Room dropdown (with Do not assign option)
+      const roomSelect = document.getElementById("assign-room-select");
+      roomSelect.innerHTML = `
+        <option value="none">🚫 Do not assign (Unassigned room)</option>
+        <option value="auto" selected>✨ Auto-Assign Best Department Room</option>
+      `;
+      res.data.rooms.forEach(rm => {
+        const opt = document.createElement("option");
+        opt.value = rm.id;
+        opt.textContent = `${rm.room_code} (${rm.room_type} · Cap: ${rm.capacity} · ${rm.building || 'COE'})`;
+        roomSelect.appendChild(opt);
+      });
     }
   } catch (err) {
     showToast(err.message || "Failed to load assignment options", true);
@@ -1770,14 +1798,14 @@ window.openAssignSubjectModal = async function(facultyId) {
 
 window._selectedAssignSubjects = new Map(); // subjectId -> { split_preference: "1.5_HOUR_SPLIT" | "3_HOUR_BLOCK" }
 
-window.renderAssignSubjectMultiList = function(subjects, alreadyHandledIds = new Set()) {
+window.renderAssignSubjectMultiList = function(subjects) {
   const container = document.getElementById("assign-subject-multiselect-container");
   if (!container) return;
   _selectedAssignSubjects.clear();
+  updateAssignSelectedCount();
 
   if (!subjects || subjects.length === 0) {
     container.innerHTML = `<div style="text-align:center; padding: 16px; color: var(--text-muted); font-size: 12px;">No major subjects available for assignment.</div>`;
-    updateAssignSelectedCount();
     return;
   }
 
@@ -1786,16 +1814,11 @@ window.renderAssignSubjectMultiList = function(subjects, alreadyHandledIds = new
     const subType = sub.subject_type || "LECTURE";
     const hrs = sub.hours_per_week || sub.units || 3;
     const defaultSplit = sub.split_preference || (hrs >= 3 ? "3_HOUR_BLOCK" : "1.5_HOUR_SPLIT");
-    const isHandled = alreadyHandledIds.has(sub.id);
-
-    if (isHandled) {
-      _selectedAssignSubjects.set(sub.id, { split_preference: defaultSplit });
-    }
 
     return `
-      <div class="assign-sub-row" data-id="${sub.id}" data-text="${sub.code} ${sub.title}" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 6px; border: 1px solid ${isHandled ? 'rgba(104,28,46,0.2)' : '#F1F5F9'}; background: ${isHandled ? 'rgba(104,28,46,0.04)' : '#FAFAFA'}; transition: background 0.15s ease;">
+      <div class="assign-sub-row" data-id="${sub.id}" data-text="${sub.code} ${sub.title}" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 6px; border: 1px solid #F1F5F9; background: #FAFAFA; transition: background 0.15s ease;">
         <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; flex: 1; margin: 0; font-size: 12px;">
-          <input type="checkbox" class="assign-sub-cb" value="${sub.id}" ${isHandled ? 'checked' : ''} style="margin-top: 3px; accent-color: var(--bulsu-maroon);" onchange="handleAssignSubCheckboxChange(this, ${sub.id}, '${defaultSplit}')">
+          <input type="checkbox" class="assign-sub-cb" value="${sub.id}" style="margin-top: 3px; accent-color: var(--bulsu-maroon);" onchange="handleAssignSubCheckboxChange(this, ${sub.id}, '${defaultSplit}')">
           <div style="line-height: 1.35;">
             <div style="font-weight: 700; color: var(--text-dark);">
               ${sub.code} — ${sub.title}
@@ -1831,8 +1854,6 @@ window.renderAssignSubjectMultiList = function(subjects, alreadyHandledIds = new
       </div>
     `;
   }).join("");
-
-  updateAssignSelectedCount();
 };
 
 window.toggleAssignSubSettings = function(subId, event) {
@@ -1918,6 +1939,8 @@ window.closeAssignSubjectModal = function() {
 window.submitAssignSubject = async function(event) {
   event.preventDefault();
   const facId = document.getElementById("assign-faculty-id").value;
+  const roomId = document.getElementById("assign-room-select").value;
+  const allowOverride = document.getElementById("assign-allow-override")?.checked || false;
 
   if (_selectedAssignSubjects.size === 0) {
     showToast("Please select at least one Subject Offering.", true);
@@ -1933,13 +1956,15 @@ window.submitAssignSubject = async function(event) {
   });
 
   const payload = {
-    subjects: subjectsPayload
+    subjects: subjectsPayload,
+    room_id: roomId === "none" ? "none" : (roomId === "auto" ? "auto" : parseInt(roomId, 10)),
+    allow_override: allowOverride
   };
 
   const btn = document.getElementById("btn-submit-assign-subject");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Saving Subject Qualifications...";
+    btn.textContent = "Assigning Subject Offerings...";
   }
 
   try {
@@ -1956,42 +1981,29 @@ window.submitAssignSubject = async function(event) {
       }
     }
   } catch (err) {
+    const conflictAlert = document.getElementById("assign-conflict-alert");
+    const conflictMsg = document.getElementById("assign-conflict-message");
+    if (conflictAlert && conflictMsg) {
+      conflictAlert.style.display = "block";
+      const detailStr = (err.conflicts && err.conflicts.length > 0) ? err.conflicts.join("<br>&bull; ") : (err.message || "Collision detected.");
+      conflictMsg.innerHTML = detailStr;
+    }
     showToast(err.message || "Failed to assign subjects", true);
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = "Save Assigned Subject(s)";
+      btn.textContent = "Assign Subject Offering";
     }
   }
 };
 
-window.unassignSubjectFromFaculty = async function(facultyId, subjectId, scheduleId = null) {
-  if (!confirm("Are you sure you want to unassign this subject from this faculty member?")) {
-    return;
-  }
+window.unassignSubjectFromFaculty = async function(facultyId, subjectId, scheduleId) {
+  if (!confirm("Are you sure you want to unassign this subject offering from the instructor?")) return;
   try {
     const payload = {};
     if (subjectId) payload.subject_id = subjectId;
     if (scheduleId) payload.schedule_id = scheduleId;
-
     const res = await API.post(`/api/faculty/${facultyId}/unassign-subject`, payload);
-    if (res.status === "success") {
-      showToast(res.message || "Subject unassigned successfully!");
-      fetchFaculty();
-      const detCont = document.getElementById("faculty-detailed-container");
-      if (detCont && detCont.style.display !== "none") {
-        openFacultyDetailed(facultyId);
-      }
-    }
-  } catch (err) {
-    showToast(err.message || "Failed to unassign subject", true);
-  }
-};
-
-window.unassignSubjectFromFaculty = async function(facultyId, scheduleId) {
-  if (!confirm("Are you sure you want to unassign this subject offering from the instructor?")) return;
-  try {
-    const res = await API.post(`/api/faculty/${facultyId}/unassign-subject`, { schedule_id: scheduleId });
     if (res.status === "success") {
       showToast(res.message || "Subject unassigned successfully!");
       fetchFaculty();

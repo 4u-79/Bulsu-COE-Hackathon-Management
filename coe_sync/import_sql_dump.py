@@ -484,11 +484,68 @@ def load_and_clean_data_final_sql(sql_file_path: Path = None) -> Dict[str, Any]:
             "reference_id": assigned_ref,
         })
 
+    # 5. Rooms (77 realistic BulSU COE Rooms from `coe room list`: NH and COE 2 buildings)
+    raw_rooms = parse_insert_tuples(sql_text, "coe room list")
+    rooms_list = []
+    seen_room_codes = set()
+
+    for r in raw_rooms:
+        if len(r) < 3:
+            continue
+        row_id = int(r[0]) if r[0] and r[0].isdigit() else None
+        room_code = " ".join(r[1].split()).strip()
+        raw_type = r[2].strip().upper()
+
+        if not room_code or room_code in seen_room_codes:
+            continue
+        seen_room_codes.add(room_code)
+
+        # Classify building
+        if room_code.startswith("NH"):
+            building = "Nicanor Reyes Hall (NH)"
+        elif "COE 2" in room_code:
+            building = "COE 2 Building"
+        elif "COE 1" in room_code:
+            building = "COE 1 Building"
+        else:
+            building = "College of Engineering"
+
+        # Classify room type
+        if "LAB" in raw_type or "DRAWING" in raw_type:
+            room_type = "LAB"
+        else:
+            room_type = "LECTURE"
+
+        # Default equipment and capacity based on room type
+        if "COMP LAB" in raw_type:
+            equip = "Desktop Computers, Air Conditioner, Projector, Network Switch"
+            cap = 40
+        elif "LAB" in raw_type or "DRAWING" in raw_type:
+            equip = "Laboratory Benches, Specialized Equipment, Whiteboard"
+            cap = 40
+        elif "AVR" in raw_type:
+            equip = "Audio-Visual Projection System, Sound System, Stepped Seating"
+            cap = 80
+        else:
+            equip = "Whiteboard, Multimedia Projector, Air Conditioner"
+            cap = 45
+
+        rooms_list.append({
+            "id": row_id,
+            "room_code": room_code,
+            "room_type": room_type,
+            "building": building,
+            "capacity": cap,
+            "equipment": equip,
+            "department": "GEN",
+        })
+
     return {
         "faculty": faculty_list,
         "sections": sections_list,
         "subjects": subjects_list,
         "users": users_list,
+        "rooms": rooms_list,
     }
 
 

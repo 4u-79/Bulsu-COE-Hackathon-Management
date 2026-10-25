@@ -43,6 +43,18 @@ async function loadDashboardMetrics() {
       const utilPct = d.overall_room_utilization_pct !== undefined ? d.overall_room_utilization_pct : (d.room_utilization || 0);
       if (rUtil) rUtil.textContent = `${Number(utilPct).toFixed(2)}%`;
 
+      const tbaAlert = document.getElementById("dash-tba-alert-row");
+      const tbaCount = document.getElementById("dash-tba-count");
+      const unassignedTba = d.unassigned_tba_classes || 0;
+      if (tbaAlert && tbaCount) {
+        if (unassignedTba > 0) {
+          tbaCount.textContent = unassignedTba;
+          tbaAlert.style.display = "block";
+        } else {
+          tbaAlert.style.display = "none";
+        }
+      }
+
       if (d.unresolved_conflicts > 0) {
         if (confCard) confCard.classList.add("kpi-card-conflict");
         if (radarCount) {

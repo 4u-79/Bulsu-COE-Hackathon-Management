@@ -674,7 +674,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      manualFaculty.innerHTML = `<option value="">-- Choose Faculty Member (${filteredFaculty.length} Available) --</option>`;
+      manualFaculty.innerHTML = `<option value="">-- Unassigned (TBA) --</option>`;
       filteredFaculty.forEach((fac) => {
         const opt = document.createElement("option");
         opt.value = fac.id;
@@ -714,6 +714,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const labWidget = document.getElementById("manual-lab-group-widget");
       if (labWidget) {
         labWidget.style.display = isLab ? "block" : "none";
+      }
+
+      // Auto-select pre-assigned faculty if available
+      if (sub.assigned_faculty_id && manualFaculty) {
+        manualFaculty.value = sub.assigned_faculty_id;
       }
 
       // Prioritize and recommend matching room types in classroom dropdown
@@ -803,7 +808,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const startTime = manualStartTime?.value;
     const endTime = manualEndTime?.value;
 
-    if (!subjectId || !sectionId || !facultyId || !roomId || !day || !startTime || !endTime) {
+    if (!subjectId || !sectionId || !roomId || !day || !startTime || !endTime) {
       if (manualConflictBanner) {
         manualConflictBanner.style.display = "none";
         manualConflictBanner.innerHTML = "";
@@ -837,7 +842,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const payload = {
         subject_id: parseInt(subjectId, 10),
         section_id: parseInt(sectionId, 10),
-        faculty_id: parseInt(facultyId, 10),
+        faculty_id: facultyId ? parseInt(facultyId, 10) : null,
         room_id: parseInt(roomId, 10),
         day_of_week: day,
         start_time: startTime,
@@ -918,16 +923,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const isLabSplitBoth = subGroupVal === "BOTH";
     const subGroup = (subGroupVal === "G1" || subGroupVal === "G2") ? subGroupVal : null;
 
+    const manualSem = document.getElementById("manual-semester")?.value || localStorage.getItem("coe_sync_active_term") || "1";
+
     const payload = {
       subject_id: parseInt(manualSubject.value, 10),
       section_id: parseInt(manualSection.value, 10),
-      faculty_id: parseInt(manualFaculty.value, 10),
+      faculty_id: manualFaculty.value ? parseInt(manualFaculty.value, 10) : null,
       room_id: parseInt(manualRoom.value, 10),
       day_of_week: manualDay.value,
       start_time: manualStartTime.value,
       end_time: manualEndTime.value,
       sub_group: subGroup,
       split_lab_groups: isLabSplitBoth,
+      academic_year: "2026-2027",
+      semester: parseInt(manualSem, 10),
     };
 
     if (btnSaveManualSlot) {
