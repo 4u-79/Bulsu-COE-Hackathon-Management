@@ -163,18 +163,32 @@ document.addEventListener("DOMContentLoaded", () => {
   function initSmartGenerateControls() {
     // Populate Program Dropdown
     if (sgProgramSelect) {
-      sgProgramSelect.innerHTML = `
-        <option value="ALL">All Degree Programs</option>
-        <option value="CE">Civil Engineering (CE)</option>
-        <option value="CPE">Computer Engineering (CPE)</option>
-        <option value="EE">Electrical Engineering (EE)</option>
-        <option value="ECE">Electronics Engineering (ECE)</option>
-        <option value="IE">Industrial Engineering (IE)</option>
-        <option value="MFGE">Manufacturing Engineering (MFGE)</option>
-        <option value="ME">Mechanical Engineering (ME)</option>
-        <option value="MEE">Mechatronics Engineering (MEE)</option>
-        <option value="GEN">General Engineering (GEN)</option>
-      `;
+      const isChair = ["CHAIR", "PROG_CHA"].includes(window.CURRENT_ROLE) || ["CHAIR", "PROG_CHA"].includes(window.AUTHENTIC_USER_ROLE);
+      const userProg = normalizeProgram(window.CURRENT_PROGRAM || window.USER_PROGRAM || "");
+
+      if (isChair && userProg && userProg !== "ALL" && userProg !== "ADMIN") {
+        sgProgramSelect.innerHTML = `<option value="${userProg}" selected>${userProg} Department (Locked)</option>`;
+        sgProgramSelect.disabled = true;
+        sgProgramSelect.style.background = "rgba(241,245,249,0.9)";
+        sgProgramSelect.style.fontWeight = "700";
+        sgProgramSelect.style.cursor = "not-allowed";
+      } else {
+        sgProgramSelect.innerHTML = `
+          <option value="ALL">All Degree Programs</option>
+          <option value="CE">Civil Engineering (CE)</option>
+          <option value="CPE">Computer Engineering (CPE)</option>
+          <option value="EE">Electrical Engineering (EE)</option>
+          <option value="ECE">Electronics Engineering (ECE)</option>
+          <option value="IE">Industrial Engineering (IE)</option>
+          <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+          <option value="ME">Mechanical Engineering (ME)</option>
+          <option value="MEE">Mechatronics Engineering (MEE)</option>
+          <option value="GEN">General Engineering (GEN)</option>
+        `;
+        sgProgramSelect.disabled = false;
+        sgProgramSelect.style.background = "";
+        sgProgramSelect.style.cursor = "";
+      }
     }
 
     renderSmartSectionPills();
@@ -384,18 +398,32 @@ document.addEventListener("DOMContentLoaded", () => {
   function initManualSchedulingControls() {
     // Populate Program Dropdown
     if (manualProgram) {
-      manualProgram.innerHTML = `
-        <option value="">-- All Programs --</option>
-        <option value="CE">Civil Engineering (CE)</option>
-        <option value="CPE">Computer Engineering (CPE)</option>
-        <option value="EE">Electrical Engineering (EE)</option>
-        <option value="ECE">Electronics Engineering (ECE)</option>
-        <option value="IE">Industrial Engineering (IE)</option>
-        <option value="MFGE">Manufacturing Engineering (MFGE)</option>
-        <option value="ME">Mechanical Engineering (ME)</option>
-        <option value="MEE">Mechatronics Engineering (MEE)</option>
-        <option value="GEN">General Engineering (GEN)</option>
-      `;
+      const isChair = ["CHAIR", "PROG_CHA"].includes(window.CURRENT_ROLE) || ["CHAIR", "PROG_CHA"].includes(window.AUTHENTIC_USER_ROLE);
+      const userProg = normalizeProgram(window.CURRENT_PROGRAM || window.USER_PROGRAM || "");
+
+      if (isChair && userProg && userProg !== "ALL" && userProg !== "ADMIN") {
+        manualProgram.innerHTML = `<option value="${userProg}" selected>${userProg} Department (Locked)</option>`;
+        manualProgram.disabled = true;
+        manualProgram.style.background = "rgba(241,245,249,0.9)";
+        manualProgram.style.fontWeight = "700";
+        manualProgram.style.cursor = "not-allowed";
+      } else {
+        manualProgram.innerHTML = `
+          <option value="">-- All Programs --</option>
+          <option value="CE">Civil Engineering (CE)</option>
+          <option value="CPE">Computer Engineering (CPE)</option>
+          <option value="EE">Electrical Engineering (EE)</option>
+          <option value="ECE">Electronics Engineering (ECE)</option>
+          <option value="IE">Industrial Engineering (IE)</option>
+          <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+          <option value="ME">Mechanical Engineering (ME)</option>
+          <option value="MEE">Mechatronics Engineering (MEE)</option>
+          <option value="GEN">General Engineering (GEN)</option>
+        `;
+        manualProgram.disabled = false;
+        manualProgram.style.background = "";
+        manualProgram.style.cursor = "";
+      }
     }
 
     // Populate Year Level Dropdown

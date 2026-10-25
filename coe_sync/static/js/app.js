@@ -183,6 +183,8 @@ async function initViewAsSelector() {
       window.AUTHENTIC_USER_ROLE = sessionInfo.role;
       const effectiveRole = sessionInfo.active_role || sessionInfo.role;
       window.CURRENT_ROLE = window.normalizeRole(effectiveRole);
+      window.CURRENT_PROGRAM = sessionInfo.active_program || sessionInfo.user_program || sessionInfo.program || null;
+      window.USER_PROGRAM = sessionInfo.program || sessionInfo.user_program || null;
       if (sessionInfo.active_reference_id) {
         window.CURRENT_REF_ID = sessionInfo.active_reference_id;
       }
@@ -267,7 +269,8 @@ window.applyRolePermissions = function (role) {
   if (navReports) navReports.style.display = (isAdminOrChair || isDean) ? "" : "none";
 
   // Role Impersonator lockdown: If native session role is FACULTY or STUDENT, remove View As toggle
-  if (window.AUTHENTIC_USER_ROLE && window.AUTHENTIC_USER_ROLE !== "CHAIR" && window.AUTHENTIC_USER_ROLE !== "ADMIN" && window.AUTHENTIC_USER_ROLE !== "DEAN") {
+  const normAuth = window.normalizeRole(window.AUTHENTIC_USER_ROLE || "");
+  if (normAuth && normAuth !== "CHAIR" && normAuth !== "ADMIN" && normAuth !== "DEAN") {
     const viewAsEl = document.getElementById("view-as-container");
     if (viewAsEl) viewAsEl.remove();
   }

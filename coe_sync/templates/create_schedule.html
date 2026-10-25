@@ -47,6 +47,11 @@
             <div class="form-row-2" style="display: grid; grid-template-columns: 1.5fr 1fr 1.2fr; gap: 14px;">
               <div class="form-group">
                 <label class="form-label" for="sg-program">Degree Program *</label>
+                {% if active_role in ['CHAIR', 'PROG_CHA'] and effective_program %}
+                <select id="sg-program" class="form-select" style="background: rgba(241,245,249,0.9); font-weight:700;">
+                  <option value="{{ effective_program }}" selected>{{ effective_program }} Department (Locked)</option>
+                </select>
+                {% else %}
                 <select id="sg-program" class="form-select">
                   <option value="ALL">All Degree Programs</option>
                   <option value="CE">Civil Engineering (CE)</option>
@@ -59,6 +64,7 @@
                   <option value="MEE">Mechatronics Engineering (MEE)</option>
                   <option value="GEN">General Engineering (GEN)</option>
                 </select>
+                {% endif %}
               </div>
               <div class="form-group">
                 <label class="form-label" for="sg-year-level">Year Level</label>
@@ -350,6 +356,11 @@
         <div class="form-row-2" style="display: grid; grid-template-columns: 1.5fr 1fr 1.2fr; gap: 14px;">
           <div class="form-group">
             <label class="form-label" for="manual-program">Degree Program *</label>
+            {% if active_role in ['CHAIR', 'PROG_CHA'] and effective_program %}
+            <select id="manual-program" class="form-select" required style="background: rgba(241,245,249,0.9); font-weight:700;">
+              <option value="{{ effective_program }}" selected>{{ effective_program }} Department (Locked)</option>
+            </select>
+            {% else %}
             <select id="manual-program" class="form-select" required>
               <option value="">-- All Programs --</option>
               <option value="CE">Civil Engineering (CE)</option>
@@ -362,6 +373,7 @@
               <option value="MEE">Mechatronics Engineering (MEE)</option>
               <option value="GEN">General Engineering (GEN)</option>
             </select>
+            {% endif %}
           </div>
           <div class="form-group">
             <label class="form-label" for="manual-year-level">Year Level</label>

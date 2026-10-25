@@ -8,6 +8,12 @@
   <!-- Centralized Design Tokens & Modular Stylesheet (Zero CDN Dependencies) -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <script>
+    window.AUTHENTIC_USER_ROLE = "{{ session.get('role') or '' }}";
+    window.CURRENT_ROLE = "{{ active_role or session.get('active_role') or session.get('role') or '' }}";
+    window.CURRENT_PROGRAM = "{{ session.get('active_program') or session.get('program') or '' }}";
+    window.CURRENT_REF_ID = "{{ session.get('active_reference_id') or session.get('reference_id') or '' }}";
+  </script>
   {% block extra_css %}{% endblock %}
 </head>
 <body class="{% if session.get('role') == 'STUDENT' or active_role == 'STUDENT' %}student-portal non-student-omitted{% endif %}">

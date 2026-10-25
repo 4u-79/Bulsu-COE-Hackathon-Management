@@ -137,6 +137,7 @@ def create_schedule():
         "create_schedule.html",
         active_page="create_schedule",
         active_role=get_effective_role(),
+        effective_program=get_effective_program(),
         current_username=session.get("username") or "chair_cpe",
         must_change_credentials=session.get("must_change_credentials", False),
     )

@@ -719,6 +719,13 @@ def api_smart_generate_schedule():
     """
     payload = request.get_json(silent=True) or {}
     user_id = session.get("user_id")
+
+    # Enforce Program Chair department scope locking
+    effective_role = get_effective_role()
+    effective_prog = get_effective_program()
+    if effective_role in ("CHAIR", "PROG_CHA") and effective_prog:
+        payload["program"] = effective_prog
+
     result = run_smart_scheduler(payload, user_id=user_id)
     if result.get("status") == "error":
         msg = str(result.get("message", "")).lower()
