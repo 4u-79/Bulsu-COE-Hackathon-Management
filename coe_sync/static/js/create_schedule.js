@@ -207,11 +207,13 @@ document.addEventListener("DOMContentLoaded", () => {
     sgProgramSelect?.addEventListener("change", () => {
       renderSmartSectionPills();
       populateSmartFacultyDropdown();
+      renderSmartLabSubjects();
       updateLiveSummaryMetrics();
     });
 
     sgYearSelect?.addEventListener("change", () => {
       renderSmartSectionPills();
+      renderSmartLabSubjects();
       updateLiveSummaryMetrics();
     });
 
@@ -219,6 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
       sgSectionsContainer?.querySelectorAll(".section-pill").forEach((pill) => {
         pill.classList.add("selected");
       });
+      renderSmartLabSubjects();
       updateLiveSummaryMetrics();
     });
 
@@ -226,6 +229,7 @@ document.addEventListener("DOMContentLoaded", () => {
       sgSectionsContainer?.querySelectorAll(".section-pill").forEach((pill) => {
         pill.classList.remove("selected");
       });
+      renderSmartLabSubjects();
       updateLiveSummaryMetrics();
     });
 
@@ -249,6 +253,107 @@ document.addEventListener("DOMContentLoaded", () => {
       btnRoomSelectAll.textContent = allRoomsChecked ? "Deselect All Rooms" : "Select All Rooms";
       updateLiveSummaryMetrics();
     });
+
+    // Initial render of Step 4 Lab Subjects
+    renderSmartLabSubjects();
+  }
+
+  // Window helpers for Step 4 Lab Splitting
+  window.toggleLabSplittingWidget = function() {
+    const isChecked = document.getElementById("pref-split-lab-groups")?.checked ?? true;
+    const subContainer = document.getElementById("sg-lab-selection-container");
+    if (subContainer) {
+      subContainer.style.opacity = isChecked ? "1" : "0.5";
+      subContainer.style.pointerEvents = isChecked ? "auto" : "none";
+    }
+  };
+
+  window.toggleSelectAllLabOfferings = function(select) {
+    const list = document.getElementById("sg-lab-subjects-list");
+    if (!list) return;
+    list.querySelectorAll(".sg-lab-cb").forEach((cb) => {
+      cb.checked = select;
+    });
+  };
+
+  function renderSmartLabSubjects() {
+    const labListContainer = document.getElementById("sg-lab-subjects-list");
+    if (!labListContainer) return;
+
+    // Track previously unchecked items to preserve user preferences across pill filter clicks
+    const previouslyUnchecked = new Set();
+    labListContainer.querySelectorAll(".sg-lab-cb:not(:checked)").forEach((cb) => {
+      previouslyUnchecked.add(cb.value);
+    });
+
+    // Detect all laboratory subjects matching active program/sections
+    const activePills = sgSectionsContainer?.querySelectorAll(".section-pill.selected") || [];
+    const selectedSecIds = Array.from(activePills).map((p) => parseInt(p.dataset.id, 10));
+    const selectedSecObjs = masterState.allSections.filter((s) => selectedSecIds.includes(s.id));
+
+    const selectedProgram = sgProgramSelect ? sgProgramSelect.value : "ALL";
+    const selectedYear = sgYearSelect ? sgYearSelect.value : "ALL";
+
+    // Gather eligible LAB subjects
+    const labSubjectsMap = new Map();
+    masterState.allSubjects.forEach((sub) => {
+      const subType = String(sub.subject_type || sub.type || "LECTURE").toUpperCase();
+      const code = String(sub.code || "").toUpperCase();
+      const isLab = subType.includes("LAB") || code.endsWith("L") || code.endsWith("D") || code.endsWith("F");
+      if (!isLab) return;
+
+      const normProg = normalizeProgram(sub.program);
+      const selProg = normalizeProgram(selectedProgram);
+
+      if (selectedProgram !== "ALL" && normProg !== selProg && normProg !== "GEN") {
+        return;
+      }
+      if (selectedYear !== "ALL" && String(sub.year_level) !== String(selectedYear)) {
+        return;
+      }
+
+      // If specific sections are selected, ensure subject matches at least one selected cohort's program
+      if (selectedSecObjs.length > 0) {
+        const matchesSection = selectedSecObjs.some((sec) => {
+          const secProg = normalizeProgram(sec.program);
+          const progMatch = (normProg === "GEN" || normProg === secProg);
+          const yearMatch = !sub.year_level || String(sub.year_level) === String(sec.year_level);
+          return progMatch && yearMatch;
+        });
+        if (!matchesSection) return;
+      }
+
+      labSubjectsMap.set(sub.id, sub);
+    });
+
+    const labSubjects = Array.from(labSubjectsMap.values());
+
+    if (labSubjects.length === 0) {
+      labListContainer.innerHTML = `<span class="empty-hint" style="text-align: center; padding: 14px; font-size: 12px; color: var(--text-muted);">No laboratory subjects found in the selected program/cohorts.</span>`;
+      return;
+    }
+
+    labListContainer.innerHTML = labSubjects.map((sub) => {
+      const isChecked = !previouslyUnchecked.has(String(sub.id));
+      return `
+        <label class="sg-lab-item-row" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; border: 1px solid #E2E8F0; background: #FAFAFA; cursor: pointer; transition: all 0.15s ease;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" class="sg-lab-cb" value="${sub.id}" ${isChecked ? "checked" : ""} style="accent-color: var(--bulsu-maroon); transform: scale(1.1); cursor: pointer;">
+            <div>
+              <div style="font-weight: 700; font-size: 12.5px; color: var(--text-dark);">
+                ${escapeHtml(sub.code)} — ${escapeHtml(sub.title)}
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px;">
+                ${sub.units} Units &bull; 3.0 Hours/Week &bull; ${escapeHtml(sub.program || 'GEN')} Dept
+              </div>
+            </div>
+          </div>
+          <span class="badge" style="background: rgba(104,28,46,0.08); color: var(--bulsu-maroon); font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(104,28,46,0.15);">
+            Split: G1 &bull; G2
+          </span>
+        </label>
+      `;
+    }).join("");
   }
 
   function renderSmartSectionPills() {
@@ -286,11 +391,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
       pill.addEventListener("click", () => {
         pill.classList.toggle("selected");
+        renderSmartLabSubjects();
         updateLiveSummaryMetrics();
       });
 
       sgSectionsContainer.appendChild(pill);
     });
+
+    renderSmartLabSubjects();
   }
 
   function renderSmartRoomCheckboxes() {
@@ -462,7 +570,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Real-time conflict checks on parameters change
-    [manualFaculty, manualRoom, manualDay, manualStartTime, manualEndTime].forEach((el) => {
+    const manualSubgroupSelect = document.getElementById("manual-subgroup-select");
+    [manualFaculty, manualRoom, manualDay, manualStartTime, manualEndTime, manualSubgroupSelect].forEach((el) => {
       el?.addEventListener("change", triggerManualPreflight);
       el?.addEventListener("input", triggerManualPreflight);
     });
@@ -601,6 +710,12 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
       }
 
+      // Toggle Laboratory Subgroup Selection widget
+      const labWidget = document.getElementById("manual-lab-group-widget");
+      if (labWidget) {
+        labWidget.style.display = isLab ? "block" : "none";
+      }
+
       // Prioritize and recommend matching room types in classroom dropdown
       populateManualRooms(isLab ? "LAB" : "LECTURE");
 
@@ -618,6 +733,8 @@ document.addEventListener("DOMContentLoaded", () => {
         manualSubjectMeta.style.display = "none";
         manualSubjectMeta.innerHTML = "";
       }
+      const labWidget = document.getElementById("manual-lab-group-widget");
+      if (labWidget) labWidget.style.display = "none";
       populateManualRooms(null);
     }
   }
@@ -714,6 +831,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
+      const subGroupVal = document.getElementById("manual-subgroup-select")?.value || "ALL";
+      const subGroup = (subGroupVal === "G1" || subGroupVal === "G2" || subGroupVal === "BOTH") ? "G1" : null;
+
       const payload = {
         subject_id: parseInt(subjectId, 10),
         section_id: parseInt(sectionId, 10),
@@ -722,6 +842,7 @@ document.addEventListener("DOMContentLoaded", () => {
         day_of_week: day,
         start_time: startTime,
         end_time: endTime,
+        sub_group: subGroup,
       };
 
       const res = await fetch("/api/conflicts/check", {
@@ -793,6 +914,10 @@ document.addEventListener("DOMContentLoaded", () => {
   formManual?.addEventListener("submit", async (e) => {
     e.preventDefault();
 
+    const subGroupVal = document.getElementById("manual-subgroup-select")?.value || "ALL";
+    const isLabSplitBoth = subGroupVal === "BOTH";
+    const subGroup = (subGroupVal === "G1" || subGroupVal === "G2") ? subGroupVal : null;
+
     const payload = {
       subject_id: parseInt(manualSubject.value, 10),
       section_id: parseInt(manualSection.value, 10),
@@ -801,6 +926,8 @@ document.addEventListener("DOMContentLoaded", () => {
       day_of_week: manualDay.value,
       start_time: manualStartTime.value,
       end_time: manualEndTime.value,
+      sub_group: subGroup,
+      split_lab_groups: isLabSplitBoth,
     };
 
     if (btnSaveManualSlot) {
@@ -915,6 +1042,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const sgSemesterSelect = document.getElementById("sg-semester");
     const activeSemester = parseInt(sgSemesterSelect?.value || localStorage.getItem("coe_sync_active_term") || "1", 10);
 
+    const isLabSplitEnabled = document.getElementById("pref-split-lab-groups")?.checked ?? true;
+    const selectedLabCbs = document.querySelectorAll("#sg-lab-subjects-list .sg-lab-cb:checked");
+    const splitLabSubjectIds = isLabSplitEnabled ? Array.from(selectedLabCbs).map((cb) => parseInt(cb.value, 10)) : [];
+
     const payload = {
       program: sgProgramSelect.value,
       year_level: sgYearSelect.value === "ALL" ? "all" : parseInt(sgYearSelect.value, 10),
@@ -922,7 +1053,11 @@ document.addEventListener("DOMContentLoaded", () => {
       section_ids: sectionIds,
       room_ids: roomIds,
       faculty_ids: sgFacultySelect.value === "all" ? "all" : [parseInt(sgFacultySelect.value, 10)],
+      split_lab_groups: isLabSplitEnabled,
+      split_lab_subject_ids: splitLabSubjectIds,
       preferences: {
+        split_lab_groups: isLabSplitEnabled,
+        split_lab_subject_ids: splitLabSubjectIds,
         minimize_gaps: document.getElementById("pref-minimize-gaps")?.checked ?? true,
         balance_workload: document.getElementById("pref-balance-workload")?.checked ?? true,
         optimize_utilization: document.getElementById("pref-optimize-utilization")?.checked ?? true,

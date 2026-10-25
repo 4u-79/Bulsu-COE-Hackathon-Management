@@ -1756,30 +1756,16 @@ window.openAssignSubjectModal = async function(facultyId) {
       document.getElementById("assign-card-fac-dept").textContent = `${f.department || f.program} Department`;
       document.getElementById("assign-card-fac-load").textContent = `${f.current_units} / ${f.max_units} Units`;
 
-      // 1. Populate Subject Offering dropdown (Exclude Minor Subjects)
+      // 1. Populate Subject Offering Multi-Select List (Exclude Minor Subjects)
       const majorSubjects = (res.data.subjects || []).filter(sub => (sub.classification || getSubjectClassification(sub)) === "MAJOR");
-      const subSelect = document.getElementById("assign-subject-select");
-      subSelect.innerHTML = `<option value="">-- Choose Subject (${majorSubjects.length} Major Subjects Available) --</option>`;
-      majorSubjects.forEach(sub => {
-        const opt = document.createElement("option");
-        opt.value = sub.id;
-        opt.textContent = `[${sub.code}] ${sub.title} (${sub.units}u · ${sub.subject_type || 'Lecture'})`;
-        subSelect.appendChild(opt);
-      });
+      renderAssignSubjectMultiList(majorSubjects);
 
-      // 2. Populate Section dropdown
-      const secSelect = document.getElementById("assign-section-select");
-      secSelect.innerHTML = `<option value="">-- Choose Section (${res.data.sections.length} Available) --</option>`;
-      res.data.sections.forEach(sec => {
-        const opt = document.createElement("option");
-        opt.value = sec.id;
-        opt.textContent = `${sec.name} (${sec.program} · Year ${sec.year_level})`;
-        secSelect.appendChild(opt);
-      });
-
-      // 3. Populate Room dropdown
+      // 2. Populate Room dropdown (with Do not assign option)
       const roomSelect = document.getElementById("assign-room-select");
-      roomSelect.innerHTML = `<option value="auto" selected>✨ Auto-Assign Best Department Room</option>`;
+      roomSelect.innerHTML = `
+        <option value="none">🚫 Do not assign (Unassigned room)</option>
+        <option value="auto" selected>✨ Auto-Assign Best Department Room</option>
+      `;
       res.data.rooms.forEach(rm => {
         const opt = document.createElement("option");
         opt.value = rm.id;
@@ -1794,89 +1780,181 @@ window.openAssignSubjectModal = async function(facultyId) {
   modal.style.display = "flex";
 };
 
+window._selectedAssignSubjects = new Map(); // subjectId -> { split_preference: "1.5_HOUR_SPLIT" | "3_HOUR_BLOCK" }
+
+window.renderAssignSubjectMultiList = function(subjects) {
+  const container = document.getElementById("assign-subject-multiselect-container");
+  if (!container) return;
+  _selectedAssignSubjects.clear();
+  updateAssignSelectedCount();
+
+  if (!subjects || subjects.length === 0) {
+    container.innerHTML = `<div style="text-align:center; padding: 16px; color: var(--text-muted); font-size: 12px;">No major subjects available for assignment.</div>`;
+    return;
+  }
+
+  container.innerHTML = subjects.map(sub => {
+    const cls = (sub.classification || getSubjectClassification(sub)) === "MAJOR" ? "Major" : "Minor";
+    const subType = sub.subject_type || "LECTURE";
+    const hrs = sub.hours_per_week || sub.units || 3;
+    const defaultSplit = sub.split_preference || (hrs >= 3 ? "3_HOUR_BLOCK" : "1.5_HOUR_SPLIT");
+
+    return `
+      <div class="assign-sub-row" data-id="${sub.id}" data-text="${sub.code} ${sub.title}" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 6px; border: 1px solid #F1F5F9; background: #FAFAFA; transition: background 0.15s ease;">
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; flex: 1; margin: 0; font-size: 12px;">
+          <input type="checkbox" class="assign-sub-cb" value="${sub.id}" style="margin-top: 3px; accent-color: var(--bulsu-maroon);" onchange="handleAssignSubCheckboxChange(this, ${sub.id}, '${defaultSplit}')">
+          <div style="line-height: 1.35;">
+            <div style="font-weight: 700; color: var(--text-dark);">
+              ${sub.code} — ${sub.title}
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+              ${sub.units} Units &bull; ${subType} &bull; ${hrs} Hours/Week &bull; <span style="font-weight:700; color:${cls === 'Major' ? 'var(--bulsu-maroon)' : '#B45309'};">${cls} Subject</span>
+              <span id="assign-sub-badge-${sub.id}" class="badge-duration-tag" style="margin-left: 6px; font-size: 10px; font-weight: 800; background: rgba(104,28,46,0.1); color: var(--bulsu-maroon); padding: 1px 6px; border-radius: 4px;">
+                ${defaultSplit === '3_HOUR_BLOCK' ? '3.0 Hours' : '1.5 Hours'}
+              </span>
+            </div>
+          </div>
+        </label>
+        
+        <!-- 3-Dots Settings Popover Menu Button -->
+        <div style="position: relative; margin-left: 8px;">
+          <button type="button" class="btn btn-sm btn-dots-settings" onclick="toggleAssignSubSettings(${sub.id}, event)" style="background: none; border: 1px solid #E2E8F0; border-radius: 6px; padding: 3px 7px; color: #64748B; cursor: pointer; font-size: 14px; line-height: 1;" title="Duration Settings (1.5h or 3h)">
+            &#8942;
+          </button>
+          <div id="assign-sub-menu-${sub.id}" class="assign-sub-settings-menu" style="display: none; position: absolute; right: 0; top: 100%; z-index: 1050; background: #FFF; border: 1px solid #CBD5E1; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.12); padding: 6px; min-width: 175px;">
+            <div style="font-size: 10.5px; font-weight: 800; color: #475569; text-transform: uppercase; padding: 4px 8px; border-bottom: 1px solid #F1F5F9; margin-bottom: 4px;">
+              Slot Duration
+            </div>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 4px 8px; cursor: pointer; border-radius: 4px; margin: 0; font-weight: 600;">
+              <input type="radio" name="sub-split-${sub.id}" value="1.5_HOUR_SPLIT" ${defaultSplit !== '3_HOUR_BLOCK' ? 'checked' : ''} onchange="setAssignSubDuration(${sub.id}, '1.5_HOUR_SPLIT')">
+              <span>1.5 Hours (Split Slot)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 4px 8px; cursor: pointer; border-radius: 4px; margin: 0; font-weight: 600;">
+              <input type="radio" name="sub-split-${sub.id}" value="3_HOUR_BLOCK" ${defaultSplit === '3_HOUR_BLOCK' ? 'checked' : ''} onchange="setAssignSubDuration(${sub.id}, '3_HOUR_BLOCK')">
+              <span>3.0 Hours (Block Slot)</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+};
+
+window.toggleAssignSubSettings = function(subId, event) {
+  event.stopPropagation();
+  // Close any open menus
+  document.querySelectorAll(".assign-sub-settings-menu").forEach(el => {
+    if (el.id !== `assign-sub-menu-${subId}`) el.style.display = "none";
+  });
+  const menu = document.getElementById(`assign-sub-menu-${subId}`);
+  if (menu) {
+    menu.style.display = menu.style.display === "none" ? "block" : "none";
+  }
+};
+
+// Global click to close popovers
+document.addEventListener("click", function(e) {
+  if (!e.target.closest(".assign-sub-settings-menu") && !e.target.closest(".btn-dots-settings")) {
+    document.querySelectorAll(".assign-sub-settings-menu").forEach(el => el.style.display = "none");
+  }
+});
+
+window.setAssignSubDuration = function(subId, duration) {
+  const badge = document.getElementById(`assign-sub-badge-${subId}`);
+  if (badge) {
+    badge.textContent = duration === "3_HOUR_BLOCK" ? "3.0 Hours" : "1.5 Hours";
+  }
+  if (_selectedAssignSubjects.has(subId)) {
+    _selectedAssignSubjects.get(subId).split_preference = duration;
+  }
+  const menu = document.getElementById(`assign-sub-menu-${subId}`);
+  if (menu) menu.style.display = "none";
+};
+
+window.handleAssignSubCheckboxChange = function(cb, subId, defaultSplit) {
+  const row = cb.closest(".assign-sub-row");
+  if (cb.checked) {
+    const radioVal = document.querySelector(`input[name="sub-split-${subId}"]:checked`)?.value || defaultSplit;
+    _selectedAssignSubjects.set(subId, { split_preference: radioVal });
+    if (row) {
+      row.style.background = "rgba(104,28,46,0.04)";
+      row.style.borderColor = "rgba(104,28,46,0.2)";
+    }
+  } else {
+    _selectedAssignSubjects.delete(subId);
+    if (row) {
+      row.style.background = "#FAFAFA";
+      row.style.borderColor = "#F1F5F9";
+    }
+  }
+  updateAssignSelectedCount();
+};
+
+window.updateAssignSelectedCount = function() {
+  const countSpan = document.getElementById("assign-selected-count");
+  if (countSpan) {
+    countSpan.textContent = `${_selectedAssignSubjects.size} Selected`;
+  }
+};
+
+window.filterAssignSubjectList = function() {
+  const q = (document.getElementById("assign-subject-search")?.value || "").toLowerCase().trim();
+  document.querySelectorAll(".assign-sub-row").forEach(row => {
+    const txt = (row.dataset.text || "").toLowerCase();
+    row.style.display = !q || txt.includes(q) ? "flex" : "none";
+  });
+};
+
+window.toggleSelectAllSubjects = function() {
+  const cbs = Array.from(document.querySelectorAll(".assign-sub-cb"));
+  const allChecked = cbs.length > 0 && cbs.every(cb => cb.checked);
+  cbs.forEach(cb => {
+    cb.checked = !allChecked;
+    const subId = parseInt(cb.value, 10);
+    window.handleAssignSubCheckboxChange(cb, subId, "1.5_HOUR_SPLIT");
+  });
+};
+
 window.closeAssignSubjectModal = function() {
   const modal = document.getElementById("modal-assign-subject");
   if (modal) modal.style.display = "none";
 };
 
-window.handleAssignSubjectSelectChange = function() {
-  const subId = document.getElementById("assign-subject-select")?.value;
-  const metaBox = document.getElementById("assign-subject-meta");
-  if (!subId || !_assignableOptionsCache) {
-    if (metaBox) metaBox.style.display = "none";
-    return;
-  }
-  const sub = _assignableOptionsCache.subjects.find(s => String(s.id) === String(subId));
-  if (sub && metaBox) {
-    const cls = (sub.classification || getSubjectClassification(sub)) === "MAJOR" ? "Major" : "Minor";
-    metaBox.style.display = "block";
-    metaBox.innerHTML = `<strong>${sub.code} — ${sub.title}</strong>: ${sub.units} Units &bull; ${sub.subject_type || 'Lecture'} &bull; ${sub.hours_per_week || sub.units || 3} Hours/Week &bull; <span style="font-weight:700; color:${cls === 'Major' ? 'var(--bulsu-maroon)' : '#B45309'};">${cls} Subject</span>`;
-  }
-};
-
-window.handleAssignSlotPresetChange = function() {
-  const preset = document.getElementById("assign-slot-preset")?.value;
-  const customRow = document.getElementById("assign-custom-time-row");
-  const stInp = document.getElementById("assign-start-time");
-  const etInp = document.getElementById("assign-end-time");
-
-  if (preset === "custom") {
-    if (customRow) customRow.style.display = "grid";
-  } else {
-    if (customRow) customRow.style.display = "none";
-    if (preset && preset.includes("-")) {
-      const [st, et] = preset.split("-");
-      if (stInp) stInp.value = st;
-      if (etInp) etInp.value = et;
-    }
-  }
-};
-
 window.submitAssignSubject = async function(event) {
   event.preventDefault();
   const facId = document.getElementById("assign-faculty-id").value;
-  const subId = document.getElementById("assign-subject-select").value;
-  const secId = document.getElementById("assign-section-select").value;
   const roomId = document.getElementById("assign-room-select").value;
-  const day = document.getElementById("assign-day-select").value;
-  const preset = document.getElementById("assign-slot-preset").value;
   const allowOverride = document.getElementById("assign-allow-override")?.checked || false;
 
-  const selectedSub = _assignableOptionsCache?.subjects?.find(s => String(s.id) === String(subId));
-  if (selectedSub && (selectedSub.classification || getSubjectClassification(selectedSub)) === "MINOR") {
-    showToast("Minor subjects cannot be assigned to faculty members.", true);
+  if (_selectedAssignSubjects.size === 0) {
+    showToast("Please select at least one Subject Offering.", true);
     return;
   }
 
-  let st = "08:00";
-  let et = "11:00";
-  if (preset === "custom") {
-    st = document.getElementById("assign-start-time").value || "08:00";
-    et = document.getElementById("assign-end-time").value || "11:00";
-  } else if (preset && preset.includes("-")) {
-    [st, et] = preset.split("-");
-  }
+  const subjectsPayload = [];
+  _selectedAssignSubjects.forEach((val, subId) => {
+    subjectsPayload.push({
+      subject_id: subId,
+      split_preference: val.split_preference || "1.5_HOUR_SPLIT"
+    });
+  });
 
   const payload = {
-    subject_id: parseInt(subId, 10),
-    section_id: parseInt(secId, 10),
-    room_id: roomId === "auto" ? null : parseInt(roomId, 10),
-    day_of_week: day,
-    start_time: st,
-    end_time: et,
+    subjects: subjectsPayload,
+    room_id: roomId === "none" ? "none" : (roomId === "auto" ? "auto" : parseInt(roomId, 10)),
     allow_override: allowOverride
   };
 
   const btn = document.getElementById("btn-submit-assign-subject");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Assigning Subject...";
+    btn.textContent = "Assigning Subject Offerings...";
   }
 
   try {
     const res = await API.post(`/api/faculty/${facId}/assign-subject`, payload);
     if (res.status === "success") {
-      showToast(res.message || "Subject assigned successfully!");
+      showToast(res.message || "Subjects assigned successfully!");
       closeAssignSubjectModal();
       // Refresh faculty list
       fetchFaculty();
@@ -1894,7 +1972,7 @@ window.submitAssignSubject = async function(event) {
       const detailStr = (err.conflicts && err.conflicts.length > 0) ? err.conflicts.join("<br>&bull; ") : (err.message || "Collision detected.");
       conflictMsg.innerHTML = detailStr;
     }
-    showToast(err.message || "Failed to assign subject", true);
+    showToast(err.message || "Failed to assign subjects", true);
   } finally {
     if (btn) {
       btn.disabled = false;

@@ -1686,6 +1686,13 @@ function openModal(editId = null, prefill = {}) {
       setSelectVal("m-status",  sched.status);
       setSelectVal("m-start",   sched.start_time?.slice(0, 5));
       setSelectVal("m-end",     sched.end_time?.slice(0, 5));
+      setSelectVal("m-subgroup", sched.sub_group || "");
+
+      // Check if subject is LAB to display subgroup row
+      const curSub = _subjects.find(sb => sb.id === sched.subject_id);
+      const isLab = curSub && (curSub.subject_type === "LAB" || (curSub.code || "").endsWith("L") || (curSub.code || "").endsWith("D") || (curSub.code || "").endsWith("F"));
+      const subGrpRow = document.getElementById("m-subgroup-row");
+      if (subGrpRow) subGrpRow.style.display = isLab ? "flex" : "none";
 
       if (sched.has_conflict && conflictBanner) {
         conflictBanner.style.display = "block";
@@ -1713,6 +1720,9 @@ function openModal(editId = null, prefill = {}) {
     saveBtn.textContent = "Save Schedule";
     if (conflictBanner) conflictBanner.style.display = "none";
     if (deleteBtn) deleteBtn.style.display = "none";
+    setSelectVal("m-subgroup", "");
+    const subGrpRow = document.getElementById("m-subgroup-row");
+    if (subGrpRow) subGrpRow.style.display = "none";
 
     // Apply prefill values from active filters or grid-click
     const activeSec = prefill.section_id || document.getElementById("filter-section")?.value;
@@ -1727,6 +1737,19 @@ function openModal(editId = null, prefill = {}) {
     if (prefill.day_of_week) setSelectVal("m-day", prefill.day_of_week);
     if (prefill.start_time)  setSelectVal("m-start", prefill.start_time);
     if (prefill.end_time)    setSelectVal("m-end", prefill.end_time);
+  }
+
+  // Bind subject change in modal to show/hide lab subgroup
+  const subSelect = document.getElementById("m-subject");
+  if (subSelect && !subSelect._hasLabListener) {
+    subSelect._hasLabListener = true;
+    subSelect.addEventListener("change", () => {
+      const selectedSubId = parseInt(subSelect.value, 10);
+      const chosenSub = _subjects.find(sb => sb.id === selectedSubId);
+      const isLabChosen = chosenSub && (chosenSub.subject_type === "LAB" || (chosenSub.code || "").endsWith("L") || (chosenSub.code || "").endsWith("D") || (chosenSub.code || "").endsWith("F"));
+      const grpRow = document.getElementById("m-subgroup-row");
+      if (grpRow) grpRow.style.display = isLabChosen ? "flex" : "none";
+    });
   }
 
   backdrop.classList.add("sched-modal-backdrop--open");
@@ -1876,17 +1899,23 @@ async function submitScheduleForm(e) {
 
 function collectFormPayload() {
   const get = id => document.getElementById(id)?.value?.trim();
+  const subGroupVal = get("m-subgroup");
+  const isLabSplitBoth = subGroupVal === "BOTH";
+  const subGroup = (subGroupVal === "G1" || subGroupVal === "G2") ? subGroupVal : null;
+
   const payload = {
     subject_id:  parseInt(get("m-subject")),
     section_id:  parseInt(get("m-section")),
     faculty_id:  parseInt(get("m-faculty")),
-    room_id:     parseInt(get("m-room")),
+    room_id:     get("m-room") ? parseInt(get("m-room")) : null,
     day_of_week: get("m-day"),
     start_time:  get("m-start"),
     end_time:    get("m-end"),
     status:      get("m-status") || "DRAFT",
+    sub_group:   subGroup,
+    split_lab_groups: isLabSplitBoth,
   };
-  const missing = Object.entries(payload).filter(([k,v]) => k !== "status" && !v).map(([k]) => k);
+  const missing = Object.entries(payload).filter(([k,v]) => k !== "status" && k !== "sub_group" && k !== "split_lab_groups" && k !== "room_id" && !v).map(([k]) => k);
   if (missing.length > 0) {
     showToast(`Please fill in: ${missing.join(", ")}`, "error");
     return null;

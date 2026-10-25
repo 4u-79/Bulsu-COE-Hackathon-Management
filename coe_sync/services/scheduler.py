@@ -78,6 +78,10 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
     minimize_gaps = preferences.get("minimize_gaps", True)
     balance_workload = preferences.get("balance_workload", True)
     optimize_utilization = preferences.get("optimize_utilization", True)
+    split_lab_groups = preferences.get("split_lab_groups", True)
+    split_lab_subject_ids = config.get("split_lab_subject_ids") or preferences.get("split_lab_subject_ids")
+    if split_lab_subject_ids is not None:
+        split_lab_subject_ids = [int(sid) for sid in split_lab_subject_ids if str(sid).isdigit()]
 
     # 1. Resolve Target Sections
     sec_query = Section.query
@@ -477,22 +481,31 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
 
                                 validation = validate_schedule_slot(candidate_payload)
                                 if validation["valid"]:
-                                    new_sched = Schedule(
-                                        subject_id=sub.id,
-                                        section_id=sec.id,
-                                        faculty_id=fac.id,
-                                        room_id=r.id,
-                                        day_of_week=day,
-                                        start_time=st,
-                                        end_time=et,
-                                        status="PUBLISHED",
-                                        split_preference=split_val,
+                                    should_split_this_lab = (
+                                        sub.subject_type == "LAB"
+                                        and split_lab_groups
+                                        and (split_lab_subject_ids is None or sub.id in split_lab_subject_ids)
                                     )
-                                    db.session.add(new_sched)
+                                    groups_to_create = ["G1", "G2"] if should_split_this_lab else [None]
+                                    for grp in groups_to_create:
+                                        new_sched = Schedule(
+                                            subject_id=sub.id,
+                                            section_id=sec.id,
+                                            faculty_id=fac.id,
+                                            room_id=r.id,
+                                            day_of_week=day,
+                                            start_time=st,
+                                            end_time=et,
+                                            status="PUBLISHED",
+                                            split_preference=split_val,
+                                            sub_group=grp,
+                                        )
+                                        db.session.add(new_sched)
+                                        placed_schedules.append(new_sched)
+                                        existing_schedules.append(new_sched)
+
                                     db.session.flush()
 
-                                    placed_schedules.append(new_sched)
-                                    existing_schedules.append(new_sched)
                                     used_rooms.add(r.id)
                                     used_faculty.add(fac.id)
                                     faculty_units_assigned[fac.id] = faculty_units_assigned.get(fac.id, 0) + sub.units

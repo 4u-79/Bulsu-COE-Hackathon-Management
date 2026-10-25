@@ -270,12 +270,11 @@ def create_schedule():
     """
     payload = request.get_json(silent=True) or {}
 
-    # Validate required parameters
+    # Validate required parameters (room_id can now be null/empty for "Do not assign")
     required_fields = [
         "subject_id",
         "section_id",
         "faculty_id",
-        "room_id",
         "day_of_week",
         "start_time",
         "end_time",
@@ -288,6 +287,10 @@ def create_schedule():
             ),
             400,
         )
+
+    # Normalize room_id
+    raw_room_id = payload.get("room_id")
+    room_id = int(raw_room_id) if (raw_room_id is not None and str(raw_room_id).isdigit() and int(raw_room_id) > 0) else None
 
     # Validate temporal ordering
     try:
@@ -304,6 +307,11 @@ def create_schedule():
             )
     except Exception as e:
         return jsonify({"error": f"Invalid time format: {str(e)}"}), 400
+
+    # Sub-group handling (G1/G2 or split into both)
+    split_lab_groups = bool(payload.get("split_lab_groups", False))
+    raw_sub_group = payload.get("sub_group")
+    sub_group = str(raw_sub_group).strip().upper() if raw_sub_group in ("G1", "G2") else None
 
     # Execute Hard Constraint validation
     validation = validate_schedule_slot(payload)
@@ -331,22 +339,29 @@ def create_schedule():
         if not split_pref:
             split_pref = getattr(subj, "split_preference", "1.5_HOUR_SPLIT") if subj else "1.5_HOUR_SPLIT"
 
-        new_schedule = Schedule(
-            subject_id=int(payload["subject_id"]),
-            section_id=int(payload["section_id"]),
-            faculty_id=int(payload["faculty_id"]),
-            room_id=int(payload["room_id"]),
-            day_of_week=payload["day_of_week"].strip().upper(),
-            start_time=st,
-            end_time=et,
-            status=status_val,
-            split_preference=split_pref,
-        )
-        db.session.add(new_schedule)
+        created_schedules = []
+        target_subgroups = ["G1", "G2"] if split_lab_groups else [sub_group]
+
+        for grp in target_subgroups:
+            new_schedule = Schedule(
+                subject_id=int(payload["subject_id"]),
+                section_id=int(payload["section_id"]),
+                faculty_id=int(payload["faculty_id"]),
+                room_id=room_id,
+                day_of_week=payload["day_of_week"].strip().upper(),
+                start_time=st,
+                end_time=et,
+                status=status_val,
+                split_preference=split_pref,
+                sub_group=grp,
+            )
+            db.session.add(new_schedule)
+            created_schedules.append(new_schedule)
+
         db.session.flush()
 
         # Update faculty current units
-        recalculate_faculty_units(new_schedule.faculty_id)
+        recalculate_faculty_units(created_schedules[0].faculty_id)
 
         # Audit Log
         user_id = session.get("user_id")
@@ -354,10 +369,9 @@ def create_schedule():
             user_id=user_id,
             action="SCHEDULE_CREATED",
             details=(
-                f"Created schedule #{new_schedule.id}: {new_schedule.subject.code} "
-                f"for {new_schedule.section.name} with {new_schedule.faculty.name} "
-                f"in {new_schedule.room.room_code} on {new_schedule.day_of_week} "
-                f"{st.strftime('%H:%M')}-{et.strftime('%H:%M')}."
+                f"Created schedule(s) for {created_schedules[0].subject.code} "
+                f"({created_schedules[0].section.name}) with {created_schedules[0].faculty.name} "
+                f"on {created_schedules[0].day_of_week} {st.strftime('%H:%M')}-{et.strftime('%H:%M')}."
             ),
         )
         db.session.add(audit)
@@ -368,7 +382,8 @@ def create_schedule():
                 {
                     "status": "success",
                     "message": "Schedule slot created successfully.",
-                    "data": new_schedule.to_dict(),
+                    "data": created_schedules[0].to_dict(),
+                    "schedules": [s.to_dict() for s in created_schedules],
                 }
             ),
             201,

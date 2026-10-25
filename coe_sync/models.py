@@ -495,9 +495,10 @@ class Schedule(db.Model):
     room_id = db.Column(
         db.Integer,
         db.ForeignKey("room.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    sub_group = db.Column(db.String(10), nullable=True)  # 'G1', 'G2', or None
     day_of_week = db.Column(
         db.Enum(
             "MON",
@@ -543,13 +544,14 @@ class Schedule(db.Model):
             ),
             "status": self.status,
             "split_preference": self.split_preference,
+            "sub_group": self.sub_group,
             # Resolved display fields
             "subject_code": self.subject.code if self.subject else None,
             "subject_name": self.subject.title if self.subject else None,
             "subject_title": self.subject.title if self.subject else None,
-            "section_name": self.section.name if self.section else None,
+            "section_name": f"{self.section.name} ({self.sub_group})" if (self.section and self.sub_group) else (self.section.name if self.section else None),
             "faculty_name": self.faculty.name if self.faculty else None,
-            "room_code": self.room.room_code if self.room else None,
+            "room_code": self.room.room_code if self.room else ("Unassigned" if not self.room_id else None),
             # Conflict flag — resolved at API layer; default False here
             "has_conflict": False,
         }

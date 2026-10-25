@@ -84,7 +84,15 @@ def validate_schedule_slot(
         subject_id = int(candidate_data.get("subject_id", 0))
         section_id = int(candidate_data.get("section_id", 0))
         faculty_id = int(candidate_data.get("faculty_id", 0))
-        room_id = int(candidate_data.get("room_id", 0))
+        raw_room_id = candidate_data.get("room_id")
+        room_id = int(raw_room_id) if (raw_room_id is not None and str(raw_room_id).isdigit() and int(raw_room_id) > 0) else None
+        sub_group = candidate_data.get("sub_group")
+        if sub_group:
+            sub_group = str(sub_group).strip().upper()
+            if sub_group not in ("G1", "G2"):
+                sub_group = None
+        else:
+            sub_group = None
         day_of_week = str(candidate_data.get("day_of_week", "")).strip().upper()
 
         start_time = parse_time(candidate_data.get("start_time"))
@@ -117,7 +125,7 @@ def validate_schedule_slot(
     subject = db.session.get(Subject, subject_id)
     section = db.session.get(Section, section_id)
     faculty = db.session.get(Faculty, faculty_id)
-    room = db.session.get(Room, room_id)
+    room = db.session.get(Room, room_id) if room_id else None
 
     if not subject:
         conflicts.append(f"Subject ID {subject_id} not found.")
@@ -125,7 +133,7 @@ def validate_schedule_slot(
         conflicts.append(f"Section ID {section_id} not found.")
     if not faculty:
         conflicts.append(f"Faculty ID {faculty_id} not found.")
-    if not room:
+    if room_id and not room:
         conflicts.append(f"Room ID {room_id} not found.")
 
     if conflicts:
@@ -137,28 +145,29 @@ def validate_schedule_slot(
     # -------------------------------------------------------------
 
     # -------------------------------------------------------------
-    # HC 5: Room Type Mismatch
+    # HC 5: Room Type Mismatch (Checked only if room is assigned)
     # -------------------------------------------------------------
-    if subject.subject_type == "LAB" and room.room_type != "LAB":
+    if room and subject.subject_type == "LAB" and room.room_type != "LAB":
         conflicts.append("Subject requires a specialized Laboratory facility.")
 
     # -------------------------------------------------------------
-    # HC 1: Room Double-Booking
+    # HC 1: Room Double-Booking (Checked only if room is assigned)
     # -------------------------------------------------------------
-    room_query = Schedule.query.filter(
-        Schedule.room_id == room_id,
-        Schedule.day_of_week == day_of_week,
-    )
-    if exclude_schedule_id:
-        room_query = room_query.filter(Schedule.id != exclude_schedule_id)
+    if room_id and room:
+        room_query = Schedule.query.filter(
+            Schedule.room_id == room_id,
+            Schedule.day_of_week == day_of_week,
+        )
+        if exclude_schedule_id:
+            room_query = room_query.filter(Schedule.id != exclude_schedule_id)
 
-    for s in room_query.all():
-        if times_overlap(start_time, end_time, s.start_time, s.end_time):
-            conflicts.append(
-                f"Room {room.room_code} is already occupied by {s.subject.code} "
-                f"({s.section.name}) at this time."
-            )
-            break
+        for s in room_query.all():
+            if times_overlap(start_time, end_time, s.start_time, s.end_time):
+                conflicts.append(
+                    f"Room {room.room_code} is already occupied by {s.subject.code} "
+                    f"({s.section.name}) at this time."
+                )
+                break
 
     # -------------------------------------------------------------
     # HC 2: Faculty Double-Booking
@@ -190,6 +199,10 @@ def validate_schedule_slot(
 
     for s in section_query.all():
         if times_overlap(start_time, end_time, s.start_time, s.end_time):
+            # If section is split into subgroups (e.g. G1 and G2 for lab), they can attend different classes concurrently
+            existing_subgroup = getattr(s, "sub_group", None)
+            if sub_group and existing_subgroup and sub_group != existing_subgroup:
+                continue
             conflicts.append(
                 f"Section {section.name} cannot attend two classes concurrently."
             )

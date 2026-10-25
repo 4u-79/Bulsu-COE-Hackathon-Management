@@ -794,150 +794,234 @@ def assign_subject_to_faculty(faculty_id: int):
             }), 403
 
     data = request.get_json(silent=True) or {}
-    subject_id = data.get("subject_id")
+    # Can receive single subject_id or list of subject_ids/subject objects
+    raw_subjects = data.get("subjects") or []
+    if not raw_subjects and data.get("subject_id"):
+        raw_subjects = [{
+            "subject_id": data.get("subject_id"),
+            "split_preference": data.get("split_preference") or "1.5_HOUR_SPLIT"
+        }]
+    elif isinstance(raw_subjects, list) and raw_subjects and not isinstance(raw_subjects[0], dict):
+        raw_subjects = [{"subject_id": sid, "split_preference": "1.5_HOUR_SPLIT"} for sid in raw_subjects]
+
+    if not raw_subjects:
+        return jsonify({"error": "At least one Subject Offering is required."}), 400
+
     section_id = data.get("section_id")
-    room_id = data.get("room_id")
+    raw_room_id = data.get("room_id")
     day_of_week = str(data.get("day_of_week", "MON")).strip().upper()
+    if day_of_week not in {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"}:
+        day_of_week = "MON"
+
     start_time_str = data.get("start_time")
     end_time_str = data.get("end_time")
     allow_override = bool(data.get("allow_override", False))
 
-    if not subject_id or not section_id:
-        return jsonify({"error": "Subject and Cohort Section are required."}), 400
-
-    subject = db.session.get(Subject, subject_id)
-    if not subject:
-        return jsonify({"error": f"Subject #{subject_id} not found."}), 404
-
-    if subject.classification == "MINOR":
-        return jsonify({
-            "error": f"Minor subject '{subject.code} - {subject.title}' cannot be assigned to faculty members. Only Major subjects may be assigned."
-        }), 400
-
-    section = db.session.get(Section, section_id)
-    if not section:
-        return jsonify({"error": f"Section #{section_id} not found."}), 404
-
-    # Check if there is an existing schedule for this subject and section
-    existing_sched = Schedule.query.filter_by(subject_id=subject.id, section_id=section.id).first()
-    exclude_id = existing_sched.id if existing_sched else None
-
-    # Resolve Times if not provided
-    if not start_time_str or not end_time_str:
-        hrs = subject.hours_per_week or subject.units or 3
-        if hrs >= 3:
-            start_time_str = "08:00"
-            end_time_str = "11:00"
-        else:
-            start_time_str = "08:30"
-            end_time_str = "10:00"
-
-    try:
-        st = parse_time(start_time_str)
-        et = parse_time(end_time_str)
-    except Exception as e:
-        return jsonify({"error": f"Invalid time format: {str(e)}"}), 400
-
-    # Resolve Room if not provided or set to 0 / 'auto'
+    # Resolve Room if specified; if "none" / "do_not_assign" / 0 / None -> keep room None
     room = None
-    if room_id and str(room_id).isdigit() and int(room_id) > 0:
-        room = db.session.get(Room, int(room_id))
+    if raw_room_id and str(raw_room_id).lower() not in ("none", "do_not_assign", "0", ""):
+        if str(raw_room_id).isdigit() and int(raw_room_id) > 0:
+            room = db.session.get(Room, int(raw_room_id))
 
-    if not room:
-        # Auto-pick best available room matching subject type (LAB vs LECTURE) and department
-        from services.conflict_detector import times_overlap
-        is_lab = subject.subject_type == "LAB"
-        target_room_type = "LAB" if is_lab else "LECTURE"
-        fac_prog = (faculty.program or "").strip().upper()
+    # If section_id is not provided, pick or assign to a default program section if needed, or find candidate
+    section = None
+    if section_id:
+        section = db.session.get(Section, int(section_id))
 
-        candidate_rooms = Room.query.filter_by(room_type=target_room_type, is_available=True).all()
-        def room_rank(r):
-            if r.department == fac_prog:
-                return 0
-            if r.department == "GEN":
-                return 1
-            return 2
-        candidate_rooms.sort(key=room_rank)
+    assigned_schedules = []
 
-        for r in candidate_rooms:
-            overlapping = Schedule.query.filter_by(room_id=r.id, day_of_week=day_of_week).all()
-            if exclude_id:
-                overlapping = [o for o in overlapping if o.id != exclude_id]
-            if not any(times_overlap(st, et, s.start_time, s.end_time) for s in overlapping):
-                room = r
-                break
+    for item in raw_subjects:
+        s_id = item.get("subject_id") if isinstance(item, dict) else item
+        item_split_pref = (item.get("split_preference") if isinstance(item, dict) else None) or "1.5_HOUR_SPLIT"
+        if not s_id:
+            continue
 
-        if not room and candidate_rooms:
-            room = candidate_rooms[0]
-        if not room:
-            return jsonify({"error": "No available rooms found in the facility inventory."}), 400
+        subject = db.session.get(Subject, int(s_id))
+        if not subject:
+            return jsonify({"error": f"Subject #{s_id} not found."}), 404
 
-    # Conflict Preflight Check
-    candidate = {
-        "subject_id": subject.id,
-        "section_id": section.id,
-        "faculty_id": faculty.id,
-        "room_id": room.id,
-        "day_of_week": day_of_week,
-        "start_time": st,
-        "end_time": et,
-    }
+        if subject.classification == "MINOR":
+            return jsonify({
+                "error": f"Minor subject '{subject.code} - {subject.title}' cannot be assigned to faculty members. Only Major subjects may be assigned."
+            }), 400
 
-    validation = validate_schedule_slot(candidate, exclude_schedule_id=exclude_id)
-    if not validation["valid"] and not allow_override:
-        return jsonify({
-            "status": "error",
-            "error": "Scheduling collision detected.",
-            "conflicts": validation["conflicts"],
-            "can_override": True,
-        }), 409
+        # Update subject's split preference if explicitly chosen
+        if item_split_pref in ("1.5_HOUR_SPLIT", "3_HOUR_BLOCK"):
+            subject.split_preference = item_split_pref
 
-    # Save or update schedule
-    if existing_sched:
-        sched = existing_sched
-        old_faculty_id = sched.faculty_id
-        sched.faculty_id = faculty.id
-        sched.room_id = room.id
-        sched.day_of_week = day_of_week
-        sched.start_time = st
-        sched.end_time = et
-        if old_faculty_id and old_faculty_id != faculty.id:
-            old_fac = db.session.get(Faculty, old_faculty_id)
-            if old_fac:
-                old_u = db.session.query(db.func.sum(Subject.units)).join(Schedule, Schedule.subject_id == Subject.id).filter(Schedule.faculty_id == old_fac.id).scalar() or 0
-                old_fac.current_units = old_u
-    else:
-        sched = Schedule(
-            subject_id=subject.id,
-            section_id=section.id,
-            faculty_id=faculty.id,
-            room_id=room.id,
-            day_of_week=day_of_week,
-            start_time=st,
-            end_time=et,
-            status="PUBLISHED",
-        )
-        db.session.add(sched)
+        # Resolve section if not selected
+        sec_for_sched = section
+        if not sec_for_sched:
+            fac_prog = (faculty.program or "").strip().upper()
+            sec_for_sched = Section.query.filter(
+                (Section.program == fac_prog) | (Section.program == subject.program)
+            ).order_by(Section.year_level.asc(), Section.name.asc()).first()
+            if not sec_for_sched:
+                sec_for_sched = Section.query.order_by(Section.year_level.asc(), Section.name.asc()).first()
 
-    db.session.flush()
+        # Check existing schedule
+        existing_sched = None
+        if sec_for_sched:
+            existing_sched = Schedule.query.filter_by(subject_id=subject.id, section_id=sec_for_sched.id).first()
+        exclude_id = existing_sched.id if existing_sched else None
+
+        # Resolve Day and Times: if multiple subjects are assigned without custom times, stagger them or pick available slots
+        candidate_days_list = [day_of_week] if data.get("day_of_week") else ["MON", "TUE", "WED", "THU", "FRI", "SAT"]
+        standard_staggers = [
+            ("08:00", "09:30"),
+            ("09:30", "11:00"),
+            ("11:00", "12:30"),
+            ("13:00", "14:30"),
+            ("14:30", "16:00"),
+            ("16:00", "17:30"),
+        ]
+        standard_3hr_staggers = [
+            ("08:00", "11:00"),
+            ("11:00", "14:00"),
+            ("14:00", "17:00"),
+        ]
+
+        if start_time_str and end_time_str:
+            cur_start_str = start_time_str
+            cur_end_str = end_time_str
+            cur_day = day_of_week
+        else:
+            # Find an open slot for this instructor and section
+            chosen_slot = None
+            slot_options = standard_3hr_staggers if item_split_pref == "3_HOUR_BLOCK" else standard_staggers
+            for d in candidate_days_list:
+                for s_st, s_et in slot_options:
+                    p_st = parse_time(s_st)
+                    p_et = parse_time(s_et)
+                    from services.conflict_detector import times_overlap
+                    # Check faculty collision
+                    fac_overlap = any(
+                        s.day_of_week == d and times_overlap(p_st, p_et, s.start_time, s.end_time)
+                        for s in Schedule.query.filter_by(faculty_id=faculty.id).all()
+                    )
+                    sec_overlap = sec_for_sched and any(
+                        s.day_of_week == d and times_overlap(p_st, p_et, s.start_time, s.end_time)
+                        for s in Schedule.query.filter_by(section_id=sec_for_sched.id).all()
+                    )
+                    if not fac_overlap and not sec_overlap:
+                        chosen_slot = (d, s_st, s_et)
+                        break
+                if chosen_slot:
+                    break
+
+            if chosen_slot:
+                cur_day, cur_start_str, cur_end_str = chosen_slot
+            else:
+                cur_day = day_of_week
+                cur_start_str = "08:00"
+                cur_end_str = "11:00" if item_split_pref == "3_HOUR_BLOCK" else "09:30"
+
+        try:
+            st = parse_time(cur_start_str)
+            et = parse_time(cur_end_str)
+        except Exception:
+            st = parse_time("08:00")
+            et = parse_time("09:30")
+
+        # Resolve room if auto was requested or room not explicitly "none"
+        sched_room = room
+        if str(raw_room_id).lower() == "auto" and not sched_room:
+            from services.conflict_detector import times_overlap
+            is_lab = subject.subject_type == "LAB"
+            target_room_type = "LAB" if is_lab else "LECTURE"
+            fac_prog = (faculty.program or "").strip().upper()
+
+            candidate_rooms = Room.query.filter_by(room_type=target_room_type, is_available=True).all()
+            def room_rank(r):
+                if r.department == fac_prog:
+                    return 0
+                if r.department == "GEN":
+                    return 1
+                return 2
+            candidate_rooms.sort(key=room_rank)
+
+            for r in candidate_rooms:
+                overlapping = Schedule.query.filter_by(room_id=r.id, day_of_week=day_of_week).all()
+                if exclude_id:
+                    overlapping = [o for o in overlapping if o.id != exclude_id]
+                if not any(times_overlap(st, et, s.start_time, s.end_time) for s in overlapping):
+                    sched_room = r
+                    break
+            if not sched_room and candidate_rooms:
+                sched_room = candidate_rooms[0]
+
+        # Preflight Check if section exists
+        if sec_for_sched:
+            candidate = {
+                "subject_id": subject.id,
+                "section_id": sec_for_sched.id,
+                "faculty_id": faculty.id,
+                "room_id": sched_room.id if sched_room else None,
+                "day_of_week": cur_day,
+                "start_time": cur_start_str,
+                "end_time": cur_end_str,
+            }
+            validation = validate_schedule_slot(candidate, exclude_schedule_id=exclude_id)
+            if not validation["valid"] and not allow_override:
+                # If room collision or section collision and override not requested, return error
+                return jsonify({
+                    "status": "error",
+                    "error": f"Scheduling collision detected for {subject.code}.",
+                    "conflicts": validation["conflicts"],
+                    "can_override": True,
+                }), 409
+
+        # Save or update schedule
+        if existing_sched:
+            sched = existing_sched
+            old_faculty_id = sched.faculty_id
+            sched.faculty_id = faculty.id
+            sched.room_id = sched_room.id if sched_room else None
+            sched.day_of_week = cur_day
+            sched.start_time = st
+            sched.end_time = et
+            sched.split_preference = item_split_pref
+            if old_faculty_id and old_faculty_id != faculty.id:
+                old_fac = db.session.get(Faculty, old_faculty_id)
+                if old_fac:
+                    old_u = db.session.query(db.func.sum(Subject.units)).join(Schedule, Schedule.subject_id == Subject.id).filter(Schedule.faculty_id == old_fac.id).scalar() or 0
+                    old_fac.current_units = old_u
+        else:
+            sched = Schedule(
+                subject_id=subject.id,
+                section_id=sec_for_sched.id if sec_for_sched else 1,
+                faculty_id=faculty.id,
+                room_id=sched_room.id if sched_room else None,
+                day_of_week=cur_day,
+                start_time=st,
+                end_time=et,
+                status="PUBLISHED",
+                split_preference=item_split_pref,
+            )
+            db.session.add(sched)
+
+        db.session.flush()
+        assigned_schedules.append(sched)
 
     # Recalculate faculty current_units
     new_units = db.session.query(db.func.sum(Subject.units)).join(Schedule, Schedule.subject_id == Subject.id).filter(Schedule.faculty_id == faculty.id).scalar() or 0
     faculty.current_units = new_units
 
+    subj_codes = ", ".join([s.subject.code for s in assigned_schedules if s.subject])
     audit = AuditLog(
         user_id=session.get("user_id"),
         action="FACULTY_SUBJECT_ASSIGNED",
-        details=f"Assigned {subject.code} ({section.name}) to {faculty.name} [{day_of_week} {start_time_str}-{end_time_str} @ {room.room_code}].",
+        details=f"Assigned {subj_codes} to {faculty.name}.",
     )
     db.session.add(audit)
     db.session.commit()
 
     return jsonify({
         "status": "success",
-        "message": f"Successfully assigned {subject.code} ({subject.title}) to {faculty.name}.",
+        "message": f"Successfully assigned {subj_codes} to {faculty.name}.",
         "data": {
-            "schedule": sched.to_dict(),
+            "schedule": assigned_schedules[0].to_dict() if assigned_schedules else None,
+            "schedules": [s.to_dict() for s in assigned_schedules],
             "faculty": faculty.to_dict(),
         }
     }), 201

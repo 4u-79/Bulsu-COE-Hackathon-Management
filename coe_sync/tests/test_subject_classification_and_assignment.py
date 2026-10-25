@@ -149,3 +149,106 @@ def test_minor_subjects_cannot_be_assigned_to_faculty(client):
     assert res_assign_major.status_code == 201
     assert res_assign_major.get_json()["status"] == "success"
 
+
+def test_multi_subject_assignment_with_split_and_unassigned_room(client):
+    """Test assigning multiple subjects with 1.5-hr / 3-hr split preferences and 'none' room."""
+    from models import Section, Room, Schedule
+
+    fac = Faculty(name="Engr. Elena Reyes", email="ereyes@bulsu.edu.ph", program="MEE", max_units=21)
+    sec = Section(name="MEE-2A", program="MEE", year_level=2)
+    s_coe = Subject.query.filter_by(code="COE 201").first()
+    s_mee3 = Subject.query.filter_by(code="MEE 300").first()
+    admin_user = User(username="admin_multi", role="ADMIN")
+    admin_user.set_password("Admin@123")
+
+    db.session.add_all([fac, sec, admin_user])
+    db.session.commit()
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_user.id
+        sess["role"] = "ADMIN"
+        sess["active_role"] = "ADMIN"
+
+    # Multi-subject payload with split preference and room_id='none'
+    res = client.post(
+        f"/api/faculty/{fac.id}/assign-subject",
+        json={
+            "subjects": [
+                {"subject_id": s_coe.id, "split_preference": "1.5_HOUR_SPLIT"},
+                {"subject_id": s_mee3.id, "split_preference": "3_HOUR_BLOCK"},
+            ],
+            "room_id": "none",
+        },
+    )
+    assert res.status_code == 201
+    body = res.get_json()
+    assert body["status"] == "success"
+    assert len(body["data"]["schedules"]) == 2
+
+    # Verify schedules created with null room_id
+    scheds = Schedule.query.filter_by(faculty_id=fac.id).all()
+    assert len(scheds) == 2
+    for s in scheds:
+        assert s.room_id is None
+        assert s.to_dict()["room_code"] == "Unassigned"
+
+
+def test_lab_subgroup_g1_g2_dual_schedules_and_concurrency(client):
+    """Test creating G1 and G2 laboratory schedule slots and section concurrency."""
+    from models import Section, Room, Schedule
+
+    fac1 = Faculty(name="Engr. Lab Instructor 1", email="lab1@bulsu.edu.ph", program="MEE", max_units=21)
+    fac2 = Faculty(name="Engr. Lab Instructor 2", email="lab2@bulsu.edu.ph", program="MEE", max_units=21)
+    sec = Section(name="MEE-3A", program="MEE", year_level=3)
+    rm1 = Room(room_code="LAB-101", room_type="LAB", capacity=30, is_available=True)
+    rm2 = Room(room_code="LAB-102", room_type="LAB", capacity=30, is_available=True)
+    sub_lab = Subject(code="MEE 301L", title="Instrumentation Lab", program="MEE", units=2, subject_type="LAB", hours_per_week=3)
+    admin_user = User(username="admin_lab", role="ADMIN")
+    admin_user.set_password("Admin@123")
+
+    db.session.add_all([fac1, fac2, sec, rm1, rm2, sub_lab, admin_user])
+    db.session.commit()
+
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_user.id
+        sess["role"] = "ADMIN"
+        sess["active_role"] = "ADMIN"
+
+    # 1. Create dual schedule (split into G1 and G2) via POST /api/schedules
+    res_dual = client.post(
+        "/api/schedules",
+        json={
+            "subject_id": sub_lab.id,
+            "section_id": sec.id,
+            "faculty_id": fac1.id,
+            "room_id": rm1.id,
+            "day_of_week": "TUE",
+            "start_time": "08:00",
+            "end_time": "11:00",
+            "split_lab_groups": True,
+        },
+    )
+    assert res_dual.status_code == 201
+    dual_data = res_dual.get_json()
+    assert len(dual_data["schedules"]) == 2
+    subgroups = {s["sub_group"] for s in dual_data["schedules"]}
+    assert subgroups == {"G1", "G2"}
+
+    # 2. Section concurrent check: G1 and G2 can run concurrently in different rooms without conflict
+    from services.conflict_detector import validate_schedule_slot
+    g2_candidate = {
+        "subject_id": sub_lab.id,
+        "section_id": sec.id,
+        "faculty_id": fac2.id,
+        "room_id": rm2.id,
+        "day_of_week": "TUE",
+        "start_time": "08:00",
+        "end_time": "11:00",
+        "sub_group": "G2",
+    }
+    # Conflict check: candidate G2 vs existing G1 (exclude the existing G2 schedule so we test if G2 can run alongside G1)
+    s_g2 = Schedule.query.filter_by(section_id=sec.id, sub_group="G2").first()
+    check_result = validate_schedule_slot(g2_candidate, exclude_schedule_id=s_g2.id)
+    assert check_result["valid"] is True, f"Expected valid, got conflicts: {check_result.get('conflicts')}"
+
+

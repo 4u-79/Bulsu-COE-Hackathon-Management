@@ -368,6 +368,19 @@
           </div>
         </div>
 
+        <!-- Laboratory Subgroup row (visible when LAB subject selected) -->
+        <div class="form-row" id="m-subgroup-row" style="display:none;">
+          <div class="form-group" style="width: 100%;">
+            <label for="m-subgroup">🧪 Laboratory Grouping (G1 / G2)</label>
+            <select id="m-subgroup" name="sub_group">
+              <option value="">Entire Section (Full Cohort)</option>
+              <option value="G1">Group 1 (G1 Only)</option>
+              <option value="G2">Group 2 (G2 Only)</option>
+              <option value="BOTH">Split into G1 &amp; G2 (Create 2 Distinct Schedules)</option>
+            </select>
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label for="m-faculty">Faculty <span class="req">*</span></label>

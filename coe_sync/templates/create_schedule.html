@@ -129,14 +129,14 @@
             </div>
           </div>
 
-          <!-- Step 3: Faculty Load & Soft Constraints -->
+          <!-- Step 3: Faculty Pool & Heuristics -->
           <div class="card smart-config-step-card">
             <div class="card-header-clean">
               <div>
                 <h2 class="section-title">3. Faculty Pool &amp; Heuristics</h2>
                 <p class="section-subtitle">Configure instructor allocation rules and soft constraint weights.</p>
               </div>
-              <span class="badge-role">Step 3 of 3</span>
+              <span class="badge-role">Step 3 of 4</span>
             </div>
 
             <div class="form-group">
@@ -172,6 +172,51 @@
                   </div>
                 </label>
               </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Laboratory Cohort Splitting (G1 & G2) -->
+          <div class="card smart-config-step-card" id="card-lab-splitting-step">
+            <div class="card-header-clean">
+              <div>
+                <h2 class="section-title" style="display:flex; align-items:center; gap:8px;">
+                  <span>🧪 4. Laboratory Cohort Splitting (G1 &amp; G2)</span>
+                </h2>
+                <p class="section-subtitle">Partition cohorts into two independent subgroups (Group 1 &amp; Group 2) for specialized laboratory facilities.</p>
+              </div>
+              <span class="badge-role" style="background: rgba(104,28,46,0.1); color: var(--bulsu-maroon); font-weight: 700;">Step 4 of 4</span>
+            </div>
+
+            <!-- Master Toggle -->
+            <div style="background: rgba(104,28,46,0.04); border: 1.5px solid rgba(104,28,46,0.18); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
+              <label class="checkbox-option" style="margin-bottom: 0; cursor: pointer;">
+                <input type="checkbox" id="pref-split-lab-groups" checked onchange="toggleLabSplittingWidget()">
+                <div class="checkbox-label-wrap">
+                  <strong style="color: var(--bulsu-maroon); font-size: 13.5px;">Enable Laboratory Group Splitting (G1 &amp; G2 Dual Slots)</strong>
+                  <span style="font-size: 12px; color: #4B5563; line-height: 1.4;">When active, selected laboratory courses below will generate two distinct concurrent/alternating schedule slots per cohort.</span>
+                </div>
+              </label>
+            </div>
+
+            <!-- Selective Laboratory Offerings List -->
+            <div id="sg-lab-selection-container" style="display: block;">
+              <div class="label-row" style="margin-bottom: 8px;">
+                <label class="form-label" style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 0;">
+                  Choose Laboratory Offerings to Split:
+                </label>
+                <div class="label-actions">
+                  <button type="button" class="btn-text-action" id="btn-lab-select-all" onclick="toggleSelectAllLabOfferings(true)">Select All Labs</button>
+                  <span class="sep">•</span>
+                  <button type="button" class="btn-text-action" id="btn-lab-clear-all" onclick="toggleSelectAllLabOfferings(false)">Clear</button>
+                </div>
+              </div>
+
+              <div id="sg-lab-subjects-list" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border-light, #E2E8F0); border-radius: 10px; background: #FFF; padding: 6px; display: flex; flex-direction: column; gap: 6px;">
+                <span class="loading-hint" style="text-align: center; padding: 16px; font-size: 12px; color: var(--text-muted);">Select cohorts above to view curriculum laboratory offerings...</span>
+              </div>
+              <span class="field-help" style="margin-top: 6px; display: block; font-size: 11.5px; color: var(--text-muted);">
+                Only checked laboratory subjects will be split into G1 &amp; G2. Unchecked laboratory subjects will be scheduled as a single class block.
+              </span>
             </div>
           </div>
 
@@ -352,121 +397,163 @@
       </div>
 
       <form id="form-manual-schedule">
-        <!-- Row 1: Program, Year Level & Academic Term -->
-        <div class="form-row-2" style="display: grid; grid-template-columns: 1.5fr 1fr 1.2fr; gap: 14px;">
-          <div class="form-group">
-            <label class="form-label" for="manual-program">Degree Program *</label>
-            {% if active_role in ['CHAIR', 'PROG_CHA'] and effective_program %}
-            <select id="manual-program" class="form-select" required style="background: rgba(241,245,249,0.9); font-weight:700;">
-              <option value="{{ effective_program }}" selected>{{ effective_program }} Department (Locked)</option>
-            </select>
-            {% else %}
-            <select id="manual-program" class="form-select" required>
-              <option value="">-- All Programs --</option>
-              <option value="CE">Civil Engineering (CE)</option>
-              <option value="CPE">Computer Engineering (CPE)</option>
-              <option value="EE">Electrical Engineering (EE)</option>
-              <option value="ECE">Electronics Engineering (ECE)</option>
-              <option value="IE">Industrial Engineering (IE)</option>
-              <option value="MFGE">Manufacturing Engineering (MFGE)</option>
-              <option value="ME">Mechanical Engineering (ME)</option>
-              <option value="MEE">Mechatronics Engineering (MEE)</option>
-              <option value="GEN">General Engineering (GEN)</option>
-            </select>
-            {% endif %}
+        <!-- Section 1: Academic Scope & Term -->
+        <div style="background: rgba(248, 250, 252, 0.7); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom: 14px;">
+            <span style="font-size: 13px; font-weight: 800; color: var(--bulsu-maroon); text-transform: uppercase; letter-spacing: 0.04em;">1. Academic Scope &amp; Target Term</span>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="manual-year-level">Year Level</label>
-            <select id="manual-year-level" class="form-select">
-              <option value="">-- All Years --</option>
-              <option value="1">1st Year</option>
-              <option value="2">2nd Year</option>
-              <option value="3">3rd Year</option>
-              <option value="4">4th Year</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="manual-semester">Academic Term</label>
-            <select id="manual-semester" class="form-select">
-              <option value="1" selected>1st Sem AY 2026–2027</option>
-              <option value="2">2nd Sem AY 2026–2027</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Row 2: Subject Offering -->
-        <div class="form-row-full">
-          <div class="form-group">
-            <label class="form-label" for="manual-subject">Subject Offering *</label>
-            <select id="manual-subject" class="form-select" required>
-              <option value="">-- Choose Subject --</option>
-            </select>
-            <div id="manual-subject-meta" class="meta-preview-box" style="display:none;"></div>
+          <div class="form-row-2" style="display: grid; grid-template-columns: 1.5fr 1fr 1.2fr; gap: 14px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-program">Degree Program *</label>
+              {% if active_role in ['CHAIR', 'PROG_CHA'] and effective_program %}
+              <select id="manual-program" class="form-select" required style="background: rgba(241,245,249,0.9); font-weight:700;">
+                <option value="{{ effective_program }}" selected>{{ effective_program }} Department (Locked)</option>
+              </select>
+              {% else %}
+              <select id="manual-program" class="form-select" required>
+                <option value="">-- All Programs --</option>
+                <option value="CE">Civil Engineering (CE)</option>
+                <option value="CPE">Computer Engineering (CPE)</option>
+                <option value="EE">Electrical Engineering (EE)</option>
+                <option value="ECE">Electronics Engineering (ECE)</option>
+                <option value="IE">Industrial Engineering (IE)</option>
+                <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+                <option value="ME">Mechanical Engineering (ME)</option>
+                <option value="MEE">Mechatronics Engineering (MEE)</option>
+                <option value="GEN">General Engineering (GEN)</option>
+              </select>
+              {% endif %}
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-year-level">Year Level</label>
+              <select id="manual-year-level" class="form-select">
+                <option value="">-- All Years --</option>
+                <option value="1">1st Year</option>
+                <option value="2">2nd Year</option>
+                <option value="3">3rd Year</option>
+                <option value="4">4th Year</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-semester">Academic Term</label>
+              <select id="manual-semester" class="form-select">
+                <option value="1" selected>1st Sem AY 2026–2027</option>
+                <option value="2">2nd Sem AY 2026–2027</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <!-- Row 3: Cohort Section & Assigned Instructor -->
-        <div class="form-row-2">
-          <div class="form-group">
-            <label class="form-label" for="manual-section">Cohort Section *</label>
-            <select id="manual-section" class="form-select" required>
-              <option value="">-- Choose Section --</option>
-            </select>
-            <div id="manual-section-meta" class="meta-preview-box" style="display:none;"></div>
+        <!-- Section 2: Subject & Cohort Selection -->
+        <div style="background: rgba(248, 250, 252, 0.7); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom: 14px;">
+            <span style="font-size: 13px; font-weight: 800; color: var(--bulsu-maroon); text-transform: uppercase; letter-spacing: 0.04em;">2. Course Offering &amp; Cohort Target</span>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="manual-faculty">Assigned Instructor *</label>
-            <select id="manual-faculty" class="form-select" required>
-              <option value="">-- Choose Faculty Member --</option>
-            </select>
+          <div class="form-row-full" style="margin-bottom: 14px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-subject">Subject Offering *</label>
+              <select id="manual-subject" class="form-select" required>
+                <option value="">-- Choose Subject --</option>
+              </select>
+              <div id="manual-subject-meta" class="meta-preview-box" style="display:none; margin-top: 8px;"></div>
+            </div>
+          </div>
+
+          <!-- Laboratory Subgroup Selection (visible for LAB subjects) -->
+          <div id="manual-lab-group-widget" style="display: none; background: #FFF; border: 1.5px solid rgba(104,28,46,0.2); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; box-shadow: 0 2px 8px rgba(104,28,46,0.04);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label class="form-label" style="color: var(--bulsu-maroon); font-weight: 800; margin-bottom: 0;">
+                🧪 Laboratory Grouping (Cohort Partitioning)
+              </label>
+              <span class="badge" style="background: rgba(104,28,46,0.1); color: var(--bulsu-maroon); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px;">Lab Course Detected</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+              Laboratory sections can be split into Group 1 (G1) and Group 2 (G2) to occupy specialized facilities and run as distinct schedule slots.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; align-items: center;">
+              <div>
+                <label class="form-label" for="manual-subgroup-select" style="font-size: 12px; font-weight: 700;">Cohort Sub-Group</label>
+                <select id="manual-subgroup-select" class="form-select" style="font-size: 12.5px;">
+                  <option value="ALL">Entire Cohort (No Split / Single Slot)</option>
+                  <option value="G1">Group 1 (G1 Only)</option>
+                  <option value="G2">Group 2 (G2 Only)</option>
+                  <option value="BOTH" selected>Split into G1 &amp; G2 (Create 2 Schedule Slots)</option>
+                </select>
+              </div>
+              <div id="manual-g2-info" style="font-size: 11.5px; color: #475569; padding: 8px 12px; background: #F8FAFC; border-radius: 6px; border: 1px solid #E2E8F0; line-height: 1.4;">
+                <span>ℹ Selecting <strong>Split into G1 &amp; G2</strong> creates two independent schedules allowing both halves of the section to be managed separately.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-section">Cohort Section *</label>
+              <select id="manual-section" class="form-select" required>
+                <option value="">-- Choose Section --</option>
+              </select>
+              <div id="manual-section-meta" class="meta-preview-box" style="display:none; margin-top: 6px;"></div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-faculty">Assigned Instructor *</label>
+              <select id="manual-faculty" class="form-select" required>
+                <option value="">-- Choose Faculty Member --</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <!-- Row 4: Classroom / Laboratory & Day of Week -->
-        <div class="form-row-2">
-          <div class="form-group">
-            <label class="form-label" for="manual-room">Classroom / Laboratory *</label>
-            <select id="manual-room" class="form-select" required>
-              <option value="">-- Choose Physical Room --</option>
-            </select>
+        <!-- Section 3: Facility & Time Slot Placement -->
+        <div style="background: rgba(248, 250, 252, 0.7); border: 1px solid rgba(226, 232, 240, 0.8); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom: 14px;">
+            <span style="font-size: 13px; font-weight: 800; color: var(--bulsu-maroon); text-transform: uppercase; letter-spacing: 0.04em;">3. Facility &amp; Time Slot Placement</span>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="manual-day">Day of Week *</label>
-            <select id="manual-day" class="form-select" required>
-              <option value="MON">Monday</option>
-              <option value="TUE">Tuesday</option>
-              <option value="WED">Wednesday</option>
-              <option value="THU">Thursday</option>
-              <option value="FRI">Friday</option>
-              <option value="SAT">Saturday</option>
-              <option value="SUN">Sunday</option>
-            </select>
-          </div>
-        </div>
+          <div class="form-row-2" style="margin-bottom: 14px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-room">Classroom / Laboratory *</label>
+              <select id="manual-room" class="form-select" required>
+                <option value="">-- Choose Physical Room --</option>
+              </select>
+            </div>
 
-        <!-- Row 5 (Time Range): Start Time & End Time -->
-        <div class="form-row-2">
-          <div class="form-group">
-            <label class="form-label" for="manual-start-time">Start Time *</label>
-            <input type="time" id="manual-start-time" class="form-input" required value="08:00" step="1800">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-day">Day of Week *</label>
+              <select id="manual-day" class="form-select" required>
+                <option value="MON">Monday (MON)</option>
+                <option value="TUE">Tuesday (TUE)</option>
+                <option value="WED">Wednesday (WED)</option>
+                <option value="THU">Thursday (THU)</option>
+                <option value="FRI">Friday (FRI)</option>
+                <option value="SAT">Saturday (SAT)</option>
+                <option value="SUN">Sunday (SUN)</option>
+              </select>
+            </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="manual-end-time">End Time *</label>
-            <input type="time" id="manual-end-time" class="form-input" required value="09:30" step="1800">
+          <div class="form-row-2">
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-start-time">Start Time *</label>
+              <input type="time" id="manual-start-time" class="form-input" required value="08:00" step="1800">
+            </div>
+
+            <div class="form-group" style="margin-bottom:0;">
+              <label class="form-label" for="manual-end-time">End Time *</label>
+              <input type="time" id="manual-end-time" class="form-input" required value="09:30" step="1800">
+            </div>
           </div>
         </div>
 
         <!-- Real-Time Pre-Flight Conflict Radar Banner -->
-        <div id="manual-conflict-banner" class="validation-banner" style="display:none;">
+        <div id="manual-conflict-banner" class="validation-banner" style="display:none; margin-bottom: 18px;">
           <!-- Dynamic validation result injected via JavaScript -->
         </div>
 
         <!-- Submit Button -->
-        <div class="form-actions-bar" style="margin-top: 28px; display: flex; justify-content: flex-end;">
-          <button type="submit" id="btn-save-manual-slot" class="btn btn-primary btn-lg" style="background: #6E1717; color: #FFF; font-weight: 700; border-radius: 9999px; padding: 0.85rem 2.5rem; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+        <div class="form-actions-bar" style="margin-top: 24px; display: flex; justify-content: flex-end;">
+          <button type="submit" id="btn-save-manual-slot" class="btn btn-primary btn-lg" style="background: #6E1717; color: #FFF; font-weight: 700; border-radius: 9999px; padding: 0.85rem 2.5rem; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 4px 14px rgba(110,23,23,0.25);">
             <span>Save Schedule Slot &rarr;</span>
           </button>
         </div>

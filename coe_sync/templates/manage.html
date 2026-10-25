@@ -625,25 +625,24 @@
             </div>
           </div>
 
-          <!-- Subject Offering Dropdown -->
+          <!-- Subject Offering Multi-Select -->
           <div>
-            <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
-              Subject Offering *
-            </label>
-            <select id="assign-subject-select" class="form-select" style="width:100%; font-size: 12.5px;" required onchange="handleAssignSubjectSelectChange()">
-              <option value="">-- Choose Subject --</option>
-            </select>
-            <div id="assign-subject-meta" style="display:none; font-size: 11.5px; color: #0284C7; background: #F0F9FF; padding: 6px 10px; border-radius: 6px; margin-top: 6px; border: 1px solid #BAE6FD;"></div>
-          </div>
-
-          <!-- Section Cohort Dropdown -->
-          <div>
-            <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
-              Target Section / Cohort *
-            </label>
-            <select id="assign-section-select" class="form-select" style="width:100%; font-size: 12.5px;" required>
-              <option value="">-- Choose Section --</option>
-            </select>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+              <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 0;">
+                Subject Offering * (Multiple Select)
+              </label>
+              <span id="assign-selected-count" style="font-size: 11px; font-weight: 700; color: var(--bulsu-maroon); background: rgba(104,28,46,0.08); padding: 2px 8px; border-radius: 9999px;">0 Selected</span>
+            </div>
+            <div style="position: relative; margin-bottom: 8px;">
+              <input type="text" id="assign-subject-search" placeholder="🔍 Search subject offerings..." class="form-input" style="width: 100%; font-size: 12px; padding: 6px 10px;" oninput="filterAssignSubjectList()">
+            </div>
+            <div id="assign-subject-multiselect-container" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border-light, #E2E8F0); border-radius: 8px; background: #FFF; padding: 4px; display: flex; flex-direction: column; gap: 4px;">
+              <div style="text-align:center; padding: 16px; color: var(--text-muted); font-size: 12px;">Loading subject offerings...</div>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+              <span>Click checkbox to select. Click <strong>⋮</strong> to toggle 1.5-hr vs 3-hr session duration.</span>
+              <button type="button" class="btn btn-sm btn-link" onclick="toggleSelectAllSubjects()" style="font-size: 11px; padding: 0; color: var(--bulsu-maroon); text-decoration: underline; background: none; border: none; cursor: pointer;">Select All / Deselect All</button>
+            </div>
           </div>
 
           <!-- Room / Laboratory Dropdown -->
@@ -652,52 +651,9 @@
               Classroom / Facility
             </label>
             <select id="assign-room-select" class="form-select" style="width:100%; font-size: 12.5px;">
-              <option value="auto">✨ Auto-Assign Best Department Room</option>
+              <option value="none">🚫 Do not assign (Unassigned room)</option>
+              <option value="auto" selected>✨ Auto-Assign Best Department Room</option>
             </select>
-          </div>
-
-          <!-- Schedule Day & Time Slot -->
-          <div style="display:grid; grid-template-columns: 1fr 1.3fr; gap: 12px;">
-            <div>
-              <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
-                Day of Week *
-              </label>
-              <select id="assign-day-select" class="form-select" style="width:100%; font-size: 12.5px;" required>
-                <option value="MON" selected>Monday (MON)</option>
-                <option value="TUE">Tuesday (TUE)</option>
-                <option value="WED">Wednesday (WED)</option>
-                <option value="THU">Thursday (THU)</option>
-                <option value="FRI">Friday (FRI)</option>
-                <option value="SAT">Saturday (SAT)</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
-                Standard Slot Preset
-              </label>
-              <select id="assign-slot-preset" class="form-select" style="width:100%; font-size: 12.5px;" onchange="handleAssignSlotPresetChange()">
-                <option value="08:00-11:00" selected>08:00 – 11:00 (3-Hr Morning Block)</option>
-                <option value="13:00-16:00">13:00 – 16:00 (3-Hr Afternoon Block)</option>
-                <option value="07:00-08:30">07:00 – 08:30 (1.5-Hr Early Split)</option>
-                <option value="08:30-10:00">08:30 – 10:00 (1.5-Hr Mid Split)</option>
-                <option value="10:00-11:30">10:00 – 11:30 (1.5-Hr Late Split)</option>
-                <option value="13:00-14:30">13:00 – 14:30 (1.5-Hr Afternoon)</option>
-                <option value="14:30-16:00">14:30 – 16:00 (1.5-Hr Afternoon)</option>
-                <option value="custom">Custom Time Slot...</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Custom Time inputs (hidden by default) -->
-          <div id="assign-custom-time-row" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div>
-              <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Start Time</label>
-              <input type="time" id="assign-start-time" class="form-input" value="08:00" style="width:100%;">
-            </div>
-            <div>
-              <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">End Time</label>
-              <input type="time" id="assign-end-time" class="form-input" value="11:00" style="width:100%;">
-            </div>
           </div>
 
           <!-- Conflict Warning Banner (if collision detected) -->
