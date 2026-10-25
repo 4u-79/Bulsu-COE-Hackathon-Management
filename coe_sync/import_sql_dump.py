@@ -453,7 +453,7 @@ def load_and_clean_data_final_sql(sql_file_path: Path = None) -> Dict[str, Any]:
             assigned_prog = "MEE"
             assigned_ref = mee_1a_id
         elif raw_uname.startswith("CHAIR-"):
-            assigned_role = "PROG_CHA"
+            assigned_role = "CHAIR"
             fac = match_faculty_for_user(raw_uname, faculty_list, user_id)
             if fac:
                 assigned_ref = fac["id"]
@@ -461,7 +461,7 @@ def load_and_clean_data_final_sql(sql_file_path: Path = None) -> Dict[str, Any]:
             elif len(r) > 4 and r[4]:
                 assigned_prog = DEPT_MAP.get(r[4].strip(), "GEN")
         elif raw_uname.startswith("FAC-"):
-            assigned_role = "FCLTY_DEPT"
+            assigned_role = "FACULTY"
             fac = match_faculty_for_user(raw_uname, faculty_list, user_id)
             if fac:
                 assigned_ref = fac["id"]

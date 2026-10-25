@@ -11,7 +11,7 @@ window.normalizeRole = function (role) {
   return up;
 };
 
-window.CURRENT_ROLE = "CHAIR";
+window.CURRENT_ROLE = window.CURRENT_ROLE ? window.normalizeRole(window.CURRENT_ROLE) : "CHAIR";
 
 document.addEventListener("DOMContentLoaded", () => {
   initHealthCheck();
@@ -456,8 +456,15 @@ window.openUnifiedInboxModal = async function (preferredTab = null, defaultSubTa
   if (preferredTab) {
     switchInboxTab(preferredTab, defaultSubTab);
   } else {
+    const reschedCount = parseInt(document.getElementById("reschedule-count-badge")?.textContent || "0", 10);
     const interCount = parseInt(document.getElementById("count-badge-interdept")?.textContent || "0", 10);
-    switchInboxTab((interCount > 0 && role !== "STUDENT" && role !== "FACULTY") ? "interdept" : "reschedules", defaultSubTab);
+    if (reschedCount > 0) {
+      switchInboxTab("reschedules", defaultSubTab);
+    } else if (interCount > 0 && role !== "STUDENT" && role !== "FACULTY") {
+      switchInboxTab("interdept", defaultSubTab);
+    } else {
+      switchInboxTab("reschedules", defaultSubTab);
+    }
   }
 };
 
@@ -628,12 +635,13 @@ async function updateReschedulesBadge() {
   const badge = document.getElementById("reschedule-count-badge");
   const facBadge = document.getElementById("fac-resched-badge");
   const studentBadge = document.getElementById("student-resched-badge");
+  const chairBadge = document.getElementById("chair-resched-badge");
 
   try {
     const res = await API.getRescheduleRequests();
     if (res.status === "success" && Array.isArray(res.data)) {
       _allRescheduleRequests = res.data;
-      const role = window.CURRENT_ROLE || "CHAIR";
+      const role = window.normalizeRole ? window.normalizeRole(window.CURRENT_ROLE) : (window.CURRENT_ROLE || "CHAIR");
 
       let pendingCount = 0;
       if (role === "STUDENT") {
@@ -655,6 +663,10 @@ async function updateReschedulesBadge() {
       if (studentBadge) {
         studentBadge.textContent = pendingCount;
         studentBadge.style.display = pendingCount > 0 ? "inline-block" : "none";
+      }
+      if (chairBadge) {
+        chairBadge.textContent = pendingCount;
+        chairBadge.style.display = pendingCount > 0 ? "inline-block" : "none";
       }
     }
   } catch (e) {

@@ -145,7 +145,7 @@ def get_schedules():
         search = request.args.get("search", type=str)
 
         effective_prog = get_effective_program()
-        if effective_role == "CHAIR" and effective_prog and not program:
+        if effective_role == "CHAIR" and effective_prog:
             program = effective_prog
 
         if section_id:

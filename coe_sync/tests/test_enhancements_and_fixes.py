@@ -372,6 +372,133 @@ class TestEnhancementsAndFixes(unittest.TestCase):
         self.assertIn("Bulacan State University — College of Engineering", html)
         self.assertIn("COE SYNC Master Timetable &amp; Conflict Engine", html)
 
+    # =========================================================================
+    # 5. Role Redundancy, Chair Scoping & 2-Tier Approval Tests
+    # =========================================================================
+    def test_chair_and_prog_cha_role_equivalence_and_normalization(self):
+        """Verify PROG_CHA and CHAIR normalize identically and provide full chair privileges."""
+        with self.app.app_context():
+            prog_cha_user = User(
+                username="CHAIR-MVillena-Test",
+                role="PROG_CHA",
+                program="CPE",
+                demo_password="password",
+                must_change_credentials=False,
+            )
+            prog_cha_user.set_password("password")
+            db.session.add(prog_cha_user)
+            db.session.commit()
+
+        # Login as PROG_CHA
+        res = self.client.post("/api/auth/login", json={"username": "CHAIR-MVillena-Test", "password": "password"})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["active_role"], "CHAIR")
+
+        # Session profile /api/auth/me should return normalized CHAIR
+        me_res = self.client.get("/api/auth/me")
+        self.assertEqual(me_res.status_code, 200)
+        self.assertEqual(me_res.get_json()["active_role"], "CHAIR")
+
+    def test_program_chair_sections_scoped_strictly_to_department(self):
+        """Verify Program Chair in /api/sections strictly receives only sections for their department."""
+        with self.app.app_context():
+            sec_cpe = Section(name="CPE - 2A", program="CPE", year_level=2, student_count=35)
+            sec_ce = Section(name="CE - 2A", program="CE", year_level=2, student_count=35)
+            sec_ee = Section(name="EE - 2A", program="EE", year_level=2, student_count=35)
+            chair = User(
+                username="chair_cpe_scoped",
+                role="CHAIR",
+                program="CPE",
+                demo_password="password",
+                must_change_credentials=False,
+            )
+            chair.set_password("password")
+            db.session.add_all([sec_cpe, sec_ce, sec_ee, chair])
+            db.session.commit()
+
+        # Login as CPE Chair
+        self.client.post("/api/auth/login", json={"username": "chair_cpe_scoped", "password": "password"})
+
+        # Call /api/sections without program parameter
+        res = self.client.get("/api/sections")
+        self.assertEqual(res.status_code, 200)
+        sections = res.get_json()["data"]
+        self.assertTrue(len(sections) > 0)
+        for s in sections:
+            self.assertEqual(s["program"], "CPE", f"Chair received non-CPE section: {s}")
+
+    def test_two_tier_reschedule_faculty_and_chair_approval_pipeline(self):
+        """Verify student reschedule proposal flow: Student -> Faculty Endorse -> Chair Approve."""
+        with self.app.app_context():
+            cpe_sec = Section(name="CPE - 2A", program="CPE", year_level=2, student_count=30)
+            fac = Faculty(name="Engr. Test Faculty", email="testfac@bulsu.edu.ph", program="CPE", max_units=21, current_units=15)
+            subj = Subject(code="CPE 201", title="Logic Circuits", units=3, hours_per_week=3, subject_type="LECTURE", program="CPE", year_level=2, semester=1)
+            room1 = Room(room_code="COE 101", room_type="LECTURE", capacity=40, building="COE 1", department="CPE")
+            room2 = Room(room_code="COE 102", room_type="LECTURE", capacity=40, building="COE 1", department="CPE")
+            db.session.add_all([cpe_sec, fac, subj, room1, room2])
+            db.session.flush()
+
+            sched = Schedule(
+                section_id=cpe_sec.id,
+                subject_id=subj.id,
+                faculty_id=fac.id,
+                room_id=room1.id,
+                day_of_week="MON",
+                start_time=time(8, 0),
+                end_time=time(10, 0),
+                status="PUBLISHED",
+            )
+            stu_user = User(username="student_cpe", role="STUDENT", program="CPE", reference_id=cpe_sec.id)
+            stu_user.set_password("password")
+            fac_user = User(username="faculty_cpe", role="FACULTY", program="CPE", reference_id=fac.id)
+            fac_user.set_password("password")
+            chair_user = User(username="chair_cpe_approver", role="CHAIR", program="CPE")
+            chair_user.set_password("password")
+
+            db.session.add_all([sched, stu_user, fac_user, chair_user])
+            db.session.commit()
+            sched_id = sched.id
+            fac_id = fac.id
+
+        # 1. Student submits reschedule proposal
+        self.client.post("/api/auth/login", json={"username": "student_cpe", "password": "password"})
+        req_res = self.client.post("/api/reschedule/request", json={
+            "schedule_id": sched_id,
+            "proposed_day": "WED",
+            "proposed_start_time": "10:00",
+            "proposed_end_time": "12:00",
+            "reason": "Class consensus",
+        })
+        self.assertEqual(req_res.status_code, 201)
+        req_id = req_res.get_json()["data"]["id"]
+        self.assertEqual(req_res.get_json()["data"]["status"], "PENDING_FACULTY")
+
+        # 2. Faculty logs in and endorses proposal
+        self.client.post("/api/auth/login", json={"username": "faculty_cpe", "password": "password"})
+        fac_rev = self.client.post(f"/api/reschedule/{req_id}/approve", json={"feedback": "Looks good to me"})
+        self.assertEqual(fac_rev.status_code, 200)
+        self.assertEqual(fac_rev.get_json()["data"]["status"], "PENDING_CHAIR")
+
+        # 3. Chair logs in and sees proposal in pending requests
+        self.client.post("/api/auth/login", json={"username": "chair_cpe_approver", "password": "password"})
+        chair_list = self.client.get("/api/reschedule/requests?status=PENDING_CHAIR")
+        self.assertEqual(chair_list.status_code, 200)
+        items = chair_list.get_json()["data"]
+        self.assertTrue(any(r["id"] == req_id for r in items), "Chair must see PENDING_CHAIR request")
+
+        # 4. Chair authorizes and updates timetable
+        chair_dec = self.client.post(f"/api/reschedule/{req_id}/approve", json={"feedback": "Approved by Chair"})
+        self.assertEqual(chair_dec.status_code, 200)
+        self.assertEqual(chair_dec.get_json()["data"]["status"], "APPROVED")
+
+        # Verify timetable updated in DB
+        with self.app.app_context():
+            updated_sched = db.session.get(Schedule, sched_id)
+            self.assertEqual(updated_sched.day_of_week, "WED")
+            self.assertEqual(updated_sched.start_time, time(10, 0))
+            self.assertEqual(updated_sched.end_time, time(12, 0))
+
 
 if __name__ == "__main__":
     unittest.main()

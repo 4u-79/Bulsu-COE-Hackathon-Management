@@ -36,9 +36,21 @@ def login_page():
     return render_template("login.html", show_demo_credentials=show_demo)
 
 
+def normalize_role(r: str) -> str:
+    """Normalize NEXUS 2.0 and legacy role names to standard role identifier."""
+    up = str(r or "").strip().upper()
+    if up in ("CHAIR", "PROG_CHA"):
+        return "CHAIR"
+    if up in ("FACULTY", "FCLTY_DEPT"):
+        return "FACULTY"
+    if up in ("STUDENT", "STDN_MYR"):
+        return "STUDENT"
+    return up
+
+
 def get_effective_role() -> str:
     """Return the currently active impersonated or authenticated role."""
-    return session.get("active_role") or session.get("role") or ""
+    return normalize_role(session.get("active_role") or session.get("role") or "")
 
 
 def get_effective_program() -> str:
@@ -85,16 +97,6 @@ def login_required(f):
     return decorated_function
 
 
-def normalize_role(r: str) -> str:
-    """Normalize NEXUS 2.0 and legacy role names to standard role identifier."""
-    up = str(r or "").strip().upper()
-    if up in ("CHAIR", "PROG_CHA"):
-        return "CHAIR"
-    if up in ("FACULTY", "FCLTY_DEPT"):
-        return "FACULTY"
-    if up in ("STUDENT", "STDN_MYR"):
-        return "STUDENT"
-    return up
 
 
 def require_roles(*roles):
@@ -157,11 +159,12 @@ def login():
             )
 
         # Initialize session
+        norm_role = normalize_role(user.role)
         session.clear()
         session["user_id"] = user.id
         session["username"] = user.username
-        session["role"] = user.role
-        session["active_role"] = user.role
+        session["role"] = norm_role
+        session["active_role"] = norm_role
         session["program"] = user.program
         session["active_program"] = user.program
         session["reference_id"] = user.reference_id
@@ -188,14 +191,14 @@ def login():
                     "status": "success",
                     "message": "Login successful",
                     "redirect": "/schedules" if normalize_role(user.role) in ["STUDENT", "FACULTY"] else "/dashboard",
-                    "role": user.role,
+                    "role": norm_role,
                     "user": user.to_dict(),
-                    "user_role": user.role,
+                    "user_role": norm_role,
                     "user_program": user.program,
                     "program": user.program,
                     "active_program": user.program,
                     "must_change_credentials": user.must_change_credentials,
-                    "active_role": user.role,
+                    "active_role": norm_role,
                     "active_reference_id": user.reference_id,
                 }
             ),
@@ -389,7 +392,7 @@ def impersonate():
     Restricted to authenticated Program Chair and Admin users.
     """
     # Enforce role restriction: genuine Students and Faculty cannot impersonate
-    auth_role = session.get("role")
+    auth_role = normalize_role(session.get("role"))
     if auth_role not in ["CHAIR", "ADMIN", "DEAN"]:
         return (
             jsonify(

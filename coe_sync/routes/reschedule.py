@@ -512,7 +512,7 @@ def chair_decision_reschedule(request_id: int):
 @require_roles("FACULTY", "CHAIR", "ADMIN")
 def approve_reschedule_alias(request_id: int):
     """Direct approval endpoint router."""
-    effective_role = get_effective_role()
+    effective_role = normalize_role(get_effective_role())
     if effective_role == "FACULTY":
         return faculty_review_reschedule(request_id)
     return chair_decision_reschedule(request_id)
@@ -522,7 +522,7 @@ def approve_reschedule_alias(request_id: int):
 @require_roles("FACULTY", "CHAIR", "ADMIN")
 def reject_reschedule_alias(request_id: int):
     """Direct rejection endpoint router."""
-    effective_role = get_effective_role()
+    effective_role = normalize_role(get_effective_role())
     if effective_role == "FACULTY":
         return faculty_review_reschedule(request_id)
     return chair_decision_reschedule(request_id)

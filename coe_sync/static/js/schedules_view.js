@@ -155,6 +155,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await fetchAndRender();
   await fetchLiveUtilization();
   updateWeekLabel();
+  if (typeof updateReschedulesBadge === "function") updateReschedulesBadge();
 });
 
 window.addEventListener("roleChanged", (e) => {
@@ -168,6 +169,7 @@ window.addEventListener("roleChanged", (e) => {
   cascadeScheduleFilters();
   fetchAndRender();
   fetchLiveUtilization();
+  if (typeof updateReschedulesBadge === "function") updateReschedulesBadge();
   if (document.getElementById("radar-drawer")?.classList.contains("radar-drawer--open")) {
     runRadarScan();
   }
@@ -370,7 +372,17 @@ function normalizeProgram(prog) {
 }
 
 function cascadeScheduleFilters() {
-  const progVal = document.getElementById("filter-program")?.value || "";
+  const normRole = window.normalizeRole ? window.normalizeRole(window.CURRENT_ROLE) : window.CURRENT_ROLE;
+  const isChair = normRole === "CHAIR";
+  const chairProg = isChair && window.CURRENT_PROGRAM ? normalizeProgram(window.CURRENT_PROGRAM) : "";
+
+  const progSel = document.getElementById("filter-program");
+  if (isChair && chairProg && progSel) {
+    progSel.value = chairProg;
+    progSel.disabled = true;
+  }
+
+  const progVal = (isChair && chairProg) ? chairProg : (progSel?.value || "");
   const yearVal = document.getElementById("filter-year")?.value || "";
   const termVal = document.getElementById("filter-term")?.value || localStorage.getItem("coe_sync_active_term") || "";
   const secSel  = document.getElementById("filter-section");
@@ -625,6 +637,17 @@ function updateRoleAdaptiveFilters() {
     if (studentBanner) studentBanner.style.display = "none";
   } else {
     // CHAIR or ADMIN
+    const normRole = window.normalizeRole ? window.normalizeRole(role) : role;
+    const isChair = normRole === "CHAIR";
+    const progSel = document.getElementById("filter-program");
+    if (isChair && window.CURRENT_PROGRAM && progSel) {
+      const chairProg = normalizeProgram(window.CURRENT_PROGRAM);
+      progSel.value = chairProg;
+      progSel.disabled = true;
+    } else if (progSel) {
+      progSel.disabled = false;
+    }
+
     if (wrapProg) wrapProg.style.display = "inline-flex";
     if (wrapSec) wrapSec.style.display = "inline-flex";
     if (wrapFac) wrapFac.style.display = "inline-flex";
@@ -1318,6 +1341,15 @@ function updateRoleSpecificPortals(schedules) {
     // CHAIR or ADMIN
     if (facBanner) facBanner.style.display = "none";
     if (studentBanner) studentBanner.style.display = "none";
+
+    const chairReviewBtn = document.getElementById("btn-chair-review-approvals");
+    if (chairReviewBtn) {
+      chairReviewBtn.onclick = () => {
+        if (typeof window.openRescheduleModal === "function") {
+          window.openRescheduleModal("pending");
+        }
+      };
+    }
   }
 }
 

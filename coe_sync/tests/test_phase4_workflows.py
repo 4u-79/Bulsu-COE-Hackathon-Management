@@ -42,7 +42,7 @@ class TestPhase4Workflows(unittest.TestCase):
         with cls.app.app_context():
             seed_database(cls.app)
 
-            cls.chair_user = User.query.filter_by(role="CHAIR").first()
+            cls.chair_user = User.query.filter_by(username="chair_cpe").first()
             cls.faculty_user = User.query.filter_by(role="FACULTY").first()
             cls.student_user = User.query.filter_by(role="STUDENT").first()
             cls.faculty_member = Faculty.query.first()

@@ -41,7 +41,7 @@ class TestAuthGatewayAndCredentials(unittest.TestCase):
     def test_01_default_chair_seed_credentials(self):
         """Test default Program Chair seed account credentials and fields."""
         with self.app.app_context():
-            chair = User.query.filter_by(role="CHAIR").first()
+            chair = User.query.filter_by(username="chair_cpe").first()
             self.assertIsNotNone(chair, "Program Chair account should exist in seed data.")
             self.assertEqual(chair.username, "chair_cpe")
             self.assertTrue(chair.check_password("chair123"), "Default password must be 'chair123'.")

@@ -30,6 +30,7 @@ from routes.auth import (
     auth_views,
     login_required,
     require_roles,
+    normalize_role,
 )
 from routes.schedules import schedules_bp
 from routes.analytics import analytics_bp
@@ -244,9 +245,9 @@ def create_app(config_name=None):
         program = request.args.get("program", "").strip()
         overloaded = request.args.get("overloaded")
 
-        effective_role = session.get("active_role") or session.get("role")
+        effective_role = normalize_role(session.get("active_role") or session.get("role"))
         effective_prog = session.get("active_program") or session.get("program")
-        if not program and effective_role == "CHAIR" and effective_prog:
+        if effective_role == "CHAIR" and effective_prog:
             program = effective_prog
 
         if search:
@@ -287,12 +288,16 @@ def create_app(config_name=None):
         year_level = request.args.get("year_level", type=int)
         faculty_id = request.args.get("faculty_id", type=int)
 
-        effective_role = session.get("active_role") or session.get("role")
+        effective_role = normalize_role(session.get("active_role") or session.get("role"))
         effective_prog = session.get("active_program") or session.get("program")
-        if not program and effective_role == "CHAIR" and effective_prog:
+        if effective_role == "CHAIR" and effective_prog:
             program = effective_prog
+        elif effective_role == "STUDENT":
+            effective_ref_id = session.get("active_reference_id") or session.get("reference_id")
+            if effective_ref_id:
+                query = query.filter(Section.id == effective_ref_id)
 
-        if not faculty_id and effective_role in ("FACULTY", "FCLTY_DEPT"):
+        if not faculty_id and effective_role == "FACULTY":
             faculty_id = session.get("active_reference_id") or session.get("reference_id")
 
         if faculty_id:
@@ -341,12 +346,12 @@ def create_app(config_name=None):
         faculty_id = request.args.get("faculty_id", type=int)
         curriculum = str(request.args.get("curriculum", "")).lower() == "true"
 
-        effective_role = session.get("active_role") or session.get("role")
+        effective_role = normalize_role(session.get("active_role") or session.get("role"))
         effective_prog = session.get("active_program") or session.get("program")
-        if not program and effective_role == "CHAIR" and effective_prog:
+        if effective_role == "CHAIR" and effective_prog and not curriculum:
             program = effective_prog
 
-        if not faculty_id and effective_role in ("FACULTY", "FCLTY_DEPT") and not curriculum:
+        if not faculty_id and effective_role == "FACULTY" and not curriculum:
             faculty_id = session.get("active_reference_id") or session.get("reference_id")
 
         if faculty_id and not curriculum:
