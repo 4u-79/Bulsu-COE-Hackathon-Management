@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
     kpiTotalClasses: document.getElementById("kpi-total-classes"),
 
     filterTerm: document.getElementById("filter-term"),
+    filterProgram: document.getElementById("filter-program"),
     filterSectionScope: document.getElementById("filter-section-scope"),
     filterRoomType: document.getElementById("filter-room-type"),
     filterUtilThreshold: document.getElementById("filter-util-threshold"),
@@ -45,6 +46,9 @@ document.addEventListener("DOMContentLoaded", () => {
           window.dispatchEvent(new CustomEvent("academicTermChanged", { detail: { term: e.target.value } }));
           this.applyFilters();
         });
+      }
+      if (this.filterProgram) {
+        this.filterProgram.addEventListener("change", () => this.loadData());
       }
       if (this.filterSectionScope) {
         this.filterSectionScope.addEventListener("change", () => this.applyFilters());
@@ -91,9 +95,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async loadData() {
       try {
+        const params = {};
+        if (this.filterProgram && this.filterProgram.value && this.filterProgram.value !== "ALL") {
+          params.program = this.filterProgram.value;
+        }
+
         const [res, reportsRes] = await Promise.all([
-          API.getAnalyticsSummary(),
-          API.getAnalyticsReports().catch(() => null),
+          API.getAnalyticsSummary(params),
+          API.getAnalyticsReports(params).catch(() => null),
         ]);
 
         if (res.status === "success" && res.data) {
@@ -104,6 +113,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
           if (reportsRes?.status === "success" && reportsRes.data?.quality_score) {
             this.qualityReport = reportsRes.data.quality_score;
+          }
+
+          // Dynamically reflect Department Specific Analytics vs Institutional
+          const mainTitle = document.getElementById("reports-main-title");
+          const mainSubtitle = document.getElementById("reports-main-subtitle");
+          const kpiClassesSubtext = document.getElementById("kpi-total-classes-subtext");
+          const kpiOverloadSubtext = document.getElementById("kpi-overload-subtext");
+
+          if (res.data.is_department_scoped && res.data.program_scope) {
+            if (mainTitle) mainTitle.textContent = "Department Specific Analytics";
+            if (mainSubtitle) mainSubtitle.textContent = `BulSU College of Engineering • ${res.data.program_scope} Department Capacity & Faculty Allocation Intelligence`;
+            if (kpiClassesSubtext) kpiClassesSubtext.textContent = `Active course offerings in ${res.data.program_scope} department`;
+            if (kpiOverloadSubtext) kpiOverloadSubtext.textContent = `${res.data.program_scope} instructors exceeding 21-unit policy threshold`;
+          } else {
+            if (mainTitle) mainTitle.textContent = "Institutional Analytics & Reports";
+            if (mainSubtitle) mainSubtitle.textContent = "BulSU College of Engineering • Academic Term Capacity & Faculty Allocation Intelligence";
+            if (kpiClassesSubtext) kpiClassesSubtext.textContent = "Active course offerings across all degree programs";
+            if (kpiOverloadSubtext) kpiOverloadSubtext.textContent = "Instructors exceeding 21-unit policy threshold";
           }
 
           this.populateKPIs();
@@ -410,7 +437,11 @@ document.addEventListener("DOMContentLoaded", () => {
       let csvContent = "data:text/csv;charset=utf-8,";
 
       // 1. Header
-      csvContent += "BULSU COLLEGE OF ENGINEERING - INSTITUTIONAL UTILIZATION & WORKLOAD REPORT\n";
+      const isDept = this.summaryData?.is_department_scoped && this.summaryData?.program_scope;
+      const reportTitle = isDept
+        ? `BULSU COLLEGE OF ENGINEERING - ${this.summaryData.program_scope} DEPARTMENT UTILIZATION & WORKLOAD REPORT`
+        : "BULSU COLLEGE OF ENGINEERING - INSTITUTIONAL UTILIZATION & WORKLOAD REPORT";
+      csvContent += `${reportTitle}\n`;
       csvContent += `Generated On,${new Date().toLocaleString()}\n`;
       csvContent += `Term,1st Semester AY 2026-2027\n\n`;
 
@@ -436,7 +467,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `BulSU_COE_Utilization_Report_${new Date().toISOString().slice(0, 10)}.csv`);
+      const filePrefix = isDept ? `BulSU_COE_${this.summaryData.program_scope}_Report_` : "BulSU_COE_Utilization_Report_";
+      link.setAttribute("download", `${filePrefix}${new Date().toISOString().slice(0, 10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

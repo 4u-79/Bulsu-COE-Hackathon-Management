@@ -13,7 +13,7 @@
       <div>
         <h2 style="font-size: 22px; font-weight: 800; color: var(--text-dark); margin:0 0 4px 0;">System Settings & Governance Workspace</h2>
         <p style="font-size: 13.5px; color: var(--text-secondary); margin:0;">
-          Configure institutional scheduling rules, role policies, personal credentials, and demo impersonation.
+          Configure institutional scheduling rules, role policies, personal credentials, and database maintenance.
         </p>
       </div>
       <span style="background: rgba(90,16,16,0.08); color: var(--bulsu-maroon); border: 1px solid rgba(90,16,16,0.2); font-size: 11.5px; font-weight: 700; padding: 6px 14px; border-radius: 9999px;">
@@ -154,82 +154,14 @@
       </div>
     </div>
 
-    <!-- Card 3 (col-span-12): Quick Role Impersonator & Demo Controls Card -->
+    <!-- Card 3 (col-span-12): Database Maintenance & Backup Card -->
     <div class="glass-card" style="grid-column: span 12; padding: 24px 28px; background: rgba(255,255,255,0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 16px; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
         <div>
-          <h3 style="font-size: 17px; font-weight: 800; color: var(--text-dark); margin:0 0 4px 0;">Quick Role Impersonator &amp; Demo Controls</h3>
-          <p style="font-size: 12.5px; color: var(--text-secondary); margin:0;">1-Click switch between administrative, departmental, instructional, and student perspectives.</p>
+          <h3 style="font-size: 17px; font-weight: 800; color: var(--text-dark); margin:0 0 4px 0;">Database Maintenance &amp; Backup</h3>
+          <p style="font-size: 12.5px; color: var(--text-secondary); margin:0;">Reset system tables or export clean master schedules.</p>
         </div>
-        <span style="background: rgba(34,197,94,0.1); color: #15803D; border: 1px solid rgba(34,197,94,0.3); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px;">
-          DEMO MODE READY
-        </span>
-      </div>
-
-      <!-- Quick Switch Buttons Grid -->
-      <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px;">
-        <!-- 1. Global Admin -->
-        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
-          <div>
-            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Global Admin</div>
-            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 10px;">Full access across all 8 programs</div>
-          </div>
-          <button type="button" class="btn btn-primary btn-sm" onclick="switchDemoUser('ADMIN', null)" style="width:100%;">
-            Switch to Admin
-          </button>
-        </div>
-
-        <!-- 2. Program Chair with dropdown -->
-        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
-          <div>
-            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Program Chair</div>
-            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 6px;">Scoped to assigned program only</div>
-            <select id="quick-chair-program-select" class="form-select" style="font-size: 11.5px; padding: 4px 8px; margin-bottom: 8px; width: 100%;">
-              <option value="MEE" selected>MEE (Mechatronics)</option>
-              <option value="CE">CE (Civil)</option>
-              <option value="CPE">CPE (Computer)</option>
-              <option value="EE">EE (Electrical)</option>
-              <option value="ECE">ECE (Electronics)</option>
-              <option value="IE">IE (Industrial)</option>
-              <option value="MFGE">MFGE (Manufacturing)</option>
-              <option value="ME">ME (Mechanical)</option>
-            </select>
-          </div>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="switchDemoChair()" style="width:100%;">
-            Switch to Chair
-          </button>
-        </div>
-
-        <!-- 3. Faculty -->
-        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
-          <div>
-            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Faculty Member</div>
-            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 10px;">Engr. Arvin Julius S. Tullao (MEE)</div>
-          </div>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="switchDemoUser('FACULTY', 109)" style="width:100%;">
-            Switch to Faculty
-          </button>
-        </div>
-
-        <!-- 4. Student -->
-        <div style="background: rgba(248,250,252,0.9); border: 1px solid #CBD5E1; border-radius: 10px; padding: 14px; display:flex; flex-direction:column; justify-content:space-between;">
-          <div>
-            <div style="font-size: 14px; font-weight: 800; color: #1E293B; margin-bottom: 2px;">Student Cohort</div>
-            <div style="font-size: 11.5px; color: #64748B; margin-bottom: 10px;">MEE - 1A Cohort View</div>
-          </div>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="switchDemoUser('STUDENT', 81)" style="width:100%;">
-            Switch to Student
-          </button>
-        </div>
-      </div>
-
-      <!-- Database Maintenance Section (Admin & Chair) -->
-      <div style="border-top: 1px solid var(--border-light); padding-top: 18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-        <div>
-          <div style="font-size: 13.5px; font-weight: 700; color: var(--text-dark);">Database Maintenance & Backup</div>
-          <div style="font-size: 12px; color: var(--text-secondary);">Reset system tables or export clean master schedules.</div>
-        </div>
-        <div style="display:flex; gap: 10px;">
+        <div style="display:flex; gap: 10px; flex-wrap:wrap;">
           <button type="button" class="btn btn-secondary btn-sm" onclick="exportScheduleCSV()" style="display:inline-flex; align-items:center; gap:6px;">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Export Full Schedule Backup (CSV)
@@ -276,27 +208,6 @@ async function triggerPurgeExpiredRequests() {
     showToast(res.message || "Expired requests purged successfully!");
   } catch (err) {
     showToast(err.message || "Failed to purge expired requests", true);
-  }
-}
-
-async function switchDemoUser(role, refId) {
-  try {
-    const res = await API.post("/api/auth/impersonate", { role, reference_id: refId });
-    showToast(res.message || `Switched view to ${role}`);
-    setTimeout(() => window.location.reload(), 600);
-  } catch (err) {
-    showToast(err.message || "Failed to switch role", true);
-  }
-}
-
-async function switchDemoChair() {
-  const prog = document.getElementById("quick-chair-program-select")?.value || "MEE";
-  try {
-    const res = await API.post("/api/auth/impersonate", { role: "CHAIR", program: prog });
-    showToast(res.message || `Switched to Program Chair (${prog})`);
-    setTimeout(() => window.location.reload(), 600);
-  } catch (err) {
-    showToast(err.message || "Failed to switch program chair", true);
   }
 }
 

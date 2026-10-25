@@ -87,8 +87,8 @@ const API = {
     return this.get("/api/health");
   },
 
-  async getAnalyticsSummary() {
-    return this.get("/api/analytics/summary");
+  async getAnalyticsSummary(params = null) {
+    return this.get("/api/analytics/summary", params);
   },
 
   async getSections(params = null) {
@@ -205,8 +205,8 @@ const API = {
     return this.get("/api/auth/demo-credentials");
   },
 
-  async getAnalyticsReports() {
-    return this.get("/api/analytics/reports");
+  async getAnalyticsReports(params = null) {
+    return this.get("/api/analytics/reports", params);
   },
 
   async seedDatabase() {

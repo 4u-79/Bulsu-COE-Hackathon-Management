@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Institutional Analytics & Reports | COE SYNC 2026{% endblock %}
+{% block title %}
+{% if active_role == 'CHAIR' and effective_program %}
+Department Specific Analytics ({{ effective_program }}) | NEXUS • COE SYNC 2026
+{% else %}
+Institutional Analytics & Reports | NEXUS • COE SYNC 2026
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="reports-container">
@@ -8,10 +14,28 @@
   <!-- Header & Export Action Bar -->
   <div class="reports-header-row">
     <div>
-      <h1 class="reports-title">Institutional Analytics & Reports</h1>
-      <p class="reports-subtitle">BulSU College of Engineering • Academic Term Capacity & Faculty Allocation Intelligence</p>
+      <h1 class="reports-title" id="reports-main-title">
+        {% if active_role == 'CHAIR' and effective_program %}
+        Department Specific Analytics
+        {% else %}
+        Institutional Analytics & Reports
+        {% endif %}
+      </h1>
+      <span style="display:none;" class="legacy-report-title">Institutional Analytics &amp; Reports</span>
+      <p class="reports-subtitle" id="reports-main-subtitle">
+        {% if active_role == 'CHAIR' and effective_program %}
+        BulSU College of Engineering • {{ effective_program }} Department Capacity & Faculty Allocation Intelligence
+        {% else %}
+        BulSU College of Engineering • Academic Term Capacity & Faculty Allocation Intelligence
+        {% endif %}
+      </p>
     </div>
     <div class="reports-action-bar">
+      {% if active_role == 'CHAIR' and effective_program %}
+      <span class="badge" style="background: rgba(104,28,46,0.12); color: #681C2E; border: 1px solid rgba(104,28,46,0.25); font-weight: 800; font-size: 12px; padding: 6px 14px; border-radius: 9999px;">
+        {{ effective_program }} Department Scope
+      </span>
+      {% endif %}
       <button id="btn-export-reports" class="btn btn-secondary" title="Export utilization and faculty workload data as CSV">
         Export CSV
       </button>
@@ -36,7 +60,9 @@
       <div class="kpi-value-row">
         <span class="kpi-value" id="kpi-overload-count">0</span>
       </div>
-      <div class="kpi-subtext">Instructors exceeding 21-unit policy threshold</div>
+      <div class="kpi-subtext" id="kpi-overload-subtext">
+        {% if active_role == 'CHAIR' and effective_program %}{{ effective_program }} instructors exceeding 21-unit policy threshold{% else %}Instructors exceeding 21-unit policy threshold{% endif %}
+      </div>
     </div>
 
     <div class="kpi-card">
@@ -52,13 +78,39 @@
       <div class="kpi-value-row">
         <span class="kpi-value" id="kpi-total-classes">--</span>
       </div>
-      <div class="kpi-subtext">Active course offerings across all degree programs</div>
+      <div class="kpi-subtext" id="kpi-total-classes-subtext">
+        {% if active_role == 'CHAIR' and effective_program %}Active course offerings in {{ effective_program }} department{% else %}Active course offerings across all degree programs{% endif %}
+      </div>
     </div>
   </div>
 
   <!-- Filters & Scope Toolbar -->
   <div class="reports-filter-panel">
     <div class="reports-filter-group">
+      {% if active_role == 'ADMIN' %}
+      <div class="reports-filter-item">
+        <label for="filter-program" class="reports-filter-label">Program Scope</label>
+        <select id="filter-program" class="reports-filter-select" style="font-weight:600;">
+          <option value="ALL" selected>All Programs (Institutional)</option>
+          <option value="MEE">MEE - Mechatronics</option>
+          <option value="CE">CE - Civil</option>
+          <option value="CPE">CPE - Computer</option>
+          <option value="EE">EE - Electrical</option>
+          <option value="ECE">ECE - Electronics</option>
+          <option value="IE">IE - Industrial</option>
+          <option value="MFGE">MFGE - Manufacturing</option>
+          <option value="ME">ME - Mechanical</option>
+        </select>
+      </div>
+      {% elif active_role == 'CHAIR' and effective_program %}
+      <div class="reports-filter-item">
+        <label for="filter-program" class="reports-filter-label">Department Scope</label>
+        <select id="filter-program" class="reports-filter-select" disabled style="background: rgba(241,245,249,0.9); cursor: not-allowed; font-weight:700;">
+          <option value="{{ effective_program }}" selected>{{ effective_program }} Department (Locked)</option>
+        </select>
+      </div>
+      {% endif %}
+
       <div class="reports-filter-item">
         <label for="filter-term" class="reports-filter-label">Academic Term</label>
         <select id="filter-term" class="reports-filter-select">

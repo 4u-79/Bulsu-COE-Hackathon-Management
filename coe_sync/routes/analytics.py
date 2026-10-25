@@ -9,7 +9,7 @@ Endpoints:
     * faculty_workloads: Faculty teaching load metrics and overload indicators
 """
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request, session
 from models import (
     db,
     Schedule,
@@ -27,16 +27,64 @@ from services.conflict_detector import (
 analytics_bp = Blueprint("analytics", __name__)
 
 
+def _resolve_analytics_program(enforce_chair_scope=True):
+    """Resolve target program filter based on user role and optional query parameter."""
+    from routes.auth import get_effective_role, get_effective_program
+
+    role = get_effective_role()
+    effective_prog = get_effective_program()
+    query_prog = request.args.get("program", "").strip().upper()
+
+    if query_prog and query_prog != "ALL":
+        return query_prog
+    # Program Chairs are strictly scoped to their assigned engineering department
+    if enforce_chair_scope and role == "CHAIR" and effective_prog:
+        return effective_prog.strip().upper()
+    return None
+
+
 @analytics_bp.route("/summary", methods=["GET"])
 def get_analytics_summary():
     """
     GET /api/analytics/summary
     Comprehensive analytics dashboard data.
+    Program-scoped if ?program=... is provided; defaults to institutional view.
     """
-    schedules = Schedule.query.all()
-    rooms = Room.query.filter_by(is_available=True).all()
-    all_faculty = Faculty.query.all()
-    all_sections = Section.query.all()
+    target_program = _resolve_analytics_program(enforce_chair_scope=False)
+
+    if target_program:
+        all_sections = (
+            Section.query.filter_by(program=target_program)
+            .order_by(Section.year_level.asc(), Section.name.asc())
+            .all()
+        )
+        sec_ids = [s.id for s in all_sections]
+        schedules = (
+            Schedule.query.filter(Schedule.section_id.in_(sec_ids)).all()
+            if sec_ids
+            else []
+        )
+        all_faculty = (
+            Faculty.query.filter_by(program=target_program)
+            .order_by(Faculty.name.asc())
+            .all()
+        )
+    else:
+        all_sections = Section.query.order_by(
+            Section.year_level.asc(), Section.name.asc()
+        ).all()
+        schedules = Schedule.query.all()
+        all_faculty = Faculty.query.order_by(Faculty.name.asc()).all()
+
+    all_available_rooms = Room.query.filter_by(is_available=True).all()
+    if target_program:
+        dept_room_ids = {s.room_id for s in schedules if s.room_id}
+        if dept_room_ids:
+            rooms = [r for r in all_available_rooms if r.id in dept_room_ids]
+        else:
+            rooms = all_available_rooms
+    else:
+        rooms = all_available_rooms
 
     total_classes = len(schedules)
 
@@ -174,6 +222,7 @@ def get_analytics_summary():
                 "id": f.id,
                 "name": f.name,
                 "email": f.email,
+                "program": f.program,
                 "max_units": f.max_units,
                 "assigned_units": assigned_units,
                 "teaching_hours": round(teaching_hours, 1),
@@ -248,6 +297,13 @@ def get_analytics_summary():
                     "faculty_workloads": faculty_workloads,
                     "room_breakdown": room_breakdown,
                     "section_breakdown": section_breakdown,
+                    "program_scope": target_program,
+                    "is_department_scoped": bool(target_program),
+                    "department_name": (
+                        f"{target_program} Department"
+                        if target_program
+                        else "Institutional (All Programs)"
+                    ),
                 },
             }
         ),
@@ -259,14 +315,45 @@ def get_analytics_summary():
 def get_analytics_reports():
     """
     GET /api/analytics/reports
-    Institutional Term Analytics, Room Utilization ranking vs. 72h weekly cap,
-    Faculty Teaching Workloads vs. 21-unit policy limit, and Schedule Quality Score
-    with explicit itemized deduction breakdown (-5 for section gaps >2h, -5 for unassigned seats >30).
+    Institutional Term Analytics or Department-Specific Analytics for Program Chairs.
+    Room Utilization ranking vs. 72h weekly cap, Faculty Teaching Workloads vs. 21-unit policy limit,
+    and Schedule Quality Score with deduction details.
     """
-    schedules = Schedule.query.all()
-    rooms = Room.query.filter_by(is_available=True).all()
-    all_faculty = Faculty.query.all()
-    all_sections = Section.query.all()
+    target_program = _resolve_analytics_program()
+
+    if target_program:
+        all_sections = (
+            Section.query.filter_by(program=target_program)
+            .order_by(Section.year_level.asc(), Section.name.asc())
+            .all()
+        )
+        sec_ids = [s.id for s in all_sections]
+        schedules = (
+            Schedule.query.filter(Schedule.section_id.in_(sec_ids)).all()
+            if sec_ids
+            else []
+        )
+        all_faculty = (
+            Faculty.query.filter_by(program=target_program)
+            .order_by(Faculty.name.asc())
+            .all()
+        )
+    else:
+        all_sections = Section.query.order_by(
+            Section.year_level.asc(), Section.name.asc()
+        ).all()
+        schedules = Schedule.query.all()
+        all_faculty = Faculty.query.order_by(Faculty.name.asc()).all()
+
+    all_available_rooms = Room.query.filter_by(is_available=True).all()
+    if target_program:
+        dept_room_ids = {s.room_id for s in schedules if s.room_id}
+        if dept_room_ids:
+            rooms = [r for r in all_available_rooms if r.id in dept_room_ids]
+        else:
+            rooms = all_available_rooms
+    else:
+        rooms = all_available_rooms
 
     # 1. Room Utilization Ranking (Mon-Sat 7am-7pm = 72 hours max)
     room_utilization_list = []
@@ -324,6 +411,7 @@ def get_analytics_reports():
                 "id": f.id,
                 "name": f.name,
                 "email": f.email,
+                "program": f.program,
                 "max_units": f.max_units,
                 "assigned_units": assigned_units,
                 "teaching_hours": round(teaching_hours, 1),
@@ -402,6 +490,13 @@ def get_analytics_reports():
                         "total_penalty": total_penalty,
                         "deductions": deductions,
                     },
+                    "program_scope": target_program,
+                    "is_department_scoped": bool(target_program),
+                    "department_name": (
+                        f"{target_program} Department"
+                        if target_program
+                        else "Institutional (All Programs)"
+                    ),
                 },
             }
         ),

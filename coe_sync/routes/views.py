@@ -7,8 +7,8 @@ Handles frontend routing for:
 """
 
 from flask import Blueprint, render_template, session, redirect, url_for, current_app, request
-from models import Room, Faculty, Section, Subject, Schedule, AuditLog
-from routes.auth import login_required, require_roles, get_effective_role, get_current_user
+from models import db, User, Room, Faculty, Section, Subject, Schedule, AuditLog
+from routes.auth import login_required, require_roles, get_effective_role, get_effective_program
 
 views_bp = Blueprint("views", __name__)
 
@@ -141,14 +141,20 @@ def create_schedule():
 @login_required
 def reports():
     from routes.auth import normalize_role
-    if normalize_role(get_effective_role()) in ("STUDENT", "FACULTY"):
+    effective_role = get_effective_role()
+    if normalize_role(effective_role) in ("STUDENT", "FACULTY"):
         return redirect(url_for("views.schedules"))
+
+    user_id = session.get("user_id")
+    user = db.session.get(User, user_id) if user_id else None
+    effective_program = get_effective_program()
 
     return render_template(
         "reports.html",
         active_page="reports",
-        active_role=get_effective_role(),
-        current_username=session.get("username") or "chair_cpe",
+        active_role=effective_role,
+        effective_program=effective_program,
+        current_username=session.get("username") or (user.username if user else "chair_cpe"),
         must_change_credentials=session.get("must_change_credentials", False),
     )
 
@@ -157,7 +163,8 @@ def reports():
 @login_required
 def settings_page():
     """Render NEXUS Settings & Governance Workspace."""
-    user = get_current_user()
+    user_id = session.get("user_id")
+    user = db.session.get(User, user_id) if user_id else None
     effective_role = get_effective_role()
     effective_program = session.get("active_program") or (user.program if user else "MEE")
 
