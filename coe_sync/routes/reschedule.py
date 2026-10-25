@@ -209,8 +209,18 @@ def get_reschedule_requests():
         query = query.filter(RescheduleRequest.status == status_filter.strip().upper())
 
     if effective_role == "STUDENT":
-        if effective_ref_id:
+        current_username = session.get("username")
+        if effective_ref_id and current_username:
+            query = query.filter(
+                db.or_(
+                    RescheduleRequest.student_section_id == effective_ref_id,
+                    RescheduleRequest.requested_by_name == current_username
+                )
+            )
+        elif effective_ref_id:
             query = query.filter(RescheduleRequest.student_section_id == effective_ref_id)
+        elif current_username:
+            query = query.filter(RescheduleRequest.requested_by_name == current_username)
     elif effective_role == "FACULTY":
         # Scoped to schedules where faculty_id == instructor reference ID
         query = query.join(Schedule, RescheduleRequest.schedule_id == Schedule.id)
@@ -594,10 +604,20 @@ def request_room_booking():
     """
     data = request.get_json(silent=True) or {}
     room_id = data.get("room_id")
-    day = (data.get("day") or "MON").strip().upper()
+    raw_day = data.get("day_of_week") or data.get("day") or "MON"
+    day = str(raw_day).strip().upper()
     start_time_str = (data.get("start_time") or "10:00").strip()
     end_time_str = (data.get("end_time") or "11:30").strip()
-    reason = (data.get("reason") or "Class / Section Activity").strip()
+    reason = (data.get("reason") or data.get("purpose") or "Class / Section Activity").strip()
+
+    # Time slot string fallback support (e.g., 'MON 13:00-16:00')
+    time_slot = data.get("time_slot")
+    if time_slot and " " in time_slot and "-" in time_slot:
+        parts = time_slot.split(" ", 1)
+        day = parts[0].strip().upper()
+        times = parts[1].split("-", 1)
+        start_time_str = times[0].strip()
+        end_time_str = times[1].strip()
 
     room = db.session.get(Room, room_id) if room_id else None
     if not room:
@@ -607,11 +627,21 @@ def request_room_booking():
     effective_ref_id = get_effective_reference_id()
     effective_prog = get_effective_program()
 
-    sched = Schedule.query.filter_by(room_id=room.id).first()
-    sec = db.session.get(Section, effective_ref_id) if (effective_role == "STUDENT" and effective_ref_id) else None
-    if not sec and effective_prog:
+    sec = None
+    if effective_role in ("STUDENT", "STDN_MYR"):
+        if effective_ref_id:
+            sec = db.session.get(Section, effective_ref_id)
+        if not sec and effective_prog:
+            sec = Section.query.filter_by(program=effective_prog).first()
+    elif effective_prog:
         sec = Section.query.filter_by(program=effective_prog).first()
+
+    if not sec:
+        sec = Section.query.first()
+
     sec_id = sec.id if sec else 1
+
+    sched = Schedule.query.filter_by(room_id=room.id).first()
 
     req = RescheduleRequest(
         schedule_id=sched.id if sched else None,
@@ -649,8 +679,19 @@ def get_pending_requests_summary():
     reschedule_q = RescheduleRequest.query.filter(
         RescheduleRequest.status.in_(["PENDING", "PENDING_FACULTY", "PENDING_CHAIR"])
     )
-    if effective_role == "STUDENT" and ref_id:
-        reschedule_q = reschedule_q.filter(RescheduleRequest.student_section_id == ref_id)
+    if effective_role == "STUDENT":
+        uname = session.get("username")
+        if ref_id and uname:
+            reschedule_q = reschedule_q.filter(
+                db.or_(
+                    RescheduleRequest.student_section_id == ref_id,
+                    RescheduleRequest.requested_by_name == uname
+                )
+            )
+        elif ref_id:
+            reschedule_q = reschedule_q.filter(RescheduleRequest.student_section_id == ref_id)
+        elif uname:
+            reschedule_q = reschedule_q.filter(RescheduleRequest.requested_by_name == uname)
     elif effective_role == "FACULTY" and ref_id:
         reschedule_q = reschedule_q.join(Schedule, RescheduleRequest.schedule_id == Schedule.id).filter(
             Schedule.faculty_id == ref_id

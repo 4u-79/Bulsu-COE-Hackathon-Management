@@ -381,20 +381,38 @@ function cascadeScheduleFilters() {
 
   if (secSel) {
     const prevVal = secSel.value;
-    const filtered = _masterData.sections.filter(s => {
+    const isStudent = window.CURRENT_ROLE === "STUDENT";
+    const studentSecId = window.CURRENT_REF_ID;
+
+    let filtered = _masterData.sections.filter(s => {
+      if (isStudent && studentSecId) {
+        return String(s.id) === String(studentSecId);
+      }
       if (normProg && normalizeProgram(s.program) !== normProg) return false;
       if (yearVal && String(s.year_level) !== String(yearVal)) return false;
       return true;
     });
-    const defaultSecText = window.CURRENT_ROLE === "STUDENT" ? "Viewing Cohort: [Select Section ▾]" : "All Section ▾";
-    secSel.innerHTML = `<option value="">${defaultSecText}</option>` +
+
+    if (isStudent && studentSecId && filtered.length === 0) {
+      filtered = _masterData.sections.filter(s => String(s.id) === String(studentSecId));
+    }
+
+    const defaultSecText = isStudent ? "My Cohort Section" : "All Section ▾";
+    secSel.innerHTML = (isStudent && filtered.length > 0 ? "" : `<option value="">${defaultSecText}</option>`) +
       filtered.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
-    if (filtered.some(s => String(s.id) === String(prevVal))) {
+
+    if (isStudent && studentSecId) {
+      secSel.value = studentSecId;
+      secSel.disabled = true;
+    } else if (filtered.some(s => String(s.id) === String(prevVal))) {
       secSel.value = prevVal;
+      secSel.disabled = false;
     } else if (normProg && filtered.length > 0) {
-      secSel.value = filtered[0].id; // Auto-select first section when program chosen
+      secSel.value = filtered[0].id;
+      secSel.disabled = false;
     } else {
       secSel.value = "";
+      secSel.disabled = false;
     }
   }
 
@@ -419,17 +437,50 @@ function cascadeScheduleFilters() {
 
   if (subjSel) {
     const prevVal = subjSel.value;
-    const filtered = _masterData.subjects.filter(s => {
-      if (normProg) {
-        const sp = normalizeProgram(s.program);
-        if (sp !== normProg && sp !== "GEN") return false;
+    const isStudent = window.CURRENT_ROLE === "STUDENT";
+    const studentSecId = window.CURRENT_REF_ID || document.getElementById("filter-section")?.value;
+
+    let filtered = _masterData.subjects;
+
+    if (isStudent) {
+      // Find subjects that are assigned to this student section's schedules
+      const secScheduleSubjIds = new Set(
+        (_schedules || [])
+          .filter(s => !studentSecId || String(s.section_id) === String(studentSecId))
+          .map(s => String(s.subject_id))
+      );
+
+      if (secScheduleSubjIds.size > 0) {
+        filtered = _masterData.subjects.filter(s => secScheduleSubjIds.has(String(s.id)));
+      } else {
+        const studentSec = _masterData.sections.find(s => String(s.id) === String(studentSecId));
+        const secProg = studentSec ? normalizeProgram(studentSec.program) : (window.CURRENT_PROGRAM ? normalizeProgram(window.CURRENT_PROGRAM) : null);
+        const secYear = studentSec ? String(studentSec.year_level) : null;
+
+        filtered = _masterData.subjects.filter(s => {
+          if (secProg) {
+            const sp = normalizeProgram(s.program);
+            if (sp !== secProg && sp !== "GEN") return false;
+          }
+          if (secYear && s.year_level && String(s.year_level) !== secYear) return false;
+          if (termVal && s.semester && String(s.semester) !== String(termVal)) return false;
+          return true;
+        });
       }
-      if (yearVal && String(s.year_level) !== String(yearVal)) return false;
-      if (termVal && s.semester && String(s.semester) !== String(termVal)) return false;
-      return true;
-    });
-    subjSel.innerHTML = `<option value="">All Subject ▾</option>` +
-      filtered.map(s => `<option value="${s.id}">${escapeHtml(s.code || s.name)}</option>`).join("");
+    } else {
+      filtered = filtered.filter(s => {
+        if (normProg) {
+          const sp = normalizeProgram(s.program);
+          if (sp !== normProg && sp !== "GEN") return false;
+        }
+        if (yearVal && String(s.year_level) !== String(yearVal)) return false;
+        if (termVal && s.semester && String(s.semester) !== String(termVal)) return false;
+        return true;
+      });
+    }
+
+    subjSel.innerHTML = `<option value="">All Subjects (${filtered.length}) ▾</option>` +
+      filtered.map(s => `<option value="${s.id}">${escapeHtml(s.code || s.name)} - ${escapeHtml(s.title || s.name || "")}</option>`).join("");
     if (filtered.some(s => String(s.id) === String(prevVal))) {
       subjSel.value = prevVal;
     } else {
@@ -545,7 +596,14 @@ function updateRoleAdaptiveFilters() {
 
   if (role === "STUDENT") {
     if (wrapProg) wrapProg.style.display = "none";
-    if (wrapSec) wrapSec.style.display = "inline-flex";
+    if (wrapSec) {
+      wrapSec.style.display = "inline-flex";
+      const secSel = document.getElementById("filter-section");
+      if (secSel && window.CURRENT_REF_ID) {
+        secSel.value = window.CURRENT_REF_ID;
+        secSel.disabled = true;
+      }
+    }
     if (wrapFac) wrapFac.style.display = "none";
     if (wrapRoom) wrapRoom.style.display = "inline-flex";
     if (wrapSubj) wrapSubj.style.display = "inline-flex";
@@ -611,6 +669,13 @@ async function fetchAndRender() {
   if (yearVal) params.year_level = yearVal;
   if (termVal) params.semester   = parseInt(termVal, 10);
 
+  if (window.CURRENT_ROLE === "STUDENT") {
+    const studentSecId = window.CURRENT_REF_ID || secVal;
+    if (studentSecId) {
+      params.section_id = studentSecId;
+    }
+  }
+
   try {
     let res = await API.getSchedules(params);
     _schedules = res?.data || [];
@@ -627,7 +692,7 @@ async function fetchAndRender() {
           res = await API.getSchedules(params);
           _schedules = res?.data || [];
         }
-      } else if (window.CURRENT_ROLE === "STUDENT") {
+      } else if (window.CURRENT_ROLE === "STUDENT" && !window.CURRENT_REF_ID) {
         const poolRes = await API.getSchedules({ semester: params.semester });
         const targetClass = poolRes?.data?.find(s => s.section_id);
         if (targetClass && String(targetClass.section_id) !== String(secVal)) {
@@ -635,6 +700,23 @@ async function fetchAndRender() {
           params.section_id = targetClass.section_id;
           res = await API.getSchedules(params);
           _schedules = res?.data || [];
+        }
+      }
+    }
+
+    // When in Student role, populate the subject filter with the subjects present in their schedule
+    if (window.CURRENT_ROLE === "STUDENT") {
+      const subjSel = document.getElementById("filter-subject");
+      if (subjSel) {
+        const prevSubj = subjSel.value;
+        const assignedSubjIds = [...new Set(_schedules.map(s => String(s.subject_id)))];
+        const assignedSubjects = _masterData.subjects.filter(sub => assignedSubjIds.includes(String(sub.id)));
+        subjSel.innerHTML = `<option value="">All Section Subjects (${assignedSubjects.length}) ▾</option>` +
+          assignedSubjects.map(sub => `<option value="${sub.id}">[${escapeHtml(sub.code || "")}] ${escapeHtml(sub.title || sub.name || "")}</option>`).join("");
+        if (assignedSubjects.some(sub => String(sub.id) === String(prevSubj))) {
+          subjSel.value = prevSubj;
+        } else {
+          subjSel.value = "";
         }
       }
     }

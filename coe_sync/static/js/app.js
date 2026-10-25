@@ -743,13 +743,14 @@ async function renderRescheduleCards(tab) {
   }
 
   container.innerHTML = items.map((r) => {
+    const isRoomBooking = !r.schedule_id || (r.reason && r.reason.startsWith("[Room Booking Request]"));
     let statusPill = "";
     if (r.status === "PENDING_FACULTY" || r.status === "PENDING") {
       statusPill = '<span class="step-pill pending">⏳ Pending Review</span>';
     } else if (r.status === "PENDING_CHAIR") {
       statusPill = '<span class="step-pill pending">⏳ Pending Program Chair Approval</span>';
     } else if (r.status === "APPROVED") {
-      statusPill = '<span class="step-pill approved">✓ Approved &amp; Timetable Updated</span>';
+      statusPill = isRoomBooking ? '<span class="step-pill approved">✓ Approved &amp; Room Reserved</span>' : '<span class="step-pill approved">✓ Approved &amp; Timetable Updated</span>';
     } else if (r.status === "REJECTED") {
       statusPill = '<span class="step-pill rejected">✕ Rejected</span>';
     }
@@ -758,24 +759,38 @@ async function renderRescheduleCards(tab) {
     const canReview = isPending && (role === "FACULTY" || role === "CHAIR" || role === "ADMIN");
     const expDays = r.expires_in_days !== undefined ? r.expires_in_days : 7;
 
+    const titleText = isRoomBooking
+      ? `🏢 Room Reservation &bull; ${escapeHtml(r.proposed_room_code || "Room")}`
+      : `${escapeHtml(r.subject_code || "Class")} &bull; ${escapeHtml(r.section_name || "Section")}`;
+    const subtitleText = isRoomBooking
+      ? `Requested by ${escapeHtml(r.requested_by_name || "Student Mayor")} (${escapeHtml(r.section_name || "Section")})`
+      : `${escapeHtml(r.subject_title || "")} (${escapeHtml(r.faculty_name || "Instructor")})`;
+
     return `
-      <div class="reschedule-card" data-id="${r.id}">
+      <div class="reschedule-card" data-id="${r.id}" style="${isRoomBooking ? 'border-left: 4px solid #10B981;' : ''}">
         <div class="reschedule-card-header">
           <div>
-            <div class="reschedule-card-title">${escapeHtml(r.subject_code || "Class")} &bull; ${escapeHtml(r.section_name || "Section")}</div>
-            <div style="font-size: 12px; color: var(--text-muted);">${escapeHtml(r.subject_title || "")} (${escapeHtml(r.faculty_name || "Instructor")})</div>
+            <div class="reschedule-card-title">${titleText}</div>
+            <div style="font-size: 12px; color: var(--text-muted);">${subtitleText}</div>
           </div>
           <div>${statusPill}</div>
         </div>
 
         <div class="reschedule-details-row">
-          <div><strong>Current:</strong> ${r.current_day || "—"} ${r.current_start_time || ""}&ndash;${r.current_end_time || ""}</div>
-          <div style="color: var(--sidebar-bg);">&rarr;</div>
-          <div><strong>Proposed:</strong> <span style="color: #065F46; font-weight: 700;">${r.proposed_day} ${r.proposed_start_time ? r.proposed_start_time.slice(0, 5) : ""}&ndash;${r.proposed_end_time ? r.proposed_end_time.slice(0, 5) : ""}</span></div>
-          <div><strong>Room:</strong> ${escapeHtml(r.room_code || "Auto/Current")}</div>
+          ${isRoomBooking ? `
+            <div><strong>Type:</strong> <span style="font-weight: 700; color: #047857;">Ad-Hoc Room Reservation</span></div>
+            <div style="color: var(--sidebar-bg);">&bull;</div>
+            <div><strong>Reserved Slot:</strong> <span style="color: #065F46; font-weight: 700;">${r.proposed_day} ${r.proposed_start_time ? r.proposed_start_time.slice(0, 5) : ""}&ndash;${r.proposed_end_time ? r.proposed_end_time.slice(0, 5) : ""}</span></div>
+            <div><strong>Room:</strong> <strong>${escapeHtml(r.proposed_room_code || r.room_code || "Facility")}</strong></div>
+          ` : `
+            <div><strong>Current:</strong> ${r.current_day || "—"} ${r.current_start_time || ""}&ndash;${r.current_end_time || ""}</div>
+            <div style="color: var(--sidebar-bg);">&rarr;</div>
+            <div><strong>Proposed:</strong> <span style="color: #065F46; font-weight: 700;">${r.proposed_day} ${r.proposed_start_time ? r.proposed_start_time.slice(0, 5) : ""}&ndash;${r.proposed_end_time ? r.proposed_end_time.slice(0, 5) : ""}</span></div>
+            <div><strong>Room:</strong> ${escapeHtml(r.proposed_room_code || r.room_code || "Auto/Current")}</div>
+          `}
         </div>
 
-        <div style="font-size: 12px; background: var(--bg-page); padding: 8px 12px; border-radius: var(--radius-xs);">
+        <div style="font-size: 12px; background: var(--bg-page); padding: 8px 12px; border-radius: var(--radius-xs); margin-top: 6px;">
           <strong>Reason:</strong> ${escapeHtml(r.reason)}
         </div>
 
@@ -792,6 +807,12 @@ async function renderRescheduleCards(tab) {
         ${r.faculty_feedback ? `
           <div style="font-size: 12px; color: #065F46; background: #D1FAE5; padding: 6px 10px; border-radius: var(--radius-xs); margin-top: 4px;">
             <strong>Faculty Feedback:</strong> ${escapeHtml(r.faculty_feedback)}
+          </div>
+        ` : ""}
+
+        ${r.chair_feedback ? `
+          <div style="font-size: 12px; color: #1E40AF; background: #DBEAFE; padding: 6px 10px; border-radius: var(--radius-xs); margin-top: 4px;">
+            <strong>Chair Decision / Remarks:</strong> ${escapeHtml(r.chair_feedback)}
           </div>
         ` : ""}
 

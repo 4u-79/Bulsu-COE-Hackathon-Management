@@ -237,5 +237,50 @@ class TestPhase5Governance(unittest.TestCase):
         self.assertIn("deductions", data["quality_score"])
 
 
+    def test_05_student_room_request_in_my_requests(self):
+        """Test that room request submitted by student appears in their My Requests inbox."""
+        with self.app.app_context():
+            room = Room.query.first()
+            room_id = room.id
+            room_code = room.room_code
+
+        with self.client.session_transaction() as sess:
+            sess["user_id"] = self.student_user_id
+            sess["role"] = "STUDENT"
+            sess["active_role"] = "STUDENT"
+            sess["username"] = "mayor_mee1a"
+            sess["reference_id"] = self.section_id
+            sess["active_reference_id"] = self.section_id
+
+        # Submit room reservation request
+        res = self.client.post("/api/rooms/request", json={
+            "room_id": room_id,
+            "day_of_week": "WED",
+            "start_time": "13:00",
+            "end_time": "15:00",
+            "reason": "Robotics team assembly"
+        })
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()
+        self.assertEqual(data["status"], "success")
+        req_id = data["data"]["id"]
+        self.assertEqual(data["data"]["proposed_day"], "WED")
+        self.assertIn("Robotics team assembly", data["data"]["reason"])
+
+        # Fetch My Requests as student
+        list_res = self.client.get("/api/reschedule/requests")
+        self.assertEqual(list_res.status_code, 200)
+        list_data = list_res.get_json()
+        self.assertEqual(list_data["status"], "success")
+        student_req_ids = [r["id"] for r in list_data["data"]]
+        self.assertIn(req_id, student_req_ids)
+
+        # Verify pending summary counts the request
+        sum_res = self.client.get("/api/requests/pending-summary")
+        self.assertEqual(sum_res.status_code, 200)
+        sum_data = sum_res.get_json()
+        self.assertGreaterEqual(sum_data["reschedule_count"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

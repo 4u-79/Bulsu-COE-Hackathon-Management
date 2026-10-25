@@ -1262,7 +1262,8 @@ a {
   z-index: 1000;
 }
 
-.modal-backdrop.open {
+.modal-backdrop.open,
+.modal-backdrop.active {
   display: flex;
   animation: fadeIn 0.18s ease-in-out;
 }
