@@ -1756,14 +1756,14 @@ window.openAssignSubjectModal = async function(facultyId) {
       document.getElementById("assign-card-fac-dept").textContent = `${f.department || f.program} Department`;
       document.getElementById("assign-card-fac-load").textContent = `${f.current_units} / ${f.max_units} Units`;
 
-      // 1. Populate Subject Offering dropdown
+      // 1. Populate Subject Offering dropdown (Exclude Minor Subjects)
+      const majorSubjects = (res.data.subjects || []).filter(sub => (sub.classification || getSubjectClassification(sub)) === "MAJOR");
       const subSelect = document.getElementById("assign-subject-select");
-      subSelect.innerHTML = `<option value="">-- Choose Subject (${res.data.subjects.length} Available) --</option>`;
-      res.data.subjects.forEach(sub => {
+      subSelect.innerHTML = `<option value="">-- Choose Subject (${majorSubjects.length} Major Subjects Available) --</option>`;
+      majorSubjects.forEach(sub => {
         const opt = document.createElement("option");
         opt.value = sub.id;
-        const cls = (sub.classification || getSubjectClassification(sub)) === "MAJOR" ? "Major" : "Minor";
-        opt.textContent = `[${sub.code}] ${sub.title} (${sub.units}u · ${sub.subject_type || 'Lecture'} · ${cls})`;
+        opt.textContent = `[${sub.code}] ${sub.title} (${sub.units}u · ${sub.subject_type || 'Lecture'})`;
         subSelect.appendChild(opt);
       });
 
@@ -1841,6 +1841,12 @@ window.submitAssignSubject = async function(event) {
   const day = document.getElementById("assign-day-select").value;
   const preset = document.getElementById("assign-slot-preset").value;
   const allowOverride = document.getElementById("assign-allow-override")?.checked || false;
+
+  const selectedSub = _assignableOptionsCache?.subjects?.find(s => String(s.id) === String(subId));
+  if (selectedSub && (selectedSub.classification || getSubjectClassification(selectedSub)) === "MINOR") {
+    showToast("Minor subjects cannot be assigned to faculty members.", true);
+    return;
+  }
 
   let st = "08:00";
   let et = "11:00";

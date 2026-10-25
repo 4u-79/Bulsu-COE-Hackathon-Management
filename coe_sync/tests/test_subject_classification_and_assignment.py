@@ -82,3 +82,70 @@ def test_api_subjects_classification_filtering(client):
     assert minors_data["count"] == 2
     minor_codes = {s["code"] for s in minors_data["data"]}
     assert minor_codes == {"ETH 101", "PE 10"}
+
+
+def test_minor_subjects_cannot_be_assigned_to_faculty(client):
+    """Test that minor subjects are excluded from assignable options and rejected on assignment."""
+    from models import Section, Room
+
+    # Setup faculty, section, and room
+    fac = Faculty(name="Engr. John Smith", email="jsmith@bulsu.edu.ph", program="MEE", max_units=21)
+    sec = Section(name="MEE-1A", program="MEE", year_level=1)
+    rm = Room(room_code="COE-201", room_type="LECTURE", capacity=40, is_available=True)
+    admin_user = User(username="admin_test", role="ADMIN")
+    admin_user.set_password("Admin@123")
+
+    db.session.add_all([fac, sec, rm, admin_user])
+    db.session.commit()
+
+    # Authenticate as ADMIN
+    with client.session_transaction() as sess:
+        sess["user_id"] = admin_user.id
+        sess["username"] = admin_user.username
+        sess["role"] = "ADMIN"
+        sess["active_role"] = "ADMIN"
+
+    # 1. Verify assignable options excludes Minor subjects
+    res_opt = client.get(f"/api/faculty/{fac.id}/assignable-options")
+    assert res_opt.status_code == 200
+    opt_data = res_opt.get_json()["data"]
+    assignable_subjects = opt_data["subjects"]
+    for s in assignable_subjects:
+        assert s["classification"] == "MAJOR"
+    assignable_codes = {s["code"] for s in assignable_subjects}
+    assert "ETH 101" not in assignable_codes
+    assert "PE 10" not in assignable_codes
+    assert "MEE 101" in assignable_codes
+
+    # 2. Attempt assigning a Minor subject (ETH 101) -> Must fail with 400
+    s_eth = Subject.query.filter_by(code="ETH 101").first()
+    res_assign_minor = client.post(
+        f"/api/faculty/{fac.id}/assign-subject",
+        json={
+            "subject_id": s_eth.id,
+            "section_id": sec.id,
+            "room_id": rm.id,
+            "day_of_week": "MON",
+            "start_time": "08:00",
+            "end_time": "11:00",
+        },
+    )
+    assert res_assign_minor.status_code == 400
+    assert "Minor subject" in res_assign_minor.get_json()["error"]
+
+    # 3. Assigning a Major subject (MEE 101) -> Must succeed
+    s_mee = Subject.query.filter_by(code="MEE 101").first()
+    res_assign_major = client.post(
+        f"/api/faculty/{fac.id}/assign-subject",
+        json={
+            "subject_id": s_mee.id,
+            "section_id": sec.id,
+            "room_id": rm.id,
+            "day_of_week": "MON",
+            "start_time": "08:00",
+            "end_time": "11:00",
+        },
+    )
+    assert res_assign_major.status_code == 201
+    assert res_assign_major.get_json()["status"] == "success"
+

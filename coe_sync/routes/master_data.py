@@ -746,6 +746,8 @@ def get_faculty_assignable_options(faculty_id: int):
         fac_prog = (faculty.program or "").strip().upper()
         sub_query = sub_query.filter(Subject.program.in_([fac_prog, "GEN"]))
     subjects = sub_query.order_by(Subject.code.asc()).all()
+    # Exclude minor subjects: only Major subjects can be assigned to faculty
+    subjects = [s for s in subjects if s.classification == "MAJOR"]
 
     # Sections: faculty's program sections
     sec_query = Section.query
@@ -806,6 +808,11 @@ def assign_subject_to_faculty(faculty_id: int):
     subject = db.session.get(Subject, subject_id)
     if not subject:
         return jsonify({"error": f"Subject #{subject_id} not found."}), 404
+
+    if subject.classification == "MINOR":
+        return jsonify({
+            "error": f"Minor subject '{subject.code} - {subject.title}' cannot be assigned to faculty members. Only Major subjects may be assigned."
+        }), 400
 
     section = db.session.get(Section, section_id)
     if not section:
