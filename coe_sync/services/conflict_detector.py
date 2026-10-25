@@ -83,7 +83,8 @@ def validate_schedule_slot(
     try:
         subject_id = int(candidate_data.get("subject_id", 0))
         section_id = int(candidate_data.get("section_id", 0))
-        faculty_id = int(candidate_data.get("faculty_id", 0))
+        raw_fac_id = candidate_data.get("faculty_id")
+        faculty_id = int(raw_fac_id) if (raw_fac_id is not None and str(raw_fac_id).isdigit() and int(raw_fac_id) > 0) else None
         raw_room_id = candidate_data.get("room_id")
         room_id = int(raw_room_id) if (raw_room_id is not None and str(raw_room_id).isdigit() and int(raw_room_id) > 0) else None
         sub_group = candidate_data.get("sub_group")
@@ -124,14 +125,14 @@ def validate_schedule_slot(
     # Fetch referenced database entities
     subject = db.session.get(Subject, subject_id)
     section = db.session.get(Section, section_id)
-    faculty = db.session.get(Faculty, faculty_id)
+    faculty = db.session.get(Faculty, faculty_id) if faculty_id else None
     room = db.session.get(Room, room_id) if room_id else None
 
     if not subject:
         conflicts.append(f"Subject ID {subject_id} not found.")
     if not section:
         conflicts.append(f"Section ID {section_id} not found.")
-    if not faculty:
+    if faculty_id and not faculty:
         conflicts.append(f"Faculty ID {faculty_id} not found.")
     if room_id and not room:
         conflicts.append(f"Room ID {room_id} not found.")
@@ -170,22 +171,23 @@ def validate_schedule_slot(
                 break
 
     # -------------------------------------------------------------
-    # HC 2: Faculty Double-Booking
+    # HC 2: Faculty Double-Booking (Checked only if faculty is assigned)
     # -------------------------------------------------------------
-    faculty_query = Schedule.query.filter(
-        Schedule.faculty_id == faculty_id,
-        Schedule.day_of_week == day_of_week,
-    )
-    if exclude_schedule_id:
-        faculty_query = faculty_query.filter(Schedule.id != exclude_schedule_id)
+    if faculty_id and faculty:
+        faculty_query = Schedule.query.filter(
+            Schedule.faculty_id == faculty_id,
+            Schedule.day_of_week == day_of_week,
+        )
+        if exclude_schedule_id:
+            faculty_query = faculty_query.filter(Schedule.id != exclude_schedule_id)
 
-    for s in faculty_query.all():
-        if times_overlap(start_time, end_time, s.start_time, s.end_time):
-            conflicts.append(
-                f"{faculty.name} is already assigned to {s.subject.code} "
-                f"({s.section.name}) at this time."
-            )
-            break
+        for s in faculty_query.all():
+            if times_overlap(start_time, end_time, s.start_time, s.end_time):
+                conflicts.append(
+                    f"{faculty.name} is already assigned to {s.subject.code} "
+                    f"({s.section.name}) at this time."
+                )
+                break
 
     # -------------------------------------------------------------
     # HC 3: Section Collision
@@ -209,22 +211,23 @@ def validate_schedule_slot(
             break
 
     # -------------------------------------------------------------
-    # HC 6: Faculty Unavailability Blackout
+    # HC 6: Faculty Unavailability Blackout (Checked only if faculty is assigned)
     # -------------------------------------------------------------
-    blackout_slots = FacultyAvailability.query.filter_by(
-        faculty_id=faculty_id,
-        day_of_week=day_of_week,
-        is_preferred=False,
-    ).all()
+    if faculty_id and faculty:
+        blackout_slots = FacultyAvailability.query.filter_by(
+            faculty_id=faculty_id,
+            day_of_week=day_of_week,
+            is_preferred=False,
+        ).all()
 
-    for blackout in blackout_slots:
-        if times_overlap(
-            start_time, end_time, blackout.start_time, blackout.end_time
-        ):
-            conflicts.append(
-                f"{faculty.name} is marked as unavailable during this time window."
-            )
-            break
+        for blackout in blackout_slots:
+            if times_overlap(
+                start_time, end_time, blackout.start_time, blackout.end_time
+            ):
+                conflicts.append(
+                    f"{faculty.name} is marked as unavailable during this time window."
+                )
+                break
 
     return {
         "valid": len(conflicts) == 0,
@@ -247,7 +250,8 @@ def find_alternatives(
     try:
         subject_id = int(conflicted_data.get("subject_id", 0))
         section_id = int(conflicted_data.get("section_id", 0))
-        faculty_id = int(conflicted_data.get("faculty_id", 0))
+        raw_fac = conflicted_data.get("faculty_id")
+        faculty_id = int(raw_fac) if (raw_fac is not None and str(raw_fac).isdigit() and int(raw_fac) > 0) else None
         room_id = int(conflicted_data.get("room_id", 0))
         day_of_week = str(conflicted_data.get("day_of_week", "")).strip().upper()
         start_time = parse_time(conflicted_data.get("start_time"))
@@ -257,10 +261,10 @@ def find_alternatives(
 
     subject = db.session.get(Subject, subject_id)
     section = db.session.get(Section, section_id)
-    faculty = db.session.get(Faculty, faculty_id)
+    faculty = db.session.get(Faculty, faculty_id) if faculty_id else None
     room = db.session.get(Room, room_id)
 
-    if not (subject and section and faculty and room):
+    if not (subject and section and room):
         return suggestions
 
     start_m = time_to_minutes(start_time)

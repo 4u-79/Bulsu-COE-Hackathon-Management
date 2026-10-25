@@ -270,11 +270,10 @@ def create_schedule():
     """
     payload = request.get_json(silent=True) or {}
 
-    # Validate required parameters (room_id can now be null/empty for "Do not assign")
+    # Validate required parameters (room_id and faculty_id can be null/empty for unassigned / TBA)
     required_fields = [
         "subject_id",
         "section_id",
-        "faculty_id",
         "day_of_week",
         "start_time",
         "end_time",
@@ -288,9 +287,11 @@ def create_schedule():
             400,
         )
 
-    # Normalize room_id
+    # Normalize room_id and faculty_id
     raw_room_id = payload.get("room_id")
     room_id = int(raw_room_id) if (raw_room_id is not None and str(raw_room_id).isdigit() and int(raw_room_id) > 0) else None
+    raw_fac_id = payload.get("faculty_id")
+    faculty_id = int(raw_fac_id) if (raw_fac_id is not None and str(raw_fac_id).isdigit() and int(raw_fac_id) > 0) else None
 
     # Validate temporal ordering
     try:
@@ -346,7 +347,7 @@ def create_schedule():
             new_schedule = Schedule(
                 subject_id=int(payload["subject_id"]),
                 section_id=int(payload["section_id"]),
-                faculty_id=int(payload["faculty_id"]),
+                faculty_id=faculty_id,
                 room_id=room_id,
                 day_of_week=payload["day_of_week"].strip().upper(),
                 start_time=st,
@@ -360,8 +361,9 @@ def create_schedule():
 
         db.session.flush()
 
-        # Update faculty current units
-        recalculate_faculty_units(created_schedules[0].faculty_id)
+        # Update faculty current units if faculty was assigned
+        if faculty_id:
+            recalculate_faculty_units(faculty_id)
 
         # Audit Log
         user_id = session.get("user_id")
@@ -479,8 +481,10 @@ def update_schedule(schedule_id: int):
     # Update attributes
     schedule.subject_id = int(merged_data["subject_id"])
     schedule.section_id = int(merged_data["section_id"])
-    schedule.faculty_id = int(merged_data["faculty_id"])
-    schedule.room_id = int(merged_data["room_id"])
+    raw_fac = merged_data.get("faculty_id")
+    schedule.faculty_id = int(raw_fac) if (raw_fac is not None and str(raw_fac).isdigit() and int(raw_fac) > 0) else None
+    raw_rm = merged_data.get("room_id")
+    schedule.room_id = int(raw_rm) if (raw_rm is not None and str(raw_rm).isdigit() and int(raw_rm) > 0) else None
     schedule.day_of_week = str(merged_data["day_of_week"]).strip().upper()
     schedule.start_time = st
     schedule.end_time = et
@@ -498,8 +502,9 @@ def update_schedule(schedule_id: int):
     db.session.flush()
 
     # Recalculate workloads
-    recalculate_faculty_units(schedule.faculty_id)
-    if old_faculty_id != schedule.faculty_id:
+    if schedule.faculty_id:
+        recalculate_faculty_units(schedule.faculty_id)
+    if old_faculty_id and old_faculty_id != schedule.faculty_id:
         recalculate_faculty_units(old_faculty_id)
 
     # Log audit

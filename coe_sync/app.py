@@ -91,6 +91,12 @@ def create_app(config_name=None):
     )
     db.init_app(app)
 
+    with app.app_context():
+        try:
+            db.create_all()
+        except Exception:
+            pass
+
     # -------------------------------------------------------------
     # Register Modular Blueprints
     # -------------------------------------------------------------

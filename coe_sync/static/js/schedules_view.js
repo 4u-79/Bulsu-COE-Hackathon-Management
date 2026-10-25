@@ -537,7 +537,7 @@ function populateModalSelects() {
 
   if (mFac) {
     const prev = mFac.value;
-    mFac.innerHTML = `<option value="">Select faculty…</option>` +
+    mFac.innerHTML = `<option value="">TBA — No Professor Assigned</option>` +
       (_masterData.faculty || []).map(f =>
         `<option value="${f.id}">${escapeHtml(f.name || "")}</option>`
       ).join("");
@@ -977,7 +977,12 @@ function buildEventCard(s) {
       <div class="ev-title" style="padding-right: 32px; font-weight: 700; line-height: 1.2;">${escapeHtml(displayTitle)}</div>
       ${!isShort ? `
         <div class="ev-meta" style="font-weight: 600;">${escapeHtml(s.section_name || "—")}</div>
-        <div class="ev-meta ev-faculty" style="opacity: 0.9;">${escapeHtml(s.faculty_name || "—")}</div>
+        <div class="ev-meta ev-faculty" style="opacity: 0.9;">
+          ${(!s.faculty_id || s.faculty_name === "TBA" || s.has_no_faculty)
+            ? `<span class="badge-tba-alert" style="background: #FEF3C7; color: #92400E; font-weight: 800; padding: 1px 6px; border-radius: 4px; font-size: 9.5px; border: 1px solid #FCD34D; display: inline-flex; align-items: center; gap: 3px;">⚠️ TBA • No Prof Assigned</span>`
+            : escapeHtml(s.faculty_name || "—")
+          }
+        </div>
         <div class="ev-meta" style="font-size: 9.5px; opacity: 0.85;">${escapeHtml(s.room_code || "—")}</div>
       ` : ""}
       ${isConflict ? `<div class="ev-conflict-badge">⚠ Conflict</div>` : ""}
@@ -1128,7 +1133,12 @@ function buildDayEventCard(s) {
       ${isDraft ? `<span class="ev-badge-draft">DRAFT</span>` : `<span class="ev-badge-published">✓ Published</span>`}
     </div>
     <div class="day-card-section" style="font-weight: 600; margin-top: 2px;">${escapeHtml(s.section_name || "—")} · Room ${escapeHtml(s.room_code || "—")}</div>
-    <div class="day-card-faculty" style="opacity: 0.9; margin-top: 1px;">${escapeHtml(s.faculty_name || "—")}</div>
+    <div class="day-card-faculty" style="opacity: 0.9; margin-top: 1px;">
+      ${(!s.faculty_id || s.faculty_name === "TBA" || s.has_no_faculty)
+        ? `<span class="badge-tba-alert" style="background: #FEF3C7; color: #92400E; font-weight: 800; padding: 2px 7px; border-radius: 4px; font-size: 10px; border: 1px solid #FCD34D; display: inline-flex; align-items: center; gap: 4px;">⚠️ TBA • No Prof Assigned</span>`
+        : escapeHtml(s.faculty_name || "—")
+      }
+    </div>
     <div class="day-card-time" style="font-size: 11px; margin-top: 2px;">${formatTimeRange(s.start_time, s.end_time)}</div>
     ${isConflict ? `<div class="ev-conflict-badge" style="margin-top: 4px;">⚠ Conflict Detected</div>` : ""}
   `;
@@ -1559,13 +1569,13 @@ function detectConflictsLocally(schedules) {
       if (aStart >= bEnd || bStart >= aEnd) continue;
 
       // Check hard constraints
-      if (a.room_id === b.room_id) {
+      if (a.room_id && b.room_id && a.room_id === b.room_id) {
         conflicts.push({ type: "room", resource: a.room_code, schedA: a, schedB: b });
       }
-      if (a.faculty_id === b.faculty_id) {
+      if (a.faculty_id && b.faculty_id && a.faculty_id === b.faculty_id) {
         conflicts.push({ type: "faculty", resource: a.faculty_name, schedA: a, schedB: b });
       }
-      if (a.section_id === b.section_id) {
+      if (a.section_id && b.section_id && a.section_id === b.section_id) {
         conflicts.push({ type: "section", resource: a.section_name, schedA: a, schedB: b });
       }
     }

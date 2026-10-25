@@ -151,8 +151,8 @@ def test_minor_subjects_cannot_be_assigned_to_faculty(client):
 
 
 def test_multi_subject_assignment_with_split_and_unassigned_room(client):
-    """Test assigning multiple subjects with 1.5-hr / 3-hr split preferences and 'none' room."""
-    from models import Section, Room, Schedule
+    """Test assigning multiple subjects as teaching qualifications without automatic timetable slots."""
+    from models import Section, Room, Schedule, FacultySubject
 
     fac = Faculty(name="Engr. Elena Reyes", email="ereyes@bulsu.edu.ph", program="MEE", max_units=21)
     sec = Section(name="MEE-2A", program="MEE", year_level=2)
@@ -169,28 +169,30 @@ def test_multi_subject_assignment_with_split_and_unassigned_room(client):
         sess["role"] = "ADMIN"
         sess["active_role"] = "ADMIN"
 
-    # Multi-subject payload with split preference and room_id='none'
+    # Multi-subject payload assigns subjects faculty can handle (without forcing default schedule date/time/section)
     res = client.post(
         f"/api/faculty/{fac.id}/assign-subject",
         json={
             "subjects": [
                 {"subject_id": s_coe.id, "split_preference": "1.5_HOUR_SPLIT"},
                 {"subject_id": s_mee3.id, "split_preference": "3_HOUR_BLOCK"},
-            ],
-            "room_id": "none",
+            ]
         },
     )
     assert res.status_code == 201
     body = res.get_json()
     assert body["status"] == "success"
-    assert len(body["data"]["schedules"]) == 2
+    assert len(body["data"]["assigned_subjects"]) == 2
 
-    # Verify schedules created with null room_id
+    # Verify FacultySubject records created and faculty units updated
+    fs_records = FacultySubject.query.filter_by(faculty_id=fac.id).all()
+    assert len(fs_records) == 2
+    assigned_sub_ids = {fs.subject_id for fs in fs_records}
+    assert assigned_sub_ids == {s_coe.id, s_mee3.id}
+
+    # Verify that assigning subjects does NOT automatically create a date schedule/slot by default
     scheds = Schedule.query.filter_by(faculty_id=fac.id).all()
-    assert len(scheds) == 2
-    for s in scheds:
-        assert s.room_id is None
-        assert s.to_dict()["room_code"] == "Unassigned"
+    assert len(scheds) == 0
 
 
 def test_lab_subgroup_g1_g2_dual_schedules_and_concurrency(client):

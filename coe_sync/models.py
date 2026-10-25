@@ -142,6 +142,13 @@ class Faculty(db.Model):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    handled_subjects = db.relationship(
+        "FacultySubject",
+        backref="faculty",
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def to_dict(self) -> dict:
         """Serialize Faculty to dictionary."""
@@ -154,6 +161,7 @@ class Faculty(db.Model):
             "max_units": self.max_units,
             "current_units": self.current_units,
             "preferred_session_type": self.preferred_session_type or "SPLIT",
+            "handled_subject_ids": [fs.subject_id for fs in self.handled_subjects] if hasattr(self, "handled_subjects") else [],
         }
 
     def __repr__(self) -> str:
@@ -465,6 +473,52 @@ class FacultyAvailability(db.Model):
         return f"<FacultyAvailability faculty_id={self.faculty_id} {self.day_of_week} {self.start_time}-{self.end_time} ({pref})>"
 
 
+class FacultySubject(db.Model):
+    """
+    Faculty Subject qualification & teaching assignment model.
+    Represents subjects a faculty member can handle or is assigned to teach.
+    """
+
+    __tablename__ = "faculty_subject"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    faculty_id = db.Column(
+        db.Integer,
+        db.ForeignKey("faculty.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    subject_id = db.Column(
+        db.Integer,
+        db.ForeignKey("subject.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    subject = db.relationship("Subject", backref=db.backref("handling_faculty_links", cascade="all, delete-orphan", lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint("faculty_id", "subject_id", name="uq_faculty_subject"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "faculty_id": self.faculty_id,
+            "subject_id": self.subject_id,
+            "code": self.subject.code if self.subject else None,
+            "title": self.subject.title if self.subject else None,
+            "units": self.subject.units if self.subject else None,
+            "subject_type": self.subject.subject_type if self.subject else None,
+            "classification": self.subject.classification if self.subject else None,
+            "program": self.subject.program if self.subject else None,
+        }
+
+    def __repr__(self) -> str:
+        return f"<FacultySubject faculty_id={self.faculty_id} subject_id={self.subject_id}>"
+
+
 class Schedule(db.Model):
     """
     Core timetable schedule entity binding subject, section, faculty, room,
@@ -488,8 +542,8 @@ class Schedule(db.Model):
     )
     faculty_id = db.Column(
         db.Integer,
-        db.ForeignKey("faculty.id", ondelete="CASCADE"),
-        nullable=False,
+        db.ForeignKey("faculty.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     room_id = db.Column(
@@ -550,7 +604,8 @@ class Schedule(db.Model):
             "subject_name": self.subject.title if self.subject else None,
             "subject_title": self.subject.title if self.subject else None,
             "section_name": f"{self.section.name} ({self.sub_group})" if (self.section and self.sub_group) else (self.section.name if self.section else None),
-            "faculty_name": self.faculty.name if self.faculty else None,
+            "faculty_name": self.faculty.name if self.faculty else "TBA",
+            "has_no_faculty": self.faculty_id is None,
             "room_code": self.room.room_code if self.room else ("Unassigned" if not self.room_id else None),
             # Conflict flag — resolved at API layer; default False here
             "has_conflict": False,

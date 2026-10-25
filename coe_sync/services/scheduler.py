@@ -17,6 +17,7 @@ from models import (
     Subject,
     Room,
     Faculty,
+    FacultySubject,
     AuditLog,
     InterDepartmentRequest,
 )
@@ -267,29 +268,22 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
 
             ordered_rooms = tier1_rooms + tier2_gen + tier2_other
 
-            # Candidate faculty matching program & workload
-            sub_p = normalize_prog_code(sub.program)
-            if sub_p in ("GEN", "ALL", "COMMON", "COE"):
-                dept_faculty = [
-                    f for f in faculty_list
-                    if not f.program
-                    or not sec.program
-                    or normalize_prog_code(f.program) in (sec_p, "GEN", "ALL", "COMMON", "COE")
-                ]
-            else:
-                dept_faculty = [
-                    f for f in faculty_list
-                    if not f.program
-                    or normalize_prog_code(f.program) == sec_p
-                ]
-            valid_faculty = dept_faculty if dept_faculty else [f for f in faculty_list]
-            if balance_workload:
-                valid_faculty.sort(
-                    key=lambda f: (
-                        faculty_units_assigned.get(f.id, 0),
-                        faculty_units_assigned.get(f.id, 0) >= f.max_units,
+            # Candidate faculty matching assigned qualifications for this subject
+            # If no faculty has been assigned to handle this subject, candidate_faculty = [None] (scheduled as TBA)
+            assigned_fs = FacultySubject.query.filter_by(subject_id=sub.id).all()
+            assigned_fac_ids = {fs.faculty_id for fs in assigned_fs}
+
+            if assigned_fac_ids:
+                candidate_faculty = [f for f in faculty_list if f.id in assigned_fac_ids]
+                if balance_workload:
+                    candidate_faculty.sort(
+                        key=lambda f: (
+                            faculty_units_assigned.get(f.id, 0),
+                            faculty_units_assigned.get(f.id, 0) >= f.max_units,
+                        )
                     )
-                )
+            else:
+                candidate_faculty = [None]
 
             # Check session split preferences: [2x 1.5-Hr Split | 3-Hr Straight | Auto]
             session_split_mode = str(
@@ -298,7 +292,8 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                 or "auto"
             ).strip().lower()
 
-            fac_pref = getattr(valid_faculty[0], "preferred_session_type", "SPLIT") if valid_faculty else "SPLIT"
+            first_fac = candidate_faculty[0] if candidate_faculty else None
+            fac_pref = getattr(first_fac, "preferred_session_type", "SPLIT") if first_fac else "SPLIT"
             sub_pref = getattr(sub, "preferred_session_type", getattr(sub, "split_preference", "SPLIT"))
 
             if session_split_mode in ("straight", "3_hour_straight", "3-hr straight"):
@@ -338,15 +333,16 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                             if is_room_busy(r.id, day1, st, et) or is_room_busy(r.id, day2, st, et):
                                 continue
 
-                            for fac in valid_faculty:
-                                # Fast pre-check: faculty must be free on both days
-                                if is_fac_busy(fac.id, day1, st, et) or is_fac_busy(fac.id, day2, st, et):
+                            for fac in candidate_faculty:
+                                fac_id = fac.id if fac else None
+                                # Fast pre-check: faculty must be free on both days (if faculty assigned)
+                                if fac_id and (is_fac_busy(fac_id, day1, st, et) or is_fac_busy(fac_id, day2, st, et)):
                                     continue
 
                                 p1 = {
                                     "subject_id": sub.id,
                                     "section_id": sec.id,
-                                    "faculty_id": fac.id,
+                                    "faculty_id": fac_id,
                                     "room_id": r.id,
                                     "day_of_week": day1,
                                     "start_time": st_str,
@@ -355,7 +351,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                 p2 = {
                                     "subject_id": sub.id,
                                     "section_id": sec.id,
-                                    "faculty_id": fac.id,
+                                    "faculty_id": fac_id,
                                     "room_id": r.id,
                                     "day_of_week": day2,
                                     "start_time": st_str,
@@ -367,7 +363,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     sched1 = Schedule(
                                         subject_id=sub.id,
                                         section_id=sec.id,
-                                        faculty_id=fac.id,
+                                        faculty_id=fac_id,
                                         room_id=r.id,
                                         day_of_week=day1,
                                         start_time=st,
@@ -378,7 +374,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     sched2 = Schedule(
                                         subject_id=sub.id,
                                         section_id=sec.id,
-                                        faculty_id=fac.id,
+                                        faculty_id=fac_id,
                                         room_id=r.id,
                                         day_of_week=day2,
                                         start_time=st,
@@ -393,8 +389,9 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     placed_schedules.extend([sched1, sched2])
                                     existing_schedules.extend([sched1, sched2])
                                     used_rooms.add(r.id)
-                                    used_faculty.add(fac.id)
-                                    faculty_units_assigned[fac.id] = faculty_units_assigned.get(fac.id, 0) + sub.units
+                                    if fac_id:
+                                        used_faculty.add(fac_id)
+                                        faculty_units_assigned[fac_id] = faculty_units_assigned.get(fac_id, 0) + sub.units
 
                                     # Check Rule 2: If placed in overflow/interdepartmental room, create InterDepartmentRequest
                                     r_dept = getattr(r, "department", "GEN")
@@ -404,7 +401,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                         alt_payload = {
                                             "subject_id": sub.id,
                                             "section_id": sec.id,
-                                            "faculty_id": fac.id,
+                                            "faculty_id": fac_id,
                                             "room_id": r.id,
                                             "day_of_week": day1,
                                             "start_time": st_str,
@@ -464,15 +461,16 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                             if is_room_busy(r.id, day, st, et):
                                 continue
 
-                            for fac in valid_faculty:
+                            for fac in candidate_faculty:
+                                fac_id = fac.id if fac else None
                                 # Fast pre-check: faculty free
-                                if is_fac_busy(fac.id, day, st, et):
+                                if fac_id and is_fac_busy(fac_id, day, st, et):
                                     continue
 
                                 candidate_payload = {
                                     "subject_id": sub.id,
                                     "section_id": sec.id,
-                                    "faculty_id": fac.id,
+                                    "faculty_id": fac_id,
                                     "room_id": r.id,
                                     "day_of_week": day,
                                     "start_time": st_str,
@@ -491,7 +489,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                         new_sched = Schedule(
                                             subject_id=sub.id,
                                             section_id=sec.id,
-                                            faculty_id=fac.id,
+                                            faculty_id=fac_id,
                                             room_id=r.id,
                                             day_of_week=day,
                                             start_time=st,
@@ -507,8 +505,9 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                     db.session.flush()
 
                                     used_rooms.add(r.id)
-                                    used_faculty.add(fac.id)
-                                    faculty_units_assigned[fac.id] = faculty_units_assigned.get(fac.id, 0) + sub.units
+                                    if fac_id:
+                                        used_faculty.add(fac_id)
+                                        faculty_units_assigned[fac_id] = faculty_units_assigned.get(fac_id, 0) + sub.units
 
                                     # Check Rule 2: If placed in overflow/interdepartmental room, create InterDepartmentRequest
                                     r_dept = getattr(r, "department", "GEN")
@@ -518,7 +517,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                         alt_payload = {
                                             "subject_id": sub.id,
                                             "section_id": sec.id,
-                                            "faculty_id": fac.id,
+                                            "faculty_id": fac_id,
                                             "room_id": r.id,
                                             "day_of_week": day,
                                             "start_time": st_str,
