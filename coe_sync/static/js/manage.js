@@ -270,7 +270,13 @@ function renderFacultyTable(faculty) {
           <span style="background: #86EFAC; color: #14532D; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 9999px; text-transform: capitalize;">Active</span>
         </td>
         <td style="text-align: right;">
-          <div style="display:flex; justify-content:flex-end; align-items:center; gap: 8px;">
+          <div style="display:flex; justify-content:flex-end; align-items:center; gap: 8px; flex-wrap:wrap;">
+            ${["ADMIN", "CHAIR", "PROG_CHA"].includes(window.CURRENT_ROLE) ? `
+              <button class="btn btn-primary btn-sm" onclick="openAssignSubjectModal(${f.id})" style="display:inline-flex; align-items:center; gap:4px; font-weight:700; background:var(--bulsu-maroon); color:#FFFFFF; border:none; padding:4px 14px; border-radius:9999px; font-size:11.5px;" title="Assign Subject to Faculty">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Assign Subject
+              </button>
+            ` : ""}
             <button class="btn btn-sm" onclick="openFacultyDetailed(${f.id})" style="background: #60A5FA; color: #FFFFFF; font-weight: 600; padding: 4px 18px; border-radius: 9999px; border:none; cursor:pointer;" title="View Faculty Profile">
               About
             </button>
@@ -330,20 +336,54 @@ window.openFacultyDetailed = async function (facultyId) {
         editWrap.style.display = canEdit ? "block" : "none";
       }
 
+      // Check assign permissions: ADMIN, CHAIR
+      const canAssign = ["ADMIN", "CHAIR", "PROG_CHA"].includes(window.CURRENT_ROLE);
+      const assignBtn = document.getElementById("btn-detailed-assign-subject");
+      if (assignBtn) {
+        assignBtn.style.display = canAssign ? "inline-flex" : "none";
+      }
+
       // 1. Column 1: Subjects
       const subjectsList = document.getElementById("detailed-subjects-list");
       if (subjectsList) {
         const subjects = f.assigned_subjects || [];
         if (subjects.length === 0) {
-          subjectsList.innerHTML = `<div style="color: #64748B; font-size: 13px; font-style: italic;">No subjects assigned yet.</div>`;
+          subjectsList.innerHTML = `
+            <div style="color: #64748B; font-size: 13px; font-style: italic; margin-bottom: 8px;">No subjects assigned yet.</div>
+            ${canAssign ? `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openAssignSubjectModal(${f.id})" style="font-size:11.5px;">
+                + Assign Subject Offering
+              </button>
+            ` : ''}
+          `;
         } else {
-          subjectsList.innerHTML = subjects.map(s => `
-            <div style="background: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.6); border-radius: 8px; padding: 10px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.03);">
-              <div style="font-size: 13px; font-weight: 700; color: #1E293B;">${escapeHtml(s.code || "")}</div>
-              <div style="font-size: 12px; color: #475569; margin: 2px 0;">${escapeHtml(s.title || "")}</div>
-              <div style="font-size: 11px; font-weight: 600; color: var(--bulsu-maroon);">${s.units || 3} Units &bull; ${escapeHtml(s.subject_type || "Lecture")}</div>
+          subjectsList.innerHTML = subjects.map(s => {
+            const secText = (s.sections && s.sections.length > 0) ? s.sections.join(", ") : (s.section_name || "");
+            const slotText = (s.day_of_week && s.start_time) ? `${s.day_of_week} ${s.start_time}-${s.end_time}` : "";
+            const roomText = s.room_code ? `@ ${s.room_code}` : "";
+            return `
+            <div style="background: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.6); border-radius: 8px; padding: 10px 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.03); position:relative;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 8px;">
+                <div>
+                  <div style="font-size: 13.5px; font-weight: 800; color: #1E293B;">${escapeHtml(s.code || "")}</div>
+                  <div style="font-size: 12px; color: #475569; margin: 2px 0;">${escapeHtml(s.title || "")}</div>
+                  <div style="font-size: 11px; font-weight: 700; color: var(--bulsu-maroon);">${s.units || 3} Units &bull; ${escapeHtml(s.subject_type || s.type || "Lecture")}</div>
+                </div>
+                ${(canAssign && s.schedule_id) ? `
+                  <button type="button" class="btn btn-sm" onclick="unassignSubjectFromFaculty(${f.id}, ${s.schedule_id})" style="color: #DC2626; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; cursor:pointer;" title="Unassign subject from faculty">
+                    Unassign
+                  </button>
+                ` : ''}
+              </div>
+              ${(secText || slotText) ? `
+                <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(0,0,0,0.05); font-size: 11px; color: #64748B; display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px;">
+                  ${secText ? `<span style="font-weight:700; color:#3B82F6;">Cohort: ${escapeHtml(secText)}</span>` : ''}
+                  ${slotText ? `<span>${escapeHtml(slotText)} ${escapeHtml(roomText)}</span>` : ''}
+                </div>
+              ` : ''}
             </div>
-          `).join("");
+            `;
+          }).join("");
         }
       }
 
@@ -1641,4 +1681,203 @@ function renderRoomTimetable() {
     </div>
   `;
 }
+
+
+// -------------------------------------------------------------
+// Faculty Subject Assignment Controller (Chair & Admin)
+// -------------------------------------------------------------
+let _assignableOptionsCache = null;
+
+window.openAssignSubjectModal = async function(facultyId) {
+  const facId = facultyId || _currentDetailedFaculty?.id;
+  if (!facId) {
+    showToast("Please select a faculty member first.", true);
+    return;
+  }
+
+  const modal = document.getElementById("modal-assign-subject");
+  if (!modal) return;
+
+  // Reset modal state
+  document.getElementById("assign-faculty-id").value = facId;
+  const conflictAlert = document.getElementById("assign-conflict-alert");
+  if (conflictAlert) conflictAlert.style.display = "none";
+  const overrideCb = document.getElementById("assign-allow-override");
+  if (overrideCb) overrideCb.checked = false;
+  const metaBox = document.getElementById("assign-subject-meta");
+  if (metaBox) metaBox.style.display = "none";
+
+  // Pre-fill target faculty info if known
+  const facObj = (masterDataCache.faculty || []).find(f => String(f.id) === String(facId)) || _currentDetailedFaculty;
+  if (facObj) {
+    document.getElementById("assign-card-fac-name").textContent = facObj.name || "Faculty Member";
+    document.getElementById("assign-card-fac-dept").textContent = `${facObj.department || facObj.program || 'Engineering'} Department`;
+    document.getElementById("assign-card-fac-load").textContent = `${facObj.current_units || 0} / ${facObj.max_units || 21} Units`;
+  }
+
+  // Load assignable options
+  try {
+    const res = await API.get(`/api/faculty/${facId}/assignable-options`);
+    if (res.status === "success") {
+      _assignableOptionsCache = res.data;
+      const f = res.data.faculty;
+      document.getElementById("assign-card-fac-name").textContent = f.name;
+      document.getElementById("assign-card-fac-dept").textContent = `${f.department || f.program} Department`;
+      document.getElementById("assign-card-fac-load").textContent = `${f.current_units} / ${f.max_units} Units`;
+
+      // 1. Populate Subject Offering dropdown
+      const subSelect = document.getElementById("assign-subject-select");
+      subSelect.innerHTML = `<option value="">-- Choose Subject (${res.data.subjects.length} Available) --</option>`;
+      res.data.subjects.forEach(sub => {
+        const opt = document.createElement("option");
+        opt.value = sub.id;
+        opt.textContent = `[${sub.code}] ${sub.title} (${sub.units}u · ${sub.subject_type || 'Lecture'})`;
+        subSelect.appendChild(opt);
+      });
+
+      // 2. Populate Section dropdown
+      const secSelect = document.getElementById("assign-section-select");
+      secSelect.innerHTML = `<option value="">-- Choose Section (${res.data.sections.length} Available) --</option>`;
+      res.data.sections.forEach(sec => {
+        const opt = document.createElement("option");
+        opt.value = sec.id;
+        opt.textContent = `${sec.name} (${sec.program} · Year ${sec.year_level})`;
+        secSelect.appendChild(opt);
+      });
+
+      // 3. Populate Room dropdown
+      const roomSelect = document.getElementById("assign-room-select");
+      roomSelect.innerHTML = `<option value="auto" selected>✨ Auto-Assign Best Department Room</option>`;
+      res.data.rooms.forEach(rm => {
+        const opt = document.createElement("option");
+        opt.value = rm.id;
+        opt.textContent = `${rm.room_code} (${rm.room_type} · Cap: ${rm.capacity} · ${rm.building || 'COE'})`;
+        roomSelect.appendChild(opt);
+      });
+    }
+  } catch (err) {
+    showToast(err.message || "Failed to load assignment options", true);
+  }
+
+  modal.style.display = "flex";
+};
+
+window.closeAssignSubjectModal = function() {
+  const modal = document.getElementById("modal-assign-subject");
+  if (modal) modal.style.display = "none";
+};
+
+window.handleAssignSubjectSelectChange = function() {
+  const subId = document.getElementById("assign-subject-select")?.value;
+  const metaBox = document.getElementById("assign-subject-meta");
+  if (!subId || !_assignableOptionsCache) {
+    if (metaBox) metaBox.style.display = "none";
+    return;
+  }
+  const sub = _assignableOptionsCache.subjects.find(s => String(s.id) === String(subId));
+  if (sub && metaBox) {
+    metaBox.style.display = "block";
+    metaBox.innerHTML = `<strong>${sub.code} — ${sub.title}</strong>: ${sub.units} Units &bull; ${sub.subject_type || 'Lecture'} &bull; ${sub.hours_per_week || sub.units || 3} Hours/Week`;
+  }
+};
+
+window.handleAssignSlotPresetChange = function() {
+  const preset = document.getElementById("assign-slot-preset")?.value;
+  const customRow = document.getElementById("assign-custom-time-row");
+  const stInp = document.getElementById("assign-start-time");
+  const etInp = document.getElementById("assign-end-time");
+
+  if (preset === "custom") {
+    if (customRow) customRow.style.display = "grid";
+  } else {
+    if (customRow) customRow.style.display = "none";
+    if (preset && preset.includes("-")) {
+      const [st, et] = preset.split("-");
+      if (stInp) stInp.value = st;
+      if (etInp) etInp.value = et;
+    }
+  }
+};
+
+window.submitAssignSubject = async function(event) {
+  event.preventDefault();
+  const facId = document.getElementById("assign-faculty-id").value;
+  const subId = document.getElementById("assign-subject-select").value;
+  const secId = document.getElementById("assign-section-select").value;
+  const roomId = document.getElementById("assign-room-select").value;
+  const day = document.getElementById("assign-day-select").value;
+  const preset = document.getElementById("assign-slot-preset").value;
+  const allowOverride = document.getElementById("assign-allow-override")?.checked || false;
+
+  let st = "08:00";
+  let et = "11:00";
+  if (preset === "custom") {
+    st = document.getElementById("assign-start-time").value || "08:00";
+    et = document.getElementById("assign-end-time").value || "11:00";
+  } else if (preset && preset.includes("-")) {
+    [st, et] = preset.split("-");
+  }
+
+  const payload = {
+    subject_id: parseInt(subId, 10),
+    section_id: parseInt(secId, 10),
+    room_id: roomId === "auto" ? null : parseInt(roomId, 10),
+    day_of_week: day,
+    start_time: st,
+    end_time: et,
+    allow_override: allowOverride
+  };
+
+  const btn = document.getElementById("btn-submit-assign-subject");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Assigning Subject...";
+  }
+
+  try {
+    const res = await API.post(`/api/faculty/${facId}/assign-subject`, payload);
+    if (res.status === "success") {
+      showToast(res.message || "Subject assigned successfully!");
+      closeAssignSubjectModal();
+      // Refresh faculty list
+      fetchFaculty();
+      // If detailed view is open, refresh detailed view
+      const detCont = document.getElementById("faculty-detailed-container");
+      if (detCont && detCont.style.display !== "none") {
+        openFacultyDetailed(facId);
+      }
+    }
+  } catch (err) {
+    const conflictAlert = document.getElementById("assign-conflict-alert");
+    const conflictMsg = document.getElementById("assign-conflict-message");
+    if (conflictAlert && conflictMsg) {
+      conflictAlert.style.display = "block";
+      const detailStr = (err.conflicts && err.conflicts.length > 0) ? err.conflicts.join("<br>&bull; ") : (err.message || "Collision detected.");
+      conflictMsg.innerHTML = detailStr;
+    }
+    showToast(err.message || "Failed to assign subject", true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Assign Subject Offering";
+    }
+  }
+};
+
+window.unassignSubjectFromFaculty = async function(facultyId, scheduleId) {
+  if (!confirm("Are you sure you want to unassign this subject offering from the instructor?")) return;
+  try {
+    const res = await API.post(`/api/faculty/${facultyId}/unassign-subject`, { schedule_id: scheduleId });
+    if (res.status === "success") {
+      showToast(res.message || "Subject unassigned successfully!");
+      fetchFaculty();
+      const detCont = document.getElementById("faculty-detailed-container");
+      if (detCont && detCont.style.display !== "none") {
+        openFacultyDetailed(facultyId);
+      }
+    }
+  } catch (err) {
+    showToast(err.message || "Failed to unassign subject", true);
+  }
+};
 

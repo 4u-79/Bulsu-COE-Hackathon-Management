@@ -225,6 +225,11 @@ def get_faculty_detail(faculty_id: int):
                     "units": s.subject.units,
                     "type": s.subject.subject_type,
                     "sections": [s.section.name] if s.section else [],
+                    "schedule_id": s.id,
+                    "day_of_week": s.day_of_week,
+                    "start_time": s.start_time.strftime("%H:%M") if s.start_time else "",
+                    "end_time": s.end_time.strftime("%H:%M") if s.end_time else "",
+                    "room_code": s.room.room_code if s.room else "",
                 }
             else:
                 if s.section and s.section.name not in subjects_dict[s.subject.id]["sections"]:
@@ -709,4 +714,283 @@ def delete_faculty_availability(avail_id: int):
         "status": "success",
         "message": "Availability window removed successfully.",
     }), 200
+
+
+# -----------------------------------------------------------------
+# FACULTY SUBJECT ASSIGNMENT (Program Chair & Admin)
+# -----------------------------------------------------------------
+@master_data_bp.route("/faculty/<int:faculty_id>/assignable-options", methods=["GET"])
+@master_data_bp.route("/master/faculty/<int:faculty_id>/assignable-options", methods=["GET"])
+@require_roles("CHAIR", "ADMIN")
+def get_faculty_assignable_options(faculty_id: int):
+    """Retrieve subjects, sections, and rooms tailored for assigning to a specific faculty member."""
+    faculty = db.session.get(Faculty, faculty_id)
+    if not faculty:
+        return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
+
+    effective_role = session.get("active_role") or session.get("role")
+    effective_prog = session.get("active_program") or session.get("program")
+
+    # Chair scoping check
+    if effective_role in ("CHAIR", "PROG_CHA") and effective_prog:
+        fac_prog = (faculty.program or "").strip().upper()
+        eff_prog = effective_prog.strip().upper()
+        if fac_prog != eff_prog and fac_prog != "GEN":
+            return jsonify({
+                "error": f"Unauthorized: As {effective_prog} Program Chair, you can only manage faculty in your department."
+            }), 403
+
+    # Subjects: faculty's program + GEN subjects (or all if ADMIN)
+    sub_query = Subject.query
+    if effective_role in ("CHAIR", "PROG_CHA") or request.args.get("scoped", "true").lower() == "true":
+        fac_prog = (faculty.program or "").strip().upper()
+        sub_query = sub_query.filter(Subject.program.in_([fac_prog, "GEN"]))
+    subjects = sub_query.order_by(Subject.code.asc()).all()
+
+    # Sections: faculty's program sections
+    sec_query = Section.query
+    if effective_role in ("CHAIR", "PROG_CHA") or request.args.get("scoped", "true").lower() == "true":
+        fac_prog = (faculty.program or "").strip().upper()
+        sec_query = sec_query.filter(Section.program == fac_prog)
+    sections = sec_query.order_by(Section.year_level.asc(), Section.name.asc()).all()
+
+    # Rooms: all available rooms
+    rooms = Room.query.filter_by(is_available=True).order_by(Room.room_code.asc()).all()
+
+    return jsonify({
+        "status": "success",
+        "data": {
+            "faculty": faculty.to_dict(),
+            "subjects": [s.to_dict() for s in subjects],
+            "sections": [s.to_dict() for s in sections],
+            "rooms": [r.to_dict() for r in rooms],
+        }
+    }), 200
+
+
+@master_data_bp.route("/faculty/<int:faculty_id>/assign-subject", methods=["POST"])
+@master_data_bp.route("/master/faculty/<int:faculty_id>/assign-subject", methods=["POST"])
+@require_roles("CHAIR", "ADMIN")
+def assign_subject_to_faculty(faculty_id: int):
+    """Assign a curricular subject offering to a faculty member with conflict validation."""
+    from services.conflict_detector import validate_schedule_slot, parse_time
+
+    faculty = db.session.get(Faculty, faculty_id)
+    if not faculty:
+        return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
+
+    effective_role = session.get("active_role") or session.get("role")
+    effective_prog = session.get("active_program") or session.get("program")
+
+    # Chair scoping check
+    if effective_role in ("CHAIR", "PROG_CHA") and effective_prog:
+        fac_prog = (faculty.program or "").strip().upper()
+        eff_prog = effective_prog.strip().upper()
+        if fac_prog != eff_prog and fac_prog != "GEN":
+            return jsonify({
+                "error": f"Unauthorized: As {effective_prog} Program Chair, you can only assign subjects to faculty in your department."
+            }), 403
+
+    data = request.get_json(silent=True) or {}
+    subject_id = data.get("subject_id")
+    section_id = data.get("section_id")
+    room_id = data.get("room_id")
+    day_of_week = str(data.get("day_of_week", "MON")).strip().upper()
+    start_time_str = data.get("start_time")
+    end_time_str = data.get("end_time")
+    allow_override = bool(data.get("allow_override", False))
+
+    if not subject_id or not section_id:
+        return jsonify({"error": "Subject and Cohort Section are required."}), 400
+
+    subject = db.session.get(Subject, subject_id)
+    if not subject:
+        return jsonify({"error": f"Subject #{subject_id} not found."}), 404
+
+    section = db.session.get(Section, section_id)
+    if not section:
+        return jsonify({"error": f"Section #{section_id} not found."}), 404
+
+    # Check if there is an existing schedule for this subject and section
+    existing_sched = Schedule.query.filter_by(subject_id=subject.id, section_id=section.id).first()
+    exclude_id = existing_sched.id if existing_sched else None
+
+    # Resolve Times if not provided
+    if not start_time_str or not end_time_str:
+        hrs = subject.hours_per_week or subject.units or 3
+        if hrs >= 3:
+            start_time_str = "08:00"
+            end_time_str = "11:00"
+        else:
+            start_time_str = "08:30"
+            end_time_str = "10:00"
+
+    try:
+        st = parse_time(start_time_str)
+        et = parse_time(end_time_str)
+    except Exception as e:
+        return jsonify({"error": f"Invalid time format: {str(e)}"}), 400
+
+    # Resolve Room if not provided or set to 0 / 'auto'
+    room = None
+    if room_id and str(room_id).isdigit() and int(room_id) > 0:
+        room = db.session.get(Room, int(room_id))
+
+    if not room:
+        # Auto-pick best available room matching subject type (LAB vs LECTURE) and department
+        from services.conflict_detector import times_overlap
+        is_lab = subject.subject_type == "LAB"
+        target_room_type = "LAB" if is_lab else "LECTURE"
+        fac_prog = (faculty.program or "").strip().upper()
+
+        candidate_rooms = Room.query.filter_by(room_type=target_room_type, is_available=True).all()
+        def room_rank(r):
+            if r.department == fac_prog:
+                return 0
+            if r.department == "GEN":
+                return 1
+            return 2
+        candidate_rooms.sort(key=room_rank)
+
+        for r in candidate_rooms:
+            overlapping = Schedule.query.filter_by(room_id=r.id, day_of_week=day_of_week).all()
+            if exclude_id:
+                overlapping = [o for o in overlapping if o.id != exclude_id]
+            if not any(times_overlap(st, et, s.start_time, s.end_time) for s in overlapping):
+                room = r
+                break
+
+        if not room and candidate_rooms:
+            room = candidate_rooms[0]
+        if not room:
+            return jsonify({"error": "No available rooms found in the facility inventory."}), 400
+
+    # Conflict Preflight Check
+    candidate = {
+        "subject_id": subject.id,
+        "section_id": section.id,
+        "faculty_id": faculty.id,
+        "room_id": room.id,
+        "day_of_week": day_of_week,
+        "start_time": st,
+        "end_time": et,
+    }
+
+    validation = validate_schedule_slot(candidate, exclude_schedule_id=exclude_id)
+    if not validation["valid"] and not allow_override:
+        return jsonify({
+            "status": "error",
+            "error": "Scheduling collision detected.",
+            "conflicts": validation["conflicts"],
+            "can_override": True,
+        }), 409
+
+    # Save or update schedule
+    if existing_sched:
+        sched = existing_sched
+        old_faculty_id = sched.faculty_id
+        sched.faculty_id = faculty.id
+        sched.room_id = room.id
+        sched.day_of_week = day_of_week
+        sched.start_time = st
+        sched.end_time = et
+        if old_faculty_id and old_faculty_id != faculty.id:
+            old_fac = db.session.get(Faculty, old_faculty_id)
+            if old_fac:
+                old_u = db.session.query(db.func.sum(Subject.units)).join(Schedule, Schedule.subject_id == Subject.id).filter(Schedule.faculty_id == old_fac.id).scalar() or 0
+                old_fac.current_units = old_u
+    else:
+        sched = Schedule(
+            subject_id=subject.id,
+            section_id=section.id,
+            faculty_id=faculty.id,
+            room_id=room.id,
+            day_of_week=day_of_week,
+            start_time=st,
+            end_time=et,
+            status="PUBLISHED",
+        )
+        db.session.add(sched)
+
+    db.session.flush()
+
+    # Recalculate faculty current_units
+    new_units = db.session.query(db.func.sum(Subject.units)).join(Schedule, Schedule.subject_id == Subject.id).filter(Schedule.faculty_id == faculty.id).scalar() or 0
+    faculty.current_units = new_units
+
+    audit = AuditLog(
+        user_id=session.get("user_id"),
+        action="FACULTY_SUBJECT_ASSIGNED",
+        details=f"Assigned {subject.code} ({section.name}) to {faculty.name} [{day_of_week} {start_time_str}-{end_time_str} @ {room.room_code}].",
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Successfully assigned {subject.code} ({subject.title}) to {faculty.name}.",
+        "data": {
+            "schedule": sched.to_dict(),
+            "faculty": faculty.to_dict(),
+        }
+    }), 201
+
+
+@master_data_bp.route("/faculty/<int:faculty_id>/unassign-subject", methods=["POST"])
+@master_data_bp.route("/master/faculty/<int:faculty_id>/unassign-subject", methods=["POST"])
+@require_roles("CHAIR", "ADMIN")
+def unassign_subject_from_faculty(faculty_id: int):
+    """Unassign / remove a subject offering from a faculty member."""
+    faculty = db.session.get(Faculty, faculty_id)
+    if not faculty:
+        return jsonify({"error": f"Faculty #{faculty_id} not found."}), 404
+
+    effective_role = session.get("active_role") or session.get("role")
+    effective_prog = session.get("active_program") or session.get("program")
+
+    # Chair scoping check
+    if effective_role in ("CHAIR", "PROG_CHA") and effective_prog:
+        fac_prog = (faculty.program or "").strip().upper()
+        eff_prog = effective_prog.strip().upper()
+        if fac_prog != eff_prog and fac_prog != "GEN":
+            return jsonify({
+                "error": f"Unauthorized: As {effective_prog} Program Chair, you can only manage faculty in your department."
+            }), 403
+
+    data = request.get_json(silent=True) or {}
+    schedule_id = data.get("schedule_id")
+    subject_id = data.get("subject_id")
+
+    if schedule_id:
+        sched = db.session.get(Schedule, int(schedule_id))
+    elif subject_id:
+        sched = Schedule.query.filter_by(faculty_id=faculty_id, subject_id=int(subject_id)).first()
+    else:
+        return jsonify({"error": "schedule_id or subject_id is required."}), 400
+
+    if not sched or sched.faculty_id != faculty.id:
+        return jsonify({"error": "Schedule assignment not found for this faculty member."}), 404
+
+    subj_code = sched.subject.code if sched.subject else "Subject"
+    db.session.delete(sched)
+    db.session.flush()
+
+    # Recalculate faculty current_units
+    new_units = db.session.query(db.func.sum(Subject.units)).join(Schedule, Schedule.subject_id == Subject.id).filter(Schedule.faculty_id == faculty.id).scalar() or 0
+    faculty.current_units = new_units
+
+    audit = AuditLog(
+        user_id=session.get("user_id"),
+        action="FACULTY_SUBJECT_UNASSIGNED",
+        details=f"Unassigned {subj_code} from {faculty.name}.",
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Successfully unassigned {subj_code} from {faculty.name}.",
+        "data": faculty.to_dict(),
+    }), 200
+
 

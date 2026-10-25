@@ -64,10 +64,15 @@ def manage():
     if norm_role == "DEAN" and tab == "subjects":
         return redirect(url_for("views.manage", tab="faculty"))
 
+    user_id = session.get("user_id")
+    user = db.session.get(User, user_id) if user_id else None
+    effective_program = session.get("active_program") or (user.program if user else None)
+
     return render_template(
         "manage.html",
         active_page="manage",
         active_role=effective_role,
+        effective_program=effective_program,
         current_username=session.get("username") or "chair_cpe",
         must_change_credentials=session.get("must_change_credentials", False),
     )

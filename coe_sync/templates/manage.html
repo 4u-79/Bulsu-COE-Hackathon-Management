@@ -276,6 +276,11 @@
           <input type="text" id="search-faculty" class="manage-search-input" placeholder="Search faculty name or email...">
         </div>
         <div class="manage-filter-group">
+          {% if active_role == 'CHAIR' and effective_program %}
+          <select id="filter-faculty-prog" class="manage-filter-select" disabled style="background: rgba(241,245,249,0.9); font-weight:700; cursor:not-allowed;">
+            <option value="{{ effective_program }}" selected>{{ effective_program }} Department (Locked)</option>
+          </select>
+          {% else %}
           <select id="filter-faculty-prog" class="manage-filter-select">
             <option value="">All Programs</option>
             <option value="CE">Civil Engineering (CE)</option>
@@ -288,6 +293,7 @@
             <option value="MEE">Mechatronics Engineering (MEE)</option>
             <option value="GEN">General Engineering (GEN)</option>
           </select>
+          {% endif %}
           <select id="filter-faculty-status" class="manage-filter-select">
             <option value="">All Workloads</option>
             <option value="normal">Normal Load (≤ 21 units)</option>
@@ -348,7 +354,12 @@
       <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 36px;">
         <!-- Column 1: Subjects -->
         <div>
-          <h3 style="font-size: 16px; font-weight: 700; color: #1E293B; margin: 0 0 16px 0;">Subjects</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin: 0 0 16px 0;">
+            <h3 style="font-size: 16px; font-weight: 700; color: #1E293B; margin: 0;">Subjects</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-detailed-assign-subject" onclick="openAssignSubjectModal()" style="display:none; font-size:11.5px; padding: 4px 12px; font-weight:700;">
+              + Assign Subject
+            </button>
+          </div>
           <div id="detailed-subjects-list" style="display:flex; flex-direction:column; gap: 10px;">
             <div style="color: #64748B; font-size: 13px;">Loading assigned subjects...</div>
           </div>
@@ -575,6 +586,129 @@
           <tr><td colspan="6" style="text-align:center; padding: 24px;">Loading subjects...</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+  <!-- Modal: Assign Subject Offering to Faculty -->
+  <div id="modal-assign-subject" class="modal-backdrop" style="display:none; z-index: 1150;">
+    <div class="modal-dialog" style="max-width: 620px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, rgba(104,28,46,0.06), rgba(104,28,46,0.02));">
+        <div>
+          <h3 class="modal-title" id="assign-subj-modal-title">Assign Subject Offering</h3>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 2px 0 0 0;" id="assign-subj-modal-sub">
+            Assign a curriculum course offering to the instructor.
+          </p>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeAssignSubjectModal()">&times;</button>
+      </div>
+      <form id="form-assign-subject" onsubmit="submitAssignSubject(event)">
+        <input type="hidden" id="assign-faculty-id">
+        <div class="modal-body" style="display:flex; flex-direction:column; gap: 14px; padding: 20px 24px;">
+          
+          <!-- Faculty Overview Card -->
+          <div style="background: rgba(248,250,252,0.9); border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 16px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-size: 14px; font-weight: 800; color: #1E293B;" id="assign-card-fac-name">Instructor Name</div>
+              <div style="font-size: 12px; color: #64748B;" id="assign-card-fac-dept">MEE Department</div>
+            </div>
+            <div style="text-align:right;">
+              <span id="assign-card-fac-load" style="font-size: 13px; font-weight: 800; color: var(--bulsu-maroon); background: rgba(104,28,46,0.08); padding: 4px 10px; border-radius: 9999px;">
+                0 / 21 Units
+              </span>
+            </div>
+          </div>
+
+          <!-- Subject Offering Dropdown -->
+          <div>
+            <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
+              Subject Offering *
+            </label>
+            <select id="assign-subject-select" class="form-select" style="width:100%; font-size: 12.5px;" required onchange="handleAssignSubjectSelectChange()">
+              <option value="">-- Choose Subject --</option>
+            </select>
+            <div id="assign-subject-meta" style="display:none; font-size: 11.5px; color: #0284C7; background: #F0F9FF; padding: 6px 10px; border-radius: 6px; margin-top: 6px; border: 1px solid #BAE6FD;"></div>
+          </div>
+
+          <!-- Section Cohort Dropdown -->
+          <div>
+            <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
+              Target Section / Cohort *
+            </label>
+            <select id="assign-section-select" class="form-select" style="width:100%; font-size: 12.5px;" required>
+              <option value="">-- Choose Section --</option>
+            </select>
+          </div>
+
+          <!-- Room / Laboratory Dropdown -->
+          <div>
+            <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
+              Classroom / Facility
+            </label>
+            <select id="assign-room-select" class="form-select" style="width:100%; font-size: 12.5px;">
+              <option value="auto">✨ Auto-Assign Best Department Room</option>
+            </select>
+          </div>
+
+          <!-- Schedule Day & Time Slot -->
+          <div style="display:grid; grid-template-columns: 1fr 1.3fr; gap: 12px;">
+            <div>
+              <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
+                Day of Week *
+              </label>
+              <select id="assign-day-select" class="form-select" style="width:100%; font-size: 12.5px;" required>
+                <option value="MON" selected>Monday (MON)</option>
+                <option value="TUE">Tuesday (TUE)</option>
+                <option value="WED">Wednesday (WED)</option>
+                <option value="THU">Thursday (THU)</option>
+                <option value="FRI">Friday (FRI)</option>
+                <option value="SAT">Saturday (SAT)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 12.5px; font-weight: 700; color: var(--text-dark); margin-bottom: 4px; display:block;">
+                Standard Slot Preset
+              </label>
+              <select id="assign-slot-preset" class="form-select" style="width:100%; font-size: 12.5px;" onchange="handleAssignSlotPresetChange()">
+                <option value="08:00-11:00" selected>08:00 – 11:00 (3-Hr Morning Block)</option>
+                <option value="13:00-16:00">13:00 – 16:00 (3-Hr Afternoon Block)</option>
+                <option value="07:00-08:30">07:00 – 08:30 (1.5-Hr Early Split)</option>
+                <option value="08:30-10:00">08:30 – 10:00 (1.5-Hr Mid Split)</option>
+                <option value="10:00-11:30">10:00 – 11:30 (1.5-Hr Late Split)</option>
+                <option value="13:00-14:30">13:00 – 14:30 (1.5-Hr Afternoon)</option>
+                <option value="14:30-16:00">14:30 – 16:00 (1.5-Hr Afternoon)</option>
+                <option value="custom">Custom Time Slot...</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Custom Time inputs (hidden by default) -->
+          <div id="assign-custom-time-row" style="display:none; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">Start Time</label>
+              <input type="time" id="assign-start-time" class="form-input" value="08:00" style="width:100%;">
+            </div>
+            <div>
+              <label style="font-size: 12px; font-weight: 700; color: var(--text-dark);">End Time</label>
+              <input type="time" id="assign-end-time" class="form-input" value="11:00" style="width:100%;">
+            </div>
+          </div>
+
+          <!-- Conflict Warning Banner (if collision detected) -->
+          <div id="assign-conflict-alert" style="display:none; background: #FEF2F2; border: 1px solid #F87171; border-radius: 8px; padding: 10px 14px; font-size: 12.5px; color: #991B1B;">
+            <div style="font-weight: 800; margin-bottom: 2px;">⚠️ Conflict Detected</div>
+            <div id="assign-conflict-message">Collision detected for this slot.</div>
+            <label style="display:flex; align-items:center; gap: 6px; margin-top: 8px; font-size: 12px; font-weight: 700; cursor:pointer;">
+              <input type="checkbox" id="assign-allow-override"> Authorize Chair/Admin Conflict Override
+            </label>
+          </div>
+
+        </div>
+        <div class="modal-footer" style="padding: 14px 24px; background: rgba(248,250,252,0.8);">
+          <button type="button" class="btn btn-secondary" onclick="closeAssignSubjectModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-assign-subject" style="font-weight: 700;">
+            Assign Subject Offering
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
