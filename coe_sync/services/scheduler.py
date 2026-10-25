@@ -485,7 +485,7 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
                                         day_of_week=day,
                                         start_time=st,
                                         end_time=et,
-                                        status="DRAFT",
+                                        status="PUBLISHED",
                                         split_preference=split_val,
                                     )
                                     db.session.add(new_sched)

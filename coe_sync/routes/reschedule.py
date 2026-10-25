@@ -208,13 +208,19 @@ def get_reschedule_requests():
     if status_filter:
         query = query.filter(RescheduleRequest.status == status_filter.strip().upper())
 
+    query = (
+        query.outerjoin(Schedule, RescheduleRequest.schedule_id == Schedule.id)
+        .outerjoin(Section, RescheduleRequest.student_section_id == Section.id)
+        .outerjoin(Room, RescheduleRequest.proposed_room_id == Room.id)
+    )
+
     if effective_role == "STUDENT":
         current_username = session.get("username")
         if effective_ref_id and current_username:
             query = query.filter(
                 db.or_(
                     RescheduleRequest.student_section_id == effective_ref_id,
-                    RescheduleRequest.requested_by_name == current_username
+                    RescheduleRequest.requested_by_name == current_username,
                 )
             )
         elif effective_ref_id:
@@ -222,12 +228,40 @@ def get_reschedule_requests():
         elif current_username:
             query = query.filter(RescheduleRequest.requested_by_name == current_username)
     elif effective_role == "FACULTY":
-        # Scoped to schedules where faculty_id == instructor reference ID
-        query = query.join(Schedule, RescheduleRequest.schedule_id == Schedule.id)
+        fac = db.session.get(Faculty, effective_ref_id) if effective_ref_id else None
+        fac_prog = fac.program if fac else get_effective_program()
+        cur_user = session.get("username")
+        conditions = []
         if effective_ref_id:
-            query = query.filter(Schedule.faculty_id == effective_ref_id)
-    elif effective_role in {"CHAIR", "ADMIN", "DEAN"}:
-        # Allowed to view all or filtered by status
+            conditions.append(Schedule.faculty_id == effective_ref_id)
+        if fac_prog:
+            # Standalone room booking requests or department section proposals
+            conditions.append(
+                db.and_(
+                    RescheduleRequest.schedule_id.is_(None),
+                    db.or_(
+                        Section.program == fac_prog,
+                        Room.department == fac_prog,
+                    ),
+                )
+            )
+        if cur_user:
+            conditions.append(RescheduleRequest.requested_by_name == cur_user)
+        if conditions:
+            query = query.filter(db.or_(*conditions))
+    elif effective_role == "CHAIR":
+        eff_prog = get_effective_program()
+        if eff_prog and eff_prog != "ALL":
+            query = query.filter(
+                db.or_(
+                    Section.program == eff_prog,
+                    Room.department == eff_prog,
+                    Schedule.faculty.has(program=eff_prog),
+                    RescheduleRequest.requested_by_name == session.get("username"),
+                )
+            )
+    elif effective_role in {"ADMIN", "DEAN"}:
+        # Collegiate-wide visibility across all departments
         pass
 
     requests_list = query.order_by(RescheduleRequest.created_at.desc()).all()
@@ -268,8 +302,16 @@ def faculty_review_reschedule(request_id: int):
     effective_role = normalize_role(get_effective_role())
     effective_ref_id = get_effective_reference_id()
     if effective_role == "FACULTY":
-        if not effective_ref_id or not req_obj.schedule or req_obj.schedule.faculty_id != effective_ref_id:
-            return jsonify({"error": "Unauthorized: You are not the assigned instructor for this class."}), 403
+        if req_obj.schedule:
+            if not effective_ref_id or req_obj.schedule.faculty_id != effective_ref_id:
+                return jsonify({"error": "Unauthorized: You are not the assigned instructor for this class."}), 403
+        else:
+            fac = db.session.get(Faculty, effective_ref_id) if effective_ref_id else None
+            fac_prog = fac.program if fac else get_effective_program()
+            sec_prog = req_obj.section.program if req_obj.section else None
+            room_dept = req_obj.proposed_room.department if req_obj.proposed_room else None
+            if fac_prog and sec_prog and fac_prog != sec_prog and (not room_dept or fac_prog != room_dept):
+                return jsonify({"error": "Unauthorized: This room reservation request is outside your department."}), 403
 
     payload = request.get_json(silent=True) or {}
     if request.path.endswith("/approve"):
@@ -641,10 +683,8 @@ def request_room_booking():
 
     sec_id = sec.id if sec else 1
 
-    sched = Schedule.query.filter_by(room_id=room.id).first()
-
     req = RescheduleRequest(
-        schedule_id=sched.id if sched else None,
+        schedule_id=None,
         student_section_id=sec_id,
         proposed_day=day,
         proposed_start_time=parse_time(start_time_str) or parse_time("10:00"),
@@ -653,7 +693,7 @@ def request_room_booking():
         requested_by_role=effective_role,
         requested_by_name=session.get("username") or "Student Mayor",
         reason=f"[Room Booking Request] {reason} for room {room.room_code}",
-        status="PENDING_CHAIR",
+        status="PENDING_FACULTY" if effective_role in ("STUDENT", "STDN_MYR") else "PENDING_CHAIR",
     )
     db.session.add(req)
     db.session.commit()
@@ -676,8 +716,13 @@ def get_pending_requests_summary():
     effective_prog = get_effective_program()
     ref_id = session.get("active_reference_id") or session.get("reference_id")
 
-    reschedule_q = RescheduleRequest.query.filter(
-        RescheduleRequest.status.in_(["PENDING", "PENDING_FACULTY", "PENDING_CHAIR"])
+    reschedule_q = (
+        RescheduleRequest.query.filter(
+            RescheduleRequest.status.in_(["PENDING", "PENDING_FACULTY", "PENDING_CHAIR"])
+        )
+        .outerjoin(Schedule, RescheduleRequest.schedule_id == Schedule.id)
+        .outerjoin(Section, RescheduleRequest.student_section_id == Section.id)
+        .outerjoin(Room, RescheduleRequest.proposed_room_id == Room.id)
     )
     if effective_role == "STUDENT":
         uname = session.get("username")
@@ -692,10 +737,37 @@ def get_pending_requests_summary():
             reschedule_q = reschedule_q.filter(RescheduleRequest.student_section_id == ref_id)
         elif uname:
             reschedule_q = reschedule_q.filter(RescheduleRequest.requested_by_name == uname)
-    elif effective_role == "FACULTY" and ref_id:
-        reschedule_q = reschedule_q.join(Schedule, RescheduleRequest.schedule_id == Schedule.id).filter(
-            Schedule.faculty_id == ref_id
-        )
+    elif effective_role == "FACULTY":
+        fac = db.session.get(Faculty, ref_id) if ref_id else None
+        fac_prog = fac.program if fac else effective_prog
+        uname = session.get("username")
+        conditions = []
+        if ref_id:
+            conditions.append(Schedule.faculty_id == ref_id)
+        if fac_prog:
+            conditions.append(
+                db.and_(
+                    RescheduleRequest.schedule_id.is_(None),
+                    db.or_(
+                        Section.program == fac_prog,
+                        Room.department == fac_prog,
+                    ),
+                )
+            )
+        if uname:
+            conditions.append(RescheduleRequest.requested_by_name == uname)
+        if conditions:
+            reschedule_q = reschedule_q.filter(db.or_(*conditions))
+    elif effective_role == "CHAIR":
+        if effective_prog and effective_prog != "ALL":
+            reschedule_q = reschedule_q.filter(
+                db.or_(
+                    Section.program == effective_prog,
+                    Room.department == effective_prog,
+                    Schedule.faculty.has(program=effective_prog),
+                    RescheduleRequest.requested_by_name == session.get("username"),
+                )
+            )
 
     reschedule_count = reschedule_q.count()
 

@@ -744,12 +744,9 @@ async function fetchAndRender() {
       visible = visible.filter(s => s.status === "DRAFT");
     }
 
-    // Role-level safety: Genuine students must see only PUBLISHED schedules.
-    // Impersonating Chair/Admin demoing student portal may view drafts with notice.
+    // Students can view their section schedules (drafts show the draft notice badge)
     if (window.CURRENT_ROLE === "STUDENT") {
-      if (window.AUTHENTIC_USER_ROLE !== "CHAIR" && window.AUTHENTIC_USER_ROLE !== "ADMIN") {
-        visible = visible.filter(s => s.status === "PUBLISHED");
-      }
+      // Retain visible items as filtered by client-side status selector (or all)
     }
 
     renderEventCards(visible);

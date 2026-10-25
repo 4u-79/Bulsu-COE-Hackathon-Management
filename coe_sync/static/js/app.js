@@ -717,11 +717,11 @@ async function renderRescheduleCards(tab) {
 
   if (tab === "pending") {
     if (role === "FACULTY") {
-      items = items.filter((r) => r.status === "PENDING_FACULTY");
+      items = items.filter((r) => r.status === "PENDING_FACULTY" || r.status === "PENDING");
     } else if (role === "CHAIR" || role === "ADMIN") {
-      items = items.filter((r) => r.status === "PENDING_CHAIR");
+      items = items.filter((r) => r.status === "PENDING_CHAIR" || r.status === "PENDING_FACULTY" || r.status === "PENDING");
     } else if (role === "STUDENT") {
-      items = items.filter((r) => r.status === "PENDING_FACULTY" || r.status === "PENDING_CHAIR");
+      items = items.filter((r) => r.status === "PENDING_FACULTY" || r.status === "PENDING_CHAIR" || r.status === "PENDING");
     }
   }
 
@@ -746,9 +746,9 @@ async function renderRescheduleCards(tab) {
     const isRoomBooking = !r.schedule_id || (r.reason && r.reason.startsWith("[Room Booking Request]"));
     let statusPill = "";
     if (r.status === "PENDING_FACULTY" || r.status === "PENDING") {
-      statusPill = '<span class="step-pill pending">⏳ Pending Review</span>';
+      statusPill = '<span class="step-pill pending" style="background:#FEF3C7; color:#92400E; font-weight:700;">⏳ Step 1: Pending Faculty Review</span>';
     } else if (r.status === "PENDING_CHAIR") {
-      statusPill = '<span class="step-pill pending">⏳ Pending Program Chair Approval</span>';
+      statusPill = '<span class="step-pill pending" style="background:#DBEAFE; color:#1E40AF; font-weight:700;">⏳ Step 2: Pending Chair Approval</span>';
     } else if (r.status === "APPROVED") {
       statusPill = isRoomBooking ? '<span class="step-pill approved">✓ Approved &amp; Room Reserved</span>' : '<span class="step-pill approved">✓ Approved &amp; Timetable Updated</span>';
     } else if (r.status === "REJECTED") {
@@ -817,13 +817,43 @@ async function renderRescheduleCards(tab) {
         ` : ""}
 
         ${canReview ? `
-          <div class="reschedule-actions-row" style="margin-top: 8px; display:flex; gap: 8px;">
-            <button class="btn btn-sm btn-primary" onclick="handleDirectApprove(${r.id})">
-              ✓ Approve &amp; Update Timetable
-            </button>
-            <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleDirectReject(${r.id})">
-              ✕ Decline
-            </button>
+          <div class="reschedule-actions-row" style="margin-top: 8px; display:flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            ${(r.status === "PENDING_FACULTY" || r.status === "PENDING") ? `
+              ${role === "FACULTY" ? `
+                <button class="btn btn-sm btn-primary" onclick="handleDirectApprove(${r.id})">
+                  ✓ Endorse Proposal (Faculty Review)
+                </button>
+                <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleDirectReject(${r.id})">
+                  ✕ Decline
+                </button>
+              ` : (role === "CHAIR" ? `
+                <span style="font-size: 11px; color: var(--text-muted); margin-right: 4px;">⏳ Awaiting Faculty Endorsement</span>
+                <button class="btn btn-sm btn-outline" style="font-size: 11px;" title="Program Chair override" onclick="handleDirectApprove(${r.id})">
+                  ⚡ Chair Override &amp; Approve
+                </button>
+                <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleDirectReject(${r.id})">
+                  ✕ Decline
+                </button>
+              ` : `
+                <button class="btn btn-sm btn-primary" onclick="handleDirectApprove(${r.id})">
+                  ⚡ Admin Override &amp; Approve
+                </button>
+                <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleDirectReject(${r.id})">
+                  ✕ Decline
+                </button>
+              `)}
+            ` : (r.status === "PENDING_CHAIR" ? `
+              ${(role === "CHAIR" || role === "ADMIN") ? `
+                <button class="btn btn-sm btn-primary" onclick="handleDirectApprove(${r.id})">
+                  ${isRoomBooking ? "✓ Authorize &amp; Reserve Room" : "✓ Authorize &amp; Update Timetable"}
+                </button>
+                <button class="btn btn-sm btn-secondary" style="color: #DC2626;" onclick="handleDirectReject(${r.id})">
+                  ✕ Decline
+                </button>
+              ` : `
+                <span style="font-size: 11px; color: #047857; font-weight: 600;">✓ Endorsed by Faculty &bull; Forwarded to Chair</span>
+              `}
+            ` : "")}
           </div>
         ` : ""}
       </div>
