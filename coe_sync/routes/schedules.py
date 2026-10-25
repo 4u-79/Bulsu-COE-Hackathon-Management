@@ -25,6 +25,7 @@ from services.conflict_detector import (
     find_alternatives,
     parse_time,
     time_to_minutes,
+    minutes_to_time,
     times_overlap,
 )
 from services.scheduler import run_smart_scheduler, normalize_prog_code
@@ -507,6 +508,128 @@ def update_schedule(schedule_id: int):
     )
 
 
+@schedules_bp.route("/schedules/<int:schedule_id>/drag-move", methods=["POST"])
+@schedules_bp.route("/schedules/<int:schedule_id>/move-slot", methods=["POST"])
+@require_roles("CHAIR", "ADMIN")
+def move_schedule_slot(schedule_id: int):
+    """
+    Drag-and-drop schedule mover:
+    Moves the dragged schedule to the target day and start time.
+    If it overlaps an existing class on that day (or was dropped onto another class),
+    the class below it is adjusted to start at the end of the moved class.
+    Returns the adjustment details and warnings so the user can review or ignore them.
+    """
+    schedule = db.session.get(Schedule, schedule_id)
+    if not schedule:
+        return jsonify({"error": f"Schedule #{schedule_id} not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    target_day = str(data.get("day_of_week") or data.get("target_day") or schedule.day_of_week).strip().upper()
+    target_start_str = data.get("start_time") or data.get("target_start_time")
+    target_end_str = data.get("end_time") or data.get("target_end_time")
+    target_schedule_id = data.get("target_schedule_id")
+
+    orig_st = parse_time(schedule.start_time)
+    orig_et = parse_time(schedule.end_time)
+    dur_mins = time_to_minutes(orig_et) - time_to_minutes(orig_st)
+    if dur_mins <= 0:
+        dur_mins = 90
+
+    if target_schedule_id:
+        target_sched = db.session.get(Schedule, int(target_schedule_id))
+        if target_sched:
+            target_day = target_sched.day_of_week
+            new_st = parse_time(target_sched.start_time)
+        elif target_start_str:
+            new_st = parse_time(target_start_str)
+        else:
+            new_st = orig_st
+    elif target_start_str:
+        new_st = parse_time(target_start_str)
+    else:
+        new_st = orig_st
+
+    if target_end_str:
+        new_et = parse_time(target_end_str)
+    else:
+        new_et = minutes_to_time(time_to_minutes(new_st) + dur_mins)
+
+    # Find overlapping schedules on the target day for this section or room or faculty
+    all_day_scheds = Schedule.query.filter(
+        Schedule.id != schedule.id,
+        Schedule.day_of_week == target_day,
+    ).all()
+
+    colliding = []
+    for other in all_day_scheds:
+        is_explicit_target = bool(target_schedule_id and other.id == int(target_schedule_id))
+        other_st = parse_time(other.start_time)
+        other_et = parse_time(other.end_time)
+        if is_explicit_target or times_overlap(new_st, new_et, other_st, other_et):
+            if (
+                is_explicit_target
+                or other.section_id == schedule.section_id
+                or other.room_id == schedule.room_id
+                or other.faculty_id == schedule.faculty_id
+            ):
+                colliding.append(other)
+
+    displaced_info = []
+    # Auto-adjust overlapping subjects to start at the end of the dragged class
+    if colliding:
+        colliding.sort(key=lambda s: time_to_minutes(parse_time(s.start_time)))
+        cursor_mins = time_to_minutes(new_et)
+        for other in colliding:
+            other_orig_st = parse_time(other.start_time)
+            other_orig_et = parse_time(other.end_time)
+            other_dur = time_to_minutes(other_orig_et) - time_to_minutes(other_orig_st)
+            if other_dur <= 0:
+                other_dur = 90
+
+            adj_st = minutes_to_time(cursor_mins)
+            adj_et = minutes_to_time(cursor_mins + other_dur)
+            cursor_mins += other_dur
+
+            old_slot = f"{other.day_of_week} {other_orig_st.strftime('%H:%M')}–{other_orig_et.strftime('%H:%M')}"
+            new_slot = f"{other.day_of_week} {adj_st.strftime('%H:%M')}–{adj_et.strftime('%H:%M')}"
+
+            other.start_time = adj_st
+            other.end_time = adj_et
+
+            sub_name = other.subject.code if other.subject else f"Subject #{other.subject_id}"
+            displaced_info.append({
+                "id": other.id,
+                "subject": sub_name,
+                "old_slot": old_slot,
+                "new_slot": new_slot,
+                "message": f"Class '{sub_name}' was auto-adjusted from {old_slot} to {new_slot} (moved to the end of {schedule.subject.code if schedule.subject else 'dragged class'}).",
+            })
+
+    # Update dragged schedule
+    schedule.day_of_week = target_day
+    schedule.start_time = new_st
+    schedule.end_time = new_et
+
+    # Audit log
+    dragged_code = schedule.subject.code if schedule.subject else f"Schedule #{schedule.id}"
+    dragged_slot = f"{target_day} {new_st.strftime('%H:%M')}–{new_et.strftime('%H:%M')}"
+    audit = AuditLog(
+        user_id=session.get("user_id"),
+        action="SCHEDULE_DRAG_MOVED",
+        details=f"Moved {dragged_code} to {dragged_slot}. Auto-adjusted {len(displaced_info)} overlapping class(es).",
+    )
+    db.session.add(audit)
+    db.session.commit()
+
+    return jsonify({
+        "status": "success",
+        "message": f"Moved {dragged_code} to {dragged_slot}.",
+        "dragged_schedule": schedule.to_dict(),
+        "displaced_adjustments": displaced_info,
+        "warnings": [d["message"] for d in displaced_info],
+    }), 200
+
+
 @schedules_bp.route("/schedules/<int:schedule_id>", methods=["DELETE"])
 @require_roles("CHAIR", "ADMIN")
 def delete_schedule(schedule_id: int):
@@ -614,7 +737,8 @@ def generate_draft_schedules():
     Returns: { "placed_count": int, "unplaced_items": list, "quality_score": int }
     """
     sections = Section.query.order_by(Section.id.asc()).all()
-    subjects = Subject.query.order_by(Subject.id.asc()).all()
+    # Auto-generate draft schedules for Major subjects only (Minors are scheduled manually)
+    subjects = [s for s in Subject.query.order_by(Subject.id.asc()).all() if s.classification == "MAJOR"]
     faculty_list = Faculty.query.all()
     rooms = Room.query.filter_by(is_available=True).all()
 
@@ -661,12 +785,13 @@ def generate_draft_schedules():
                 blackout_faculty.add((b.faculty_id, day, idx))
 
     for sec in sections:
-        # Match curriculum: only subjects corresponding to this section's program and year level
+        # Match curriculum: only Major subjects corresponding to this section's program and year level
         sec_p = normalize_prog_code(sec.program)
         sec_subjects = [
             sub
             for sub in subjects
-            if (
+            if sub.classification == "MAJOR"
+            and (
                 not sub.program
                 or not sec.program
                 or normalize_prog_code(sub.program) == sec_p

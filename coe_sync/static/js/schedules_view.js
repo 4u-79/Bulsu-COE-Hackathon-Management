@@ -28,6 +28,7 @@ let _weekOffset      = 0;       // 0 = current week, ±N weeks
 let _activeViewMode  = "WEEK";  // "WEEK" | "DAY"
 let _activeDayIndex  = 3;       // Default Thursday (index 3) to match reference preview
 let _schedules       = [];      // raw API data
+let _draggedSchedule = null;    // currently dragged schedule object
 let _editingId       = null;    // null = create, number = update
 let _radarCategory   = "ALL";   // "ALL" | "ROOM" | "FACULTY" | "SECTION"
 let _allConflicts    = [];      // current detected conflicts
@@ -282,6 +283,17 @@ function buildDayColumns() {
       openModal(null, { day_of_week: day, start_time: `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}` });
     });
 
+    // Drag and Drop rescheduling target on empty day slots
+    col.addEventListener("dragover", (e) => {
+      handleColumnDragOver(e, col, day);
+    });
+    col.addEventListener("dragleave", (e) => {
+      handleColumnDragLeave(e, col);
+    });
+    col.addEventListener("drop", (e) => {
+      handleColumnDrop(e, col, day);
+    });
+
     container.appendChild(col);
   });
 
@@ -305,6 +317,17 @@ function buildDayColumns() {
       const m = totalMin % 60;
       if (h >= GRID_END_HOUR) return;
       openModal(null, { day_of_week: DAYS[_activeDayIndex], start_time: `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}` });
+    });
+
+    // Drag and Drop target for Day View
+    dayCol.addEventListener("dragover", (e) => {
+      handleColumnDragOver(e, dayCol, DAYS[_activeDayIndex]);
+    });
+    dayCol.addEventListener("dragleave", (e) => {
+      handleColumnDragLeave(e, dayCol);
+    });
+    dayCol.addEventListener("drop", (e) => {
+      handleColumnDrop(e, dayCol, DAYS[_activeDayIndex]);
     });
   }
 }
@@ -433,9 +456,10 @@ function populateModalSelects() {
   if (mSubj) {
     const prev = mSubj.value;
     mSubj.innerHTML = `<option value="">Select subject…</option>` +
-      (_masterData.subjects || []).map(s =>
-        `<option value="${s.id}">${escapeHtml(s.code || "")} — ${escapeHtml(s.title || s.name || "")} (${escapeHtml(s.program || "GEN")})</option>`
-      ).join("");
+      (_masterData.subjects || []).map(s => {
+        const clsTag = (s.classification || "MAJOR") === "MINOR" ? " · Minor" : " · Major";
+        return `<option value="${s.id}">[${escapeHtml(s.code || "")}] ${escapeHtml(s.title || s.name || "")} (${escapeHtml(s.program || "GEN")}${clsTag})</option>`;
+      }).join("");
     if (prev) mSubj.value = prev;
   }
 
@@ -897,6 +921,44 @@ function buildEventCard(s) {
       e.stopPropagation();
       deleteSchedule(s.id, s.subject_code, s.section_name);
     });
+
+    // Drag-and-drop rescheduling support for Chair & Admin
+    card.setAttribute("draggable", "true");
+    card.addEventListener("dragstart", (e) => {
+      e.stopPropagation();
+      _draggedSchedule = s;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(s.id));
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      _draggedSchedule = null;
+      document.querySelectorAll(".drop-target-hover").forEach(el => el.classList.remove("drop-target-hover"));
+      document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+      document.querySelectorAll(".drag-drop-slot-guide").forEach(el => el.remove());
+    });
+    card.addEventListener("dragover", (e) => {
+      if (_draggedSchedule && _draggedSchedule.id !== s.id) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        card.classList.add("drop-target-hover");
+      }
+    });
+    card.addEventListener("dragleave", (e) => {
+      card.classList.remove("drop-target-hover");
+    });
+    card.addEventListener("drop", (e) => {
+      if (_draggedSchedule && _draggedSchedule.id !== s.id) {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.remove("drop-target-hover");
+        const draggedId = _draggedSchedule.id;
+        _draggedSchedule = null;
+        executeScheduleMove(draggedId, s.day_of_week, s.start_time ? s.start_time.slice(0, 5) : "08:00", s.id);
+      }
+    });
   }
 
   // Bind student reschedule button
@@ -980,6 +1042,45 @@ function buildDayEventCard(s) {
       openRadar();
     }
   });
+
+  if (isAdmin) {
+    card.setAttribute("draggable", "true");
+    card.addEventListener("dragstart", (e) => {
+      e.stopPropagation();
+      _draggedSchedule = s;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(s.id));
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      _draggedSchedule = null;
+      document.querySelectorAll(".drop-target-hover").forEach(el => el.classList.remove("drop-target-hover"));
+      document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+      document.querySelectorAll(".drag-drop-slot-guide").forEach(el => el.remove());
+    });
+    card.addEventListener("dragover", (e) => {
+      if (_draggedSchedule && _draggedSchedule.id !== s.id) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        card.classList.add("drop-target-hover");
+      }
+    });
+    card.addEventListener("dragleave", (e) => {
+      card.classList.remove("drop-target-hover");
+    });
+    card.addEventListener("drop", (e) => {
+      if (_draggedSchedule && _draggedSchedule.id !== s.id) {
+        e.preventDefault();
+        e.stopPropagation();
+        card.classList.remove("drop-target-hover");
+        const draggedId = _draggedSchedule.id;
+        _draggedSchedule = null;
+        executeScheduleMove(draggedId, s.day_of_week, s.start_time ? s.start_time.slice(0, 5) : "08:00", s.id);
+      }
+    });
+  }
 
   return card;
 }
@@ -2015,3 +2116,136 @@ function showToast(msg, type = "info") {
 
 // Make openModal globally accessible (for conflict radar inline buttons)
 window.openModal = openModal;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drag and Drop Timetable Rescheduling Handlers
+// ─────────────────────────────────────────────────────────────────────────────
+function handleColumnDragOver(e, col, day) {
+  if (!_draggedSchedule) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  col.classList.add("drag-over");
+
+  let guide = col.querySelector(".drag-drop-slot-guide");
+  if (!guide) {
+    guide = document.createElement("div");
+    guide.className = "drag-drop-slot-guide";
+    col.appendChild(guide);
+  }
+
+  const rect = col.getBoundingClientRect();
+  const relY = Math.max(0, e.clientY - rect.top + col.scrollTop);
+  const slotIndex = Math.floor(relY / ROW_PX);
+  const totalMin = GRID_START_HOUR * 60 + slotIndex * SLOT_MINUTES;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const topPx = slotIndex * ROW_PX;
+
+  const startM = timeToMin(_draggedSchedule.start_time);
+  const endM = timeToMin(_draggedSchedule.end_time);
+  const durMin = (endM > startM ? endM - startM : 90);
+  const heightPx = Math.max(28, durMin * PIXELS_PER_MINUTE - 4);
+
+  guide.style.top = `${topPx}px`;
+  guide.style.height = `${heightPx}px`;
+  guide.textContent = `Drop at ${day} ${timeStr}`;
+}
+
+function handleColumnDragLeave(e, col) {
+  if (e.relatedTarget && col.contains(e.relatedTarget)) return;
+  col.classList.remove("drag-over");
+  col.querySelector(".drag-drop-slot-guide")?.remove();
+}
+
+function handleColumnDrop(e, col, day) {
+  if (!_draggedSchedule) return;
+  e.preventDefault();
+  col.classList.remove("drag-over");
+  col.querySelector(".drag-drop-slot-guide")?.remove();
+
+  const rect = col.getBoundingClientRect();
+  const relY = Math.max(0, e.clientY - rect.top + col.scrollTop);
+  const slotIndex = Math.floor(relY / ROW_PX);
+  const totalMin = GRID_START_HOUR * 60 + slotIndex * SLOT_MINUTES;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h >= GRID_END_HOUR) return;
+  const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const draggedId = _draggedSchedule.id;
+  _draggedSchedule = null;
+  executeScheduleMove(draggedId, day, timeStr, null);
+}
+
+async function executeScheduleMove(scheduleId, targetDay, targetStartTime, targetScheduleId) {
+  try {
+    const payload = {
+      target_day: targetDay,
+      target_start_time: targetStartTime,
+      target_schedule_id: targetScheduleId || null,
+    };
+    const res = await API.post(`/api/schedules/${scheduleId}/drag-move`, payload);
+
+    if (res && res.status === "success") {
+      await fetchAndRender();
+      await fetchLiveUtilization();
+
+      const hasDisplaced = res.displaced_adjustments && res.displaced_adjustments.length > 0;
+      const hasWarnings = res.warnings && res.warnings.length > 0;
+
+      if (hasDisplaced || hasWarnings) {
+        showRescheduleWarning(res.message, res.warnings, res.displaced_adjustments);
+      } else {
+        showToast(res.message || "Schedule updated successfully.", "success");
+      }
+    } else {
+      showToast(res?.message || "Could not move schedule slot.", "error");
+    }
+  } catch (err) {
+    console.error("Drag move error:", err);
+    showToast(err.message || "Error moving schedule slot.", "error");
+  }
+}
+
+function showRescheduleWarning(titleMsg, warnings = [], displaced = []) {
+  const banner = document.getElementById("reschedule-warning-banner");
+  const titleEl = document.getElementById("reschedule-warning-title");
+  const bodyEl = document.getElementById("reschedule-warning-body");
+  if (!banner) return;
+
+  if (titleEl) {
+    titleEl.textContent = titleMsg || "Timetable Rescheduling Notice: Automatic Slot Adjustment";
+  }
+
+  let bodyHtml = "";
+  if (displaced && displaced.length > 0) {
+    bodyHtml += `<div style="margin-bottom: 6px;"><strong>Auto-Adjusted Course Slots:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">`;
+    displaced.forEach(d => {
+      bodyHtml += `<li>${escapeHtml(d.message || (d.subject + " shifted to " + d.new_slot))}</li>`;
+    });
+    bodyHtml += `</ul></div>`;
+  }
+
+  if (warnings && warnings.length > 0) {
+    bodyHtml += `<div><strong>Rescheduling Notes & Potential Overlaps:</strong><ul style="margin: 4px 0 0 18px; padding: 0;">`;
+    warnings.forEach(w => {
+      bodyHtml += `<li>${escapeHtml(w)}</li>`;
+    });
+    bodyHtml += `</ul></div>`;
+  }
+
+  if (bodyEl) {
+    bodyEl.innerHTML = bodyHtml || "A class was rescheduled and adjacent slots were shifted accordingly.";
+  }
+
+  banner.style.display = "block";
+  banner.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+window.dismissRescheduleWarning = function() {
+  const banner = document.getElementById("reschedule-warning-banner");
+  if (banner) {
+    banner.style.display = "none";
+  }
+};
+

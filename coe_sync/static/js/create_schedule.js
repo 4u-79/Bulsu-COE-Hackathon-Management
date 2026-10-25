@@ -349,7 +349,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const subProg = normalizeProgram(sub.program);
         const matchProg = !subProg || subProg === normProg;
         const matchYr = !sub.year_level || String(sub.year_level) === String(sec.year_level);
-        return matchProg && matchYr;
+        const isMajor = (sub.classification || "MAJOR") === "MAJOR";
+        return matchProg && matchYr && isMajor;
       });
 
       matchingSubs.forEach((sub) => {
@@ -477,7 +478,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const opt = document.createElement("option");
         opt.value = sub.id;
         const progTag = sub.program ? `[${sub.program}] ` : "";
-        opt.textContent = `${progTag}${sub.code} — ${sub.title} (${sub.units}u)`;
+        const clsTag = (sub.classification || "MAJOR") === "MINOR" ? " · Minor" : " · Major";
+        opt.textContent = `${progTag}${sub.code} — ${sub.title} (${sub.units}u${clsTag})`;
         manualSubject.appendChild(opt);
       });
 

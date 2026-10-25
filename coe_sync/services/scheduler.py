@@ -130,8 +130,8 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
     if not faculty_list:
         faculty_list = Faculty.query.all()
 
-    # 4. Resolve Subjects Pool
-    subjects = Subject.query.order_by(Subject.units.desc()).all()
+    # 4. Resolve Subjects Pool (Only Major Subjects are eligible for Smart Scheduler batch generation)
+    subjects = [s for s in Subject.query.order_by(Subject.units.desc()).all() if s.classification == "MAJOR"]
 
     # Time slots for standard classes
     lecture_slots = [
@@ -207,12 +207,13 @@ def run_smart_scheduler(config: Dict[str, Any], user_id: Optional[int] = None) -
         )
 
     for sec in sections:
-        # Match curriculum: only subjects corresponding to this section's program and year level
+        # Match curriculum: only Major subjects corresponding to this section's program and year level
         sec_p = normalize_prog_code(sec.program)
         sec_subjects = [
             sub
             for sub in subjects
-            if (
+            if sub.classification == "MAJOR"
+            and (
                 not sub.program
                 or not sec.program
                 or normalize_prog_code(sub.program) == sec_p

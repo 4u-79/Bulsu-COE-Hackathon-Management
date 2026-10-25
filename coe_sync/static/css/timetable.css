@@ -1455,3 +1455,68 @@ input[type="checkbox"]:focus-visible {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   DRAG AND DROP RESCHEDULING STYLES & COLLISION INDICATORS
+══════════════════════════════════════════════════════════════════ */
+.event-card-v2[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+
+.event-card-v2[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.event-card-v2.dragging {
+  opacity: 0.45 !important;
+  transform: scale(0.96) !important;
+  box-shadow: 0 16px 32px rgba(104, 28, 46, 0.3) !important;
+  border: 2px dashed var(--bulsu-maroon) !important;
+  z-index: 99 !important;
+}
+
+.day-column.drag-over {
+  background: rgba(104, 28, 46, 0.04) !important;
+  outline: 2px dashed rgba(104, 28, 46, 0.45) !important;
+  outline-offset: -2px;
+}
+
+.event-card-v2.drop-target-hover {
+  outline: 3px solid #F59E0B !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.6) !important;
+  transform: scale(1.02) !important;
+  z-index: 40 !important;
+}
+
+.drag-drop-slot-guide {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  background: rgba(104, 28, 46, 0.85);
+  color: #FFFFFF;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 60;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  animation: pulse-guide 1s infinite alternate;
+}
+
+@keyframes pulse-guide {
+  from { opacity: 0.85; transform: scaleY(0.98); }
+  to { opacity: 1; transform: scaleY(1); }
+}
+
+.reschedule-warning-banner {
+  animation: slide-down-banner 0.25s ease-out;
+}
+
+@keyframes slide-down-banner {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
