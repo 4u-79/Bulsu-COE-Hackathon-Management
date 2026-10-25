@@ -336,6 +336,7 @@ def create_app(config_name=None):
         year_level = request.args.get("year_level", type=int)
         semester = request.args.get("semester", type=int)
         subject_type = request.args.get("type", "").strip().upper()
+        classification = request.args.get("classification", "").strip().upper()
         units = request.args.get("units", type=int)
         faculty_id = request.args.get("faculty_id", type=int)
         curriculum = str(request.args.get("curriculum", "")).lower() == "true"
@@ -362,8 +363,6 @@ def create_app(config_name=None):
                 query = query.filter(Subject.program == "GEN")
             else:
                 query = query.filter(Subject.program.in_([prog_clean, "GEN"]))
-        if year_level:
-            query = query.filter(Subject.year_level == year_level)
         if semester:
             query = query.filter(Subject.semester == semester)
         if subject_type in ("LECTURE", "LAB"):
@@ -372,6 +371,11 @@ def create_app(config_name=None):
             query = query.filter(Subject.units == units)
 
         subjects = query.order_by(Subject.code.asc()).all()
+        if year_level:
+            subjects = [s for s in subjects if s.computed_year_level == year_level]
+        if classification in ("MAJOR", "MINOR"):
+            subjects = [s for s in subjects if s.classification == classification]
+
         return (
             jsonify(
                 {

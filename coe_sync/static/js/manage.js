@@ -644,21 +644,47 @@ async function fetchSubjects() {
   }
 }
 
+function getSubjectClassification(sub) {
+  if (sub.classification) return sub.classification;
+  const c = (sub.code || "").trim().toUpperCase();
+  const p = (sub.program || "").trim().toUpperCase();
+  const m = c.match(/([1-4])\d\d/);
+  const yr = m ? parseInt(m[1], 10) : (sub.year_level || 1);
+  if (yr >= 3) return "MAJOR";
+  if (c.startsWith("COE")) return "MAJOR";
+  if (p === "GEN" || p === "GENERAL" || p === "GENERAL ENGINEERING") return "MINOR";
+  return "MAJOR";
+}
+
 function renderSubjectsTable(subjects) {
   const tbody = document.getElementById("table-subjects-body");
   if (!tbody) return;
 
   if (subjects.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color: var(--text-muted); padding: 24px;">No curricular subjects found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 24px;">No curricular subjects found.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = subjects
     .map(
-      (sub) => `
+      (sub) => {
+        const cls = getSubjectClassification(sub);
+        const isMajor = cls === "MAJOR";
+        const badgeStyle = isMajor
+          ? "background: rgba(104, 28, 46, 0.1); color: var(--bulsu-maroon); border: 1px solid rgba(104, 28, 46, 0.25); font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"
+          : "background: rgba(217, 119, 6, 0.1); color: #B45309; border: 1px solid rgba(217, 119, 6, 0.25); font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;";
+        const badgeIcon = isMajor ? "★" : "○";
+        const badgeLabel = isMajor ? "Major" : "Minor";
+
+        return `
     <tr>
       <td><strong>${escapeHtml(sub.code)}</strong></td>
       <td>${escapeHtml(sub.title)}</td>
+      <td>
+        <span class="badge" style="${badgeStyle}">
+          <span>${badgeIcon}</span> ${badgeLabel}
+        </span>
+      </td>
       <td>${sub.units} u</td>
       <td><span class="badge badge-${sub.subject_type}">${sub.subject_type}</span></td>
       <td>${sub.hours_per_week} hrs/wk</td>
@@ -669,7 +695,8 @@ function renderSubjectsTable(subjects) {
         </div>
       </td>
     </tr>
-  `
+  `;
+      }
     )
     .join("");
 }
@@ -1065,6 +1092,7 @@ function initTableFilters() {
 
   // Subjects Filter
   const sSubjects = document.getElementById("search-subjects");
+  const fSubjClass = document.getElementById("filter-subject-class");
   const fSubjType = document.getElementById("filter-subject-type");
   const fSubjUnits = document.getElementById("filter-subject-units");
   const fSubjProg = document.getElementById("filter-subject-prog");
@@ -1072,6 +1100,7 @@ function initTableFilters() {
 
   function applySubjectsFilter() {
     const q = (sSubjects?.value || "").toLowerCase().trim();
+    const c = fSubjClass?.value || "";
     const t = fSubjType?.value || "";
     const u = fSubjUnits?.value || "";
     const p = fSubjProg?.value || "";
@@ -1079,6 +1108,7 @@ function initTableFilters() {
 
     const filtered = masterDataCache.subjects.filter((sub) => {
       if (q && !sub.code.toLowerCase().includes(q) && !sub.title.toLowerCase().includes(q)) return false;
+      if (c && getSubjectClassification(sub) !== c) return false;
       if (t && sub.subject_type !== t) return false;
       if (u && String(sub.units) !== u) return false;
       if (p && normalizeProgram(sub.program) !== normalizeProgram(p)) return false;
@@ -1090,6 +1120,7 @@ function initTableFilters() {
   }
 
   sSubjects?.addEventListener("input", debounce(applySubjectsFilter, 300));
+  fSubjClass?.addEventListener("change", applySubjectsFilter);
   fSubjType?.addEventListener("change", applySubjectsFilter);
   fSubjUnits?.addEventListener("change", applySubjectsFilter);
   fSubjProg?.addEventListener("change", applySubjectsFilter);
@@ -1731,7 +1762,8 @@ window.openAssignSubjectModal = async function(facultyId) {
       res.data.subjects.forEach(sub => {
         const opt = document.createElement("option");
         opt.value = sub.id;
-        opt.textContent = `[${sub.code}] ${sub.title} (${sub.units}u · ${sub.subject_type || 'Lecture'})`;
+        const cls = (sub.classification || getSubjectClassification(sub)) === "MAJOR" ? "Major" : "Minor";
+        opt.textContent = `[${sub.code}] ${sub.title} (${sub.units}u · ${sub.subject_type || 'Lecture'} · ${cls})`;
         subSelect.appendChild(opt);
       });
 
@@ -1776,8 +1808,9 @@ window.handleAssignSubjectSelectChange = function() {
   }
   const sub = _assignableOptionsCache.subjects.find(s => String(s.id) === String(subId));
   if (sub && metaBox) {
+    const cls = (sub.classification || getSubjectClassification(sub)) === "MAJOR" ? "Major" : "Minor";
     metaBox.style.display = "block";
-    metaBox.innerHTML = `<strong>${sub.code} — ${sub.title}</strong>: ${sub.units} Units &bull; ${sub.subject_type || 'Lecture'} &bull; ${sub.hours_per_week || sub.units || 3} Hours/Week`;
+    metaBox.innerHTML = `<strong>${sub.code} — ${sub.title}</strong>: ${sub.units} Units &bull; ${sub.subject_type || 'Lecture'} &bull; ${sub.hours_per_week || sub.units || 3} Hours/Week &bull; <span style="font-weight:700; color:${cls === 'Major' ? 'var(--bulsu-maroon)' : '#B45309'};">${cls} Subject</span>`;
   }
 };
 

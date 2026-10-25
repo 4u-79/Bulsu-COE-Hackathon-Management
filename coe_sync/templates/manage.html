@@ -548,6 +548,11 @@
           <option value="MEE">Mechatronics Engineering (MEE)</option>
           <option value="GEN">General Engineering (GEN)</option>
         </select>
+        <select id="filter-subject-class" class="manage-filter-select">
+          <option value="">All Classifications</option>
+          <option value="MAJOR">Major Subjects</option>
+          <option value="MINOR">Minor Subjects</option>
+        </select>
         <select id="filter-subject-year" class="manage-filter-select">
           <option value="">All Years</option>
           <option value="1">1st Year</option>
@@ -576,6 +581,7 @@
           <tr>
             <th>Course Code</th>
             <th>Course Title</th>
+            <th>Classification</th>
             <th>Units</th>
             <th>Delivery Type</th>
             <th>Hours / Week</th>
@@ -583,13 +589,15 @@
           </tr>
         </thead>
         <tbody id="table-subjects-body">
-          <tr><td colspan="6" style="text-align:center; padding: 24px;">Loading subjects...</td></tr>
+          <tr><td colspan="7" style="text-align:center; padding: 24px;">Loading subjects...</td></tr>
         </tbody>
       </table>
     </div>
   </div>
-  <!-- Modal: Assign Subject Offering to Faculty -->
-  <div id="modal-assign-subject" class="modal-backdrop" style="display:none; z-index: 1150;">
+</div>
+
+<!-- Modal: Assign Subject Offering to Faculty -->
+<div id="modal-assign-subject" class="modal-backdrop" style="display:none; z-index: 1150;">
     <div class="modal-dialog" style="max-width: 620px;">
       <div class="modal-header" style="background: linear-gradient(135deg, rgba(104,28,46,0.06), rgba(104,28,46,0.02));">
         <div>

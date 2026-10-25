@@ -246,6 +246,49 @@ class Subject(db.Model):
         passive_deletes=True,
     )
 
+    @property
+    def computed_year_level(self) -> int:
+        """
+        Derive year level from course code:
+        100s -> 1st Year (e.g. MEE 101, COE 100)
+        200s -> 2nd Year (e.g. MEE 201, COE 200)
+        300s -> 3rd Year (e.g. MEE 300, MEE 301)
+        400s -> 4th Year (e.g. MEE 400, MEE 401)
+        Falls back to self.year_level or 1.
+        """
+        import re
+        code_str = (self.code or "").strip().upper()
+        m = re.search(r'([1-4])\d\d', code_str)
+        if m:
+            return int(m.group(1))
+        return self.year_level or 1
+
+    @property
+    def classification(self) -> str:
+        """
+        Classify subject into 'MAJOR' or 'MINOR':
+        - 3rd & 4th Year (300/400-level): Treated as Major subjects.
+        - 1st & 2nd Year:
+            - General Engineering (GEN):
+                - Course codes starting with 'COE' (e.g. COE 100, COE 101, COE 200) -> Major Subjects
+                - Rest of General Engineering (GEN) -> Minor Subjects (e.g. ETH 101, MATH 101, NSTP, PE)
+            - Department courses (e.g. MEE 101, CE 101, ECE 201) -> Major Subjects
+        """
+        code_str = (self.code or "").strip().upper()
+        prog_str = (self.program or "").strip().upper()
+        yr = self.computed_year_level
+
+        if yr >= 3:
+            return "MAJOR"
+
+        if code_str.startswith("COE"):
+            return "MAJOR"
+
+        if prog_str in ("GEN", "GENERAL", "GENERAL ENGINEERING"):
+            return "MINOR"
+
+        return "MAJOR"
+
     def to_dict(self) -> dict:
         """Serialize Subject to dictionary."""
         return {
@@ -256,7 +299,9 @@ class Subject(db.Model):
             "units": self.units,
             "subject_type": self.subject_type,
             "hours_per_week": self.hours_per_week,
-            "year_level": self.year_level,
+            "year_level": self.computed_year_level,
+            "computed_year_level": self.computed_year_level,
+            "classification": self.classification,
             "semester": self.semester,
             "split_preference": self.split_preference,
             "is_general": self.is_general,
