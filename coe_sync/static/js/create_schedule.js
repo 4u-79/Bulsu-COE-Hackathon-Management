@@ -9,7 +9,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   // Central Master Data Cache
   const masterState = {
-    programs: ["CE", "ECE", "MEE", "MFE"],
+    programs: ["CE", "CPE", "EE", "ECE", "IE", "MFGE", "ME", "MEE", "GEN"],
     allSections: [], // { id, name, program, year_level, student_count }
     allSubjects: [], // { id, code, title, program, units, subject_type, year_level, semester }
     allFaculty: [],  // { id, name, email, program, max_units, current_units }
@@ -166,9 +166,14 @@ document.addEventListener("DOMContentLoaded", () => {
       sgProgramSelect.innerHTML = `
         <option value="ALL">All Degree Programs</option>
         <option value="CE">Civil Engineering (CE)</option>
+        <option value="CPE">Computer Engineering (CPE)</option>
+        <option value="EE">Electrical Engineering (EE)</option>
         <option value="ECE">Electronics Engineering (ECE)</option>
-        <option value="MEE">Mechanical Engineering (MEE)</option>
-        <option value="MFE">Manufacturing Engineering (MFE)</option>
+        <option value="IE">Industrial Engineering (IE)</option>
+        <option value="MFGE">Manufacturing Engineering (MFGE)</option>
+        <option value="ME">Mechanical Engineering (ME)</option>
+        <option value="MEE">Mechatronics Engineering (MEE)</option>
+        <option value="GEN">General Engineering (GEN)</option>
       `;
     }
 
